@@ -1,19 +1,18 @@
 #!/bin/bash
 
-# 🔥 DC-Detector Auto Setup Script для Raspberry Pi
-# Автоматическая установка и настройка системы детекции огня
+# 🔥 DC-Detector Simple Setup для Raspberry Pi
+# Упрощенная установка без проблемных пакетов
 # Версия: 1.0
 
-set -e  # Остановка при ошибке
+set -e
 
-# Цвета для вывода
+# Цвета
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Функции для красивого вывода
 print_header() {
     echo -e "${BLUE}================================${NC}"
     echo -e "${BLUE}🔥 $1${NC}"
@@ -36,8 +35,10 @@ print_info() {
     echo -e "${BLUE}ℹ️  $1${NC}"
 }
 
-# Проверка, что мы на Raspberry Pi
-check_raspberry_pi() {
+# Проверка системы
+check_system() {
+    print_header "Проверка системы"
+    
     if ! grep -q "Raspberry Pi" /proc/cpuinfo; then
         print_warning "Этот скрипт предназначен для Raspberry Pi"
         read -p "Продолжить установку? (y/N): " -n 1 -r
@@ -46,19 +47,21 @@ check_raspberry_pi() {
             exit 1
         fi
     fi
+    
+    print_success "Система проверена"
 }
 
 # Обновление системы
 update_system() {
     print_header "Обновление системы"
     print_info "Обновление пакетов..."
-    sudo apt update && sudo apt upgrade -y
+    sudo apt update
     print_success "Система обновлена"
 }
 
-# Установка системных зависимостей
-install_system_dependencies() {
-    print_header "Установка системных зависимостей"
+# Установка минимальных зависимостей
+install_minimal_dependencies() {
+    print_header "Установка минимальных зависимостей"
     
     print_info "Установка основных пакетов..."
     sudo apt install -y \
@@ -91,11 +94,33 @@ install_system_dependencies() {
         libpng-dev \
         libtiff-dev \
         libwebp-dev \
-        libopenexr-dev \
-        libgstreamer1.0-dev \
-        libgstreamer-plugins-base1.0-dev
+        libopenexr-dev
     
-    print_info "Установка зависимостей для камеры..."
+    print_success "Основные зависимости установлены"
+}
+
+# Установка зависимостей для камеры
+install_camera_dependencies() {
+    print_header "Установка зависимостей для камеры"
+    
+    print_info "Установка GStreamer..."
+    sudo apt install -y \
+        libgstreamer1.0-dev \
+        libgstreamer-plugins-base1.0-dev \
+        gstreamer1.0-plugins-base \
+        gstreamer1.0-plugins-good \
+        gstreamer1.0-plugins-bad \
+        gstreamer1.0-plugins-ugly \
+        gstreamer1.0-libav \
+        gstreamer1.0-tools \
+        gstreamer1.0-x \
+        gstreamer1.0-alsa \
+        gstreamer1.0-gl \
+        gstreamer1.0-gtk3 \
+        gstreamer1.0-qt5 \
+        gstreamer1.0-pulseaudio
+    
+    print_info "Установка зависимостей для PiCamera..."
     sudo apt install -y \
         libcap-dev \
         libcap2-dev \
@@ -132,24 +157,9 @@ install_system_dependencies() {
         libxcb-xkb-dev \
         libxcb-image0-dev \
         libxcb-xrm-dev \
-        libxcb-util0-dev \
-        libgstreamer1.0-dev \
-        libgstreamer-plugins-base1.0-dev \
-        libgstreamer-plugins-bad1.0-dev \
-        gstreamer1.0-plugins-base \
-        gstreamer1.0-plugins-good \
-        gstreamer1.0-plugins-bad \
-        gstreamer1.0-plugins-ugly \
-        gstreamer1.0-libav \
-        gstreamer1.0-tools \
-        gstreamer1.0-x \
-        gstreamer1.0-alsa \
-        gstreamer1.0-gl \
-        gstreamer1.0-gtk3 \
-        gstreamer1.0-qt5 \
-        gstreamer1.0-pulseaudio
+        libxcb-util0-dev
     
-    print_success "Системные зависимости установлены"
+    print_success "Зависимости для камеры установлены"
 }
 
 # Настройка камеры
@@ -197,13 +207,17 @@ install_python_dependencies() {
     pip install numpy==1.24.3
     pip install pillow==10.0.1
     pip install psutil==5.9.5
+    
+    print_info "Установка picamera2..."
     pip install picamera2==0.3.12
+    
+    print_info "Установка дополнительных зависимостей..."
     pip install gpiozero==1.6.2
     
     print_success "Python зависимости установлены"
 }
 
-# Создание директорий и файлов
+# Создание директорий
 create_directories() {
     print_header "Создание директорий"
     
@@ -355,13 +369,14 @@ show_completion_info() {
 
 # Главная функция
 main() {
-    print_header "DC-Detector Auto Setup"
-    print_info "Автоматическая установка системы детекции огня для Raspberry Pi"
+    print_header "DC-Detector Simple Setup"
+    print_info "Упрощенная установка системы детекции огня для Raspberry Pi"
     echo ""
     
-    check_raspberry_pi
+    check_system
     update_system
-    install_system_dependencies
+    install_minimal_dependencies
+    install_camera_dependencies
     setup_camera
     create_venv
     install_python_dependencies

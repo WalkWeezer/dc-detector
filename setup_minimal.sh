@@ -1,19 +1,17 @@
 #!/bin/bash
 
-# 🔥 DC-Detector Auto Setup Script для Raspberry Pi
-# Автоматическая установка и настройка системы детекции огня
+# 🔥 DC-Detector Minimal Setup для Raspberry Pi
+# Минимальная установка только необходимых компонентов
 # Версия: 1.0
 
-set -e  # Остановка при ошибке
+set -e
 
-# Цвета для вывода
-RED='\033[0;31m'
+# Цвета
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+YELLOW='\033[1;33m'
+NC='\033[0m'
 
-# Функции для красивого вывода
 print_header() {
     echo -e "${BLUE}================================${NC}"
     echo -e "${BLUE}🔥 $1${NC}"
@@ -28,37 +26,21 @@ print_warning() {
     echo -e "${YELLOW}⚠️  $1${NC}"
 }
 
-print_error() {
-    echo -e "${RED}❌ $1${NC}"
-}
-
 print_info() {
     echo -e "${BLUE}ℹ️  $1${NC}"
-}
-
-# Проверка, что мы на Raspberry Pi
-check_raspberry_pi() {
-    if ! grep -q "Raspberry Pi" /proc/cpuinfo; then
-        print_warning "Этот скрипт предназначен для Raspberry Pi"
-        read -p "Продолжить установку? (y/N): " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            exit 1
-        fi
-    fi
 }
 
 # Обновление системы
 update_system() {
     print_header "Обновление системы"
     print_info "Обновление пакетов..."
-    sudo apt update && sudo apt upgrade -y
+    sudo apt update
     print_success "Система обновлена"
 }
 
-# Установка системных зависимостей
-install_system_dependencies() {
-    print_header "Установка системных зависимостей"
+# Установка только необходимых пакетов
+install_essential() {
+    print_header "Установка необходимых пакетов"
     
     print_info "Установка основных пакетов..."
     sudo apt install -y \
@@ -86,16 +68,40 @@ install_system_dependencies() {
         curl \
         build-essential \
         cmake \
-        pkg-config \
-        libjpeg-dev \
-        libpng-dev \
-        libtiff-dev \
-        libwebp-dev \
-        libopenexr-dev \
-        libgstreamer1.0-dev \
-        libgstreamer-plugins-base1.0-dev
+        pkg-config
     
-    print_info "Установка зависимостей для камеры..."
+    print_success "Основные пакеты установлены"
+}
+
+# Установка GStreamer
+install_gstreamer() {
+    print_header "Установка GStreamer"
+    
+    print_info "Установка GStreamer..."
+    sudo apt install -y \
+        libgstreamer1.0-dev \
+        libgstreamer-plugins-base1.0-dev \
+        gstreamer1.0-plugins-base \
+        gstreamer1.0-plugins-good \
+        gstreamer1.0-plugins-bad \
+        gstreamer1.0-plugins-ugly \
+        gstreamer1.0-libav \
+        gstreamer1.0-tools \
+        gstreamer1.0-x \
+        gstreamer1.0-alsa \
+        gstreamer1.0-gl \
+        gstreamer1.0-gtk3 \
+        gstreamer1.0-qt5 \
+        gstreamer1.0-pulseaudio
+    
+    print_success "GStreamer установлен"
+}
+
+# Установка зависимостей для камеры
+install_camera_deps() {
+    print_header "Установка зависимостей для камеры"
+    
+    print_info "Установка зависимостей для PiCamera..."
     sudo apt install -y \
         libcap-dev \
         libcap2-dev \
@@ -132,24 +138,9 @@ install_system_dependencies() {
         libxcb-xkb-dev \
         libxcb-image0-dev \
         libxcb-xrm-dev \
-        libxcb-util0-dev \
-        libgstreamer1.0-dev \
-        libgstreamer-plugins-base1.0-dev \
-        libgstreamer-plugins-bad1.0-dev \
-        gstreamer1.0-plugins-base \
-        gstreamer1.0-plugins-good \
-        gstreamer1.0-plugins-bad \
-        gstreamer1.0-plugins-ugly \
-        gstreamer1.0-libav \
-        gstreamer1.0-tools \
-        gstreamer1.0-x \
-        gstreamer1.0-alsa \
-        gstreamer1.0-gl \
-        gstreamer1.0-gtk3 \
-        gstreamer1.0-qt5 \
-        gstreamer1.0-pulseaudio
+        libxcb-util0-dev
     
-    print_success "Системные зависимости установлены"
+    print_success "Зависимости для камеры установлены"
 }
 
 # Настройка камеры
@@ -182,7 +173,7 @@ create_venv() {
 }
 
 # Установка Python зависимостей
-install_python_dependencies() {
+install_python_deps() {
     print_header "Установка Python зависимостей"
     
     source fire_detection_env/bin/activate
@@ -197,13 +188,17 @@ install_python_dependencies() {
     pip install numpy==1.24.3
     pip install pillow==10.0.1
     pip install psutil==5.9.5
+    
+    print_info "Установка picamera2..."
     pip install picamera2==0.3.12
+    
+    print_info "Установка дополнительных зависимостей..."
     pip install gpiozero==1.6.2
     
     print_success "Python зависимости установлены"
 }
 
-# Создание директорий и файлов
+# Создание директорий
 create_directories() {
     print_header "Создание директорий"
     
@@ -214,35 +209,8 @@ create_directories() {
     print_success "Директории созданы"
 }
 
-# Настройка systemd сервиса
-setup_systemd() {
-    print_header "Настройка автозапуска"
-    
-    print_info "Создание systemd сервиса..."
-    sudo tee /etc/systemd/system/fire-detection.service > /dev/null <<EOF
-[Unit]
-Description=Fire Detection System
-After=network.target
-
-[Service]
-Type=simple
-User=pi
-WorkingDirectory=$(pwd)
-Environment=PATH=$(pwd)/fire_detection_env/bin
-ExecStart=$(pwd)/fire_detection_env/bin/python app_pi.py
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    sudo systemctl daemon-reload
-    print_success "Systemd сервис настроен"
-}
-
 # Создание скриптов управления
-create_management_scripts() {
+create_scripts() {
     print_header "Создание скриптов управления"
     
     # Скрипт запуска
@@ -279,6 +247,33 @@ EOF
 
     chmod +x *.sh
     print_success "Скрипты управления созданы"
+}
+
+# Настройка systemd сервиса
+setup_systemd() {
+    print_header "Настройка автозапуска"
+    
+    print_info "Создание systemd сервиса..."
+    sudo tee /etc/systemd/system/fire-detection.service > /dev/null <<EOF
+[Unit]
+Description=Fire Detection System
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=$(pwd)
+Environment=PATH=$(pwd)/fire_detection_env/bin
+ExecStart=$(pwd)/fire_detection_env/bin/python app_pi.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    sudo systemctl daemon-reload
+    print_success "Systemd сервис настроен"
 }
 
 # Настройка прав доступа
@@ -318,17 +313,11 @@ print('✅ Все основные модули работают')
     fi
 }
 
-# Получение IP адреса
-get_ip_address() {
-    IP_ADDRESS=$(hostname -I | awk '{print $1}')
-    echo "$IP_ADDRESS"
-}
-
 # Вывод информации о завершении
 show_completion_info() {
     print_header "Установка завершена!"
     
-    IP_ADDRESS=$(get_ip_address)
+    IP_ADDRESS=$(hostname -I | awk '{print $1}')
     
     echo -e "${GREEN}🎉 Система детекции огня готова к работе!${NC}"
     echo ""
@@ -355,19 +344,20 @@ show_completion_info() {
 
 # Главная функция
 main() {
-    print_header "DC-Detector Auto Setup"
-    print_info "Автоматическая установка системы детекции огня для Raspberry Pi"
+    print_header "DC-Detector Minimal Setup"
+    print_info "Минимальная установка системы детекции огня для Raspberry Pi"
     echo ""
     
-    check_raspberry_pi
     update_system
-    install_system_dependencies
+    install_essential
+    install_gstreamer
+    install_camera_deps
     setup_camera
     create_venv
-    install_python_dependencies
+    install_python_deps
     create_directories
+    create_scripts
     setup_systemd
-    create_management_scripts
     setup_permissions
     final_check
     show_completion_info
