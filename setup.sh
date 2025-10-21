@@ -135,33 +135,9 @@ install_camera_dependencies() {
         libcamera-tools \
         python3-libcamera \
         python3-kms++ \
-        python3-pyqt5 \
-        qtbase5-dev \
-        libqt5core5a \
-        libqt5gui5 \
-        libqt5widgets5 \
-        libqt5test5 \
-        libqt5concurrent5 \
-        libqt5opengl5-dev \
-        libqt5opengl5 \
         libgl1-mesa-dev \
         libglu1-mesa-dev \
-        libdrm-dev \
-        libxkbcommon-dev \
-        libxkbcommon-x11-dev \
-        libxcb-randr0-dev \
-        libxcb-xtest0-dev \
-        libxcb-shape0-dev \
-        libxcb-xfixes0-dev \
-        libxcb-util-dev \
-        libxcb-keysyms1-dev \
-        libxcb-icccm4-dev \
-        libxcb-cursor-dev \
-        libxcb-xinerama0-dev \
-        libxcb-xkb-dev \
-        libxcb-image0-dev \
-        libxcb-xrm-dev \
-        libxcb-util0-dev
+        libdrm-dev
     
     print_success "Зависимости для камеры установлены"
 }
