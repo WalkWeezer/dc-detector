@@ -222,8 +222,8 @@ create_venv() {
     source fire_detection_env/bin/activate 2>&1 | tee -a "$LOG_FILE"
     
     print_info "Обновление pip..."
-    log_command "pip install --upgrade pip"
-    pip install --upgrade pip 2>&1 | tee -a "$LOG_FILE"
+    log_command "fire_detection_env/bin/pip install --upgrade pip"
+    fire_detection_env/bin/pip install --upgrade pip 2>&1 | tee -a "$LOG_FILE"
     
     if [ ${PIPESTATUS[0]} -eq 0 ]; then
         print_success "Pip обновлен"
@@ -238,11 +238,9 @@ create_venv() {
 install_python_dependencies() {
     print_header "Установка Python зависимостей"
     
-    source fire_detection_env/bin/activate
-    
     print_info "Установка PyTorch для ARM..."
-    log_command "pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu"
-    pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu 2>&1 | tee -a "$LOG_FILE"
+    log_command "fire_detection_env/bin/pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu"
+    fire_detection_env/bin/pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu 2>&1 | tee -a "$LOG_FILE"
     
     if [ ${PIPESTATUS[0]} -eq 0 ]; then
         print_success "PyTorch установлен"
@@ -255,8 +253,8 @@ install_python_dependencies() {
     print_info "Установка основных зависимостей..."
     PYTHON_PACKAGES="ultralytics==8.0.196 opencv-python-headless==4.8.1.78 flask==2.3.3 numpy==1.24.3 pillow==10.0.1 psutil==5.9.5"
     
-    log_command "pip install $PYTHON_PACKAGES"
-    pip install $PYTHON_PACKAGES 2>&1 | tee -a "$LOG_FILE"
+    log_command "fire_detection_env/bin/pip install $PYTHON_PACKAGES"
+    fire_detection_env/bin/pip install $PYTHON_PACKAGES 2>&1 | tee -a "$LOG_FILE"
     
     if [ ${PIPESTATUS[0]} -eq 0 ]; then
         print_success "Основные Python зависимости установлены"
@@ -267,8 +265,8 @@ install_python_dependencies() {
     fi
     
     print_info "Установка picamera2..."
-    log_command "pip install picamera2==0.3.12"
-    pip install picamera2==0.3.12 2>&1 | tee -a "$LOG_FILE"
+    log_command "fire_detection_env/bin/pip install picamera2==0.3.12"
+    fire_detection_env/bin/pip install picamera2==0.3.12 2>&1 | tee -a "$LOG_FILE"
     
     if [ ${PIPESTATUS[0]} -eq 0 ]; then
         print_success "Picamera2 установлен"
@@ -279,8 +277,8 @@ install_python_dependencies() {
     fi
     
     print_info "Установка дополнительных зависимостей..."
-    log_command "pip install gpiozero==1.6.2"
-    pip install gpiozero==1.6.2 2>&1 | tee -a "$LOG_FILE"
+    log_command "fire_detection_env/bin/pip install gpiozero==1.6.2"
+    fire_detection_env/bin/pip install gpiozero==1.6.2 2>&1 | tee -a "$LOG_FILE"
     
     if [ ${PIPESTATUS[0]} -eq 0 ]; then
         print_success "Дополнительные зависимости установлены"
@@ -395,11 +393,9 @@ setup_permissions() {
 final_check() {
     print_header "Финальная проверка"
     
-    source fire_detection_env/bin/activate
-    
     print_info "Проверка импортов..."
-    log_command "python -c 'import cv2, ultralytics, numpy, flask, psutil'"
-    python -c "
+    log_command "fire_detection_env/bin/python -c 'import cv2, ultralytics, numpy, flask, psutil'"
+    fire_detection_env/bin/python -c "
 import cv2
 import ultralytics
 import numpy as np
