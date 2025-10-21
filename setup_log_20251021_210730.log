@@ -1,0 +1,441 @@
+=== DC-Detector Setup ===
+[0;34m================================[0m
+[0;34m🔥 DC-Detector Setup[0m
+[0;34m================================[0m
+[0;34mℹ️  Установка системы детекции огня для Raspberry Pi[0m
+INFO: Установка системы детекции огня для Raspberry Pi
+[0;34mℹ️  Лог установки: setup_log_20251021_210730.log[0m
+INFO: Лог установки: setup_log_20251021_210730.log
+
+[0;34m================================[0m
+[0;34m🔥 Проверка системы[0m
+[0;34m================================[0m
+=== Проверка системы ===
+System info:
+Linux raspberrypi 6.12.47+rpt-rpi-v8 #1 SMP PREEMPT Debian 1:6.12.47-1+rpt1~bookworm (2025-09-16) aarch64 GNU/Linux
+Model		: Raspberry Pi 3 Model B Rev 1.2
+Linux version 6.12.47+rpt-rpi-v8 (serge@raspberrypi.com) (aarch64-linux-gnu-gcc-12 (Debian 12.2.0-14+deb12u1) 12.2.0, GNU ld (GNU Binutils for Debian) 2.40) #1 SMP PREEMPT Debian 1:6.12.47-1+rpt1~bookworm (2025-09-16)
+SUCCESS: Система проверена
+[0;32m✅ Система проверена[0m
+[0;34m================================[0m
+=== Обновление системы ===
+[0;34m🔥 Обновление системы[0m
+[0;34m================================[0m
+[0;34mℹ️  Проверка и удаление проблемного GitHub CLI репозитория...[0m
+INFO: Проверка и удаление проблемного GitHub CLI репозитория...
+[0;34mℹ️  Удаление GitHub CLI репозитория...[0m
+INFO: Удаление GitHub CLI репозитория...
+EXECUTING: sudo rm /etc/apt/sources.list.d/github-cli.list
+Command: sudo rm /etc/apt/sources.list.d/github-cli.list
+SUCCESS: GitHub CLI репозиторий удален
+[0;32m✅ GitHub CLI репозиторий удален[0m
+[0;34mℹ️  Обновление пакетов...[0m
+INFO: Обновление пакетов...
+EXECUTING: sudo apt update
+Command: sudo apt update
+
+WARNING: apt does not have a stable CLI interface. Use with caution in scripts.
+
+
+WARNING: apt does not have a stable CLI interface. Use with caution in scripts.
+
+Hit:1 http://archive.raspberrypi.com/debian bookworm InRelease
+Hit:1 http://archive.raspberrypi.com/debian bookworm InRelease
+Hit:2 http://deb.debian.org/debian bookworm InRelease
+Hit:2 http://deb.debian.org/debian bookworm InRelease
+Hit:3 http://deb.debian.org/debian-security bookworm-security InRelease
+Hit:3 http://deb.debian.org/debian-security bookworm-security InRelease
+Hit:4 http://deb.debian.org/debian bookworm-updates InRelease
+Hit:4 http://deb.debian.org/debian bookworm-updates InRelease
+Reading package lists...Reading package lists...
+
+Building dependency tree...Building dependency tree...
+Reading state information...
+Reading state information...
+
+All packages are up to date.
+All packages are up to date.
+[0;32m✅ Система обновлена[0m
+SUCCESS: Система обновлена
+[0;34m================================[0m
+[0;34m🔥 Установка необходимых пакетов[0m
+[0;34m================================[0m
+=== Установка необходимых пакетов ===
+[0;34mℹ️  Установка основных пакетов...[0m
+INFO: Установка основных пакетов...
+EXECUTING: sudo apt install -y python3-pip python3-venv python3-dev python3-opencv libopencv-dev libhdf5-dev libhdf5-serial-dev libatlas-base-dev libavcodec-dev libavformat-dev libswscale-dev libv4l-dev libxvidcore-dev libx264-dev libgtk-3-dev libdc1394-dev v4l-utils git wget curl build-essential cmake pkg-config libjpeg-dev libpng-dev libtiff-dev libwebp-dev libopenexr-dev
+Command: sudo apt install -y python3-pip python3-venv python3-dev python3-opencv libopencv-dev libhdf5-dev libhdf5-serial-dev libatlas-base-dev libavcodec-dev libavformat-dev libswscale-dev libv4l-dev libxvidcore-dev libx264-dev libgtk-3-dev libdc1394-dev v4l-utils git wget curl build-essential cmake pkg-config libjpeg-dev libpng-dev libtiff-dev libwebp-dev libopenexr-dev
+
+WARNING: apt does not have a stable CLI interface. Use with caution in scripts.
+
+
+WARNING: apt does not have a stable CLI interface. Use with caution in scripts.
+
+Reading package lists...Reading package lists...
+
+Building dependency tree...Building dependency tree...
+Reading state information...
+Reading state information...
+
+python3-pip is already the newest version (23.0.1+dfsg-1+rpt1).
+python3-venv is already the newest version (3.11.2-1+b1).
+python3-dev is already the newest version (3.11.2-1+b1).
+python3-opencv is already the newest version (4.6.0+dfsg-12).
+libopencv-dev is already the newest version (4.6.0+dfsg-12).
+libhdf5-dev is already the newest version (1.10.8+repack1-1).
+libatlas-base-dev is already the newest version (3.10.3-13).
+libavcodec-dev is already the newest version (8:5.1.7-0+deb12u1+rpt1).
+libavformat-dev is already the newest version (8:5.1.7-0+deb12u1+rpt1).
+libswscale-dev is already the newest version (8:5.1.7-0+deb12u1+rpt1).
+libv4l-dev is already the newest version (1.22.1-5+b2).
+libxvidcore-dev is already the newest version (2:1.3.7-1).
+libx264-dev is already the newest version (2:0.164.3095+gitbaee400-3).
+libgtk-3-dev is already the newest version (1:3.24.38-2~deb12u2+rpt7+rpi1).
+libdc1394-dev is already the newest version (2.2.6-4).
+v4l-utils is already the newest version (1.22.1-5+b2).
+git is already the newest version (1:2.39.5-0+deb12u2).
+wget is already the newest version (1.21.3-1+deb12u1).
+curl is already the newest version (7.88.1-10+deb12u14).
+build-essential is already the newest version (12.9).
+cmake is already the newest version (3.25.1-1).
+pkg-config is already the newest version (1.8.1-1).
+libjpeg-dev is already the newest version (1:2.1.5-2).
+libpng-dev is already the newest version (1.6.39-2).
+libtiff-dev is already the newest version (4.5.0-6+deb12u3).
+libwebp-dev is already the newest version (1.2.4-0.2+deb12u1).
+libopenexr-dev is already the newest version (3.1.5-5).
+The following packages were automatically installed and are no longer required:
+python3-pip is already the newest version (23.0.1+dfsg-1+rpt1).
+python3-venv is already the newest version (3.11.2-1+b1).
+python3-dev is already the newest version (3.11.2-1+b1).
+python3-opencv is already the newest version (4.6.0+dfsg-12).
+libopencv-dev is already the newest version (4.6.0+dfsg-12).
+libhdf5-dev is already the newest version (1.10.8+repack1-1).
+libatlas-base-dev is already the newest version (3.10.3-13).
+libavcodec-dev is already the newest version (8:5.1.7-0+deb12u1+rpt1).
+libavformat-dev is already the newest version (8:5.1.7-0+deb12u1+rpt1).
+libswscale-dev is already the newest version (8:5.1.7-0+deb12u1+rpt1).
+libv4l-dev is already the newest version (1.22.1-5+b2).
+libxvidcore-dev is already the newest version (2:1.3.7-1).
+libx264-dev is already the newest version (2:0.164.3095+gitbaee400-3).
+libgtk-3-dev is already the newest version (1:3.24.38-2~deb12u2+rpt7+rpi1).
+libdc1394-dev is already the newest version (2.2.6-4).
+v4l-utils is already the newest version (1.22.1-5+b2).
+git is already the newest version (1:2.39.5-0+deb12u2).
+wget is already the newest version (1.21.3-1+deb12u1).
+curl is already the newest version (7.88.1-10+deb12u14).
+build-essential is already the newest version (12.9).
+cmake is already the newest version (3.25.1-1).
+pkg-config is already the newest version (1.8.1-1).
+libjpeg-dev is already the newest version (1:2.1.5-2).
+libpng-dev is already the newest version (1.6.39-2).
+libtiff-dev is already the newest version (4.5.0-6+deb12u3).
+libwebp-dev is already the newest version (1.2.4-0.2+deb12u1).
+libopenexr-dev is already the newest version (3.1.5-5).
+The following packages were automatically installed and are no longer required:
+  libbasicusageenvironment1 libgroupsock8 liblivemedia77 python3-v4l2
+  libbasicusageenvironment1 libgroupsock8 liblivemedia77 python3-v4l2
+Use 'sudo apt autoremove' to remove them.
+Use 'sudo apt autoremove' to remove them.
+0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+SUCCESS: Основные пакеты установлены
+[0;32m✅ Основные пакеты установлены[0m
+[0;34m================================[0m
+[0;34m🔥 Установка GStreamer[0m
+[0;34m================================[0m
+=== Установка GStreamer ===
+[0;34mℹ️  Установка GStreamer...[0m
+INFO: Установка GStreamer...
+EXECUTING: sudo apt install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools gstreamer1.0-x gstreamer1.0-alsa gstreamer1.0-gl gstreamer1.0-gtk3 gstreamer1.0-qt5 gstreamer1.0-pulseaudio
+Command: sudo apt install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools gstreamer1.0-x gstreamer1.0-alsa gstreamer1.0-gl gstreamer1.0-gtk3 gstreamer1.0-qt5 gstreamer1.0-pulseaudio
+
+WARNING: apt does not have a stable CLI interface. Use with caution in scripts.
+
+
+WARNING: apt does not have a stable CLI interface. Use with caution in scripts.
+
+Reading package lists...Reading package lists...
+
+Building dependency tree...Building dependency tree...
+Reading state information...
+Reading state information...
+
+libgstreamer1.0-dev is already the newest version (1.22.0-2+deb12u1).
+libgstreamer-plugins-base1.0-dev is already the newest version (1.22.0-3+rpt1+deb12u5).
+gstreamer1.0-plugins-base is already the newest version (1.22.0-3+rpt1+deb12u5).
+gstreamer1.0-plugins-good is already the newest version (1.22.0-5+rpt2+deb12u3).
+gstreamer1.0-plugins-bad is already the newest version (1.22.0-4+deb12u6).
+gstreamer1.0-libav is already the newest version (1.22.0-2).
+gstreamer1.0-x is already the newest version (1.22.0-3+rpt1+deb12u5).
+gstreamer1.0-alsa is already the newest version (1.22.0-3+rpt1+deb12u5).
+The following packages were automatically installed and are no longer required:
+libgstreamer1.0-dev is already the newest version (1.22.0-2+deb12u1).
+libgstreamer-plugins-base1.0-dev is already the newest version (1.22.0-3+rpt1+deb12u5).
+gstreamer1.0-plugins-base is already the newest version (1.22.0-3+rpt1+deb12u5).
+gstreamer1.0-plugins-good is already the newest version (1.22.0-5+rpt2+deb12u3).
+gstreamer1.0-plugins-bad is already the newest version (1.22.0-4+deb12u6).
+gstreamer1.0-libav is already the newest version (1.22.0-2).
+gstreamer1.0-x is already the newest version (1.22.0-3+rpt1+deb12u5).
+gstreamer1.0-alsa is already the newest version (1.22.0-3+rpt1+deb12u5).
+The following packages were automatically installed and are no longer required:
+  libbasicusageenvironment1 libgroupsock8 liblivemedia77 python3-v4l2
+Use 'sudo apt autoremove' to remove them.
+  libbasicusageenvironment1 libgroupsock8 liblivemedia77 python3-v4l2
+Use 'sudo apt autoremove' to remove them.
+The following additional packages will be installed:
+The following additional packages will be installed:
+  libgraphene-1.0-0 libopencore-amrnb0 libopencore-amrwb0 libsidplay1v5
+  libgraphene-1.0-0 libopencore-amrnb0 libopencore-amrwb0 libsidplay1v5
+Suggested packages:
+  sidplay-base
+Suggested packages:
+  sidplay-base
+The following NEW packages will be installed:
+  gstreamer1.0-gl gstreamer1.0-gtk3 gstreamer1.0-plugins-ugly
+The following NEW packages will be installed:
+  gstreamer1.0-gl gstreamer1.0-gtk3 gstreamer1.0-plugins-ugly
+  gstreamer1.0-pulseaudio gstreamer1.0-qt5 gstreamer1.0-tools
+  gstreamer1.0-pulseaudio gstreamer1.0-qt5 gstreamer1.0-tools
+  libgraphene-1.0-0 libopencore-amrnb0 libopencore-amrwb0 libsidplay1v5
+  libgraphene-1.0-0 libopencore-amrnb0 libopencore-amrwb0 libsidplay1v5
+0 upgraded, 10 newly installed, 0 to remove and 0 not upgraded.
+Need to get 1,025 kB of archives.
+After this operation, 3,627 kB of additional disk space will be used.
+Get:1 http://deb.debian.org/debian bookworm/main arm64 libgraphene-1.0-0 arm64 1.10.8-1 [40.3 kB]
+0 upgraded, 10 newly installed, 0 to remove and 0 not upgraded.
+Need to get 1,025 kB of archives.
+After this operation, 3,627 kB of additional disk space will be used.
+Get:1 http://deb.debian.org/debian bookworm/main arm64 libgraphene-1.0-0 arm64 1.10.8-1 [40.3 kB]
+Get:2 http://deb.debian.org/debian bookworm/main arm64 libopencore-amrnb0 arm64 0.1.6-1 [89.9 kB]
+Get:2 http://deb.debian.org/debian bookworm/main arm64 libopencore-amrnb0 arm64 0.1.6-1 [89.9 kB]
+Get:3 http://deb.debian.org/debian bookworm/main arm64 libopencore-amrwb0 arm64 0.1.6-1 [47.4 kB]
+Get:3 http://deb.debian.org/debian bookworm/main arm64 libopencore-amrwb0 arm64 0.1.6-1 [47.4 kB]
+Get:4 http://deb.debian.org/debian bookworm/main arm64 libsidplay1v5 arm64 1.36.60-1 [61.9 kB]
+Get:4 http://deb.debian.org/debian bookworm/main arm64 libsidplay1v5 arm64 1.36.60-1 [61.9 kB]
+Get:5 http://deb.debian.org/debian bookworm/main arm64 gstreamer1.0-plugins-ugly arm64 1.22.0-2+deb12u1 [187 kB]
+Get:5 http://deb.debian.org/debian bookworm/main arm64 gstreamer1.0-plugins-ugly arm64 1.22.0-2+deb12u1 [187 kB]
+Get:6 http://deb.debian.org/debian bookworm/main arm64 gstreamer1.0-tools arm64 1.22.0-2+deb12u1 [88.9 kB]
+Get:6 http://deb.debian.org/debian bookworm/main arm64 gstreamer1.0-tools arm64 1.22.0-2+deb12u1 [88.9 kB]
+Get:7 http://archive.raspberrypi.com/debian bookworm/main arm64 gstreamer1.0-gl arm64 1.22.0-3+rpt1+deb12u5 [201 kB]
+Get:7 http://archive.raspberrypi.com/debian bookworm/main arm64 gstreamer1.0-gl arm64 1.22.0-3+rpt1+deb12u5 [201 kB]
+Get:8 http://archive.raspberrypi.com/debian bookworm/main arm64 gstreamer1.0-gtk3 arm64 1.22.0-5+rpt2+deb12u3 [97.2 kB]
+Get:8 http://archive.raspberrypi.com/debian bookworm/main arm64 gstreamer1.0-gtk3 arm64 1.22.0-5+rpt2+deb12u3 [97.2 kB]
+Get:9 http://archive.raspberrypi.com/debian bookworm/main arm64 gstreamer1.0-pulseaudio arm64 1.22.0-5+rpt2+deb12u3 [74.1 kB]
+Get:9 http://archive.raspberrypi.com/debian bookworm/main arm64 gstreamer1.0-pulseaudio arm64 1.22.0-5+rpt2+deb12u3 [74.1 kB]
+Get:10 http://archive.raspberrypi.com/debian bookworm/main arm64 gstreamer1.0-qt5 arm64 1.22.0-5+rpt2+deb12u3 [136 kB]
+Get:10 http://archive.raspberrypi.com/debian bookworm/main arm64 gstreamer1.0-qt5 arm64 1.22.0-5+rpt2+deb12u3 [136 kB]
+Fetched 1,025 kB in 8s (121 kB/s)
+Fetched 1,025 kB in 8s (121 kB/s)
+Selecting previously unselected package libgraphene-1.0-0:arm64.
+(Reading database ... Selecting previously unselected package libgraphene-1.0-0:arm64.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 5%(Reading database ... 10%(Reading database ... (Reading database ... 15%15%(Reading database ... 20%(Reading database ... 20%(Reading database ... (Reading database ... 25%25%(Reading database ... (Reading database ... 30%30%(Reading database ... 35%(Reading database ... 35%(Reading database ... (Reading database ... 40%40%(Reading database ... (Reading database ... 45%45%(Reading database ... (Reading database ... 50%50%(Reading database ... 55%(Reading database ... 55%(Reading database ... 60%(Reading database ... 60%(Reading database ... 65%(Reading database ... 65%(Reading database ... 70%(Reading database ... 70%(Reading database ... 75%(Reading database ... 75%(Reading database ... 80%(Reading database ... 80%(Reading database ... (Reading database ... 85%85%(Reading database ... (Reading database ... 90%90%(Reading database ... 95%(Reading database ... 95%(Reading database ... 100%(Reading database ... 165150 files and directories currently installed.)
+(Reading database ... 100%(Reading database ... 165150 files and directories currently installed.)
+Preparing to unpack .../0-libgraphene-1.0-0_1.10.8-1_arm64.deb ...
+Preparing to unpack .../0-libgraphene-1.0-0_1.10.8-1_arm64.deb ...
+Unpacking libgraphene-1.0-0:arm64 (1.10.8-1) ...
+Unpacking libgraphene-1.0-0:arm64 (1.10.8-1) ...
+Selecting previously unselected package gstreamer1.0-gl:arm64.
+Selecting previously unselected package gstreamer1.0-gl:arm64.
+Preparing to unpack .../1-gstreamer1.0-gl_1.22.0-3+rpt1+deb12u5_arm64.deb ...
+Preparing to unpack .../1-gstreamer1.0-gl_1.22.0-3+rpt1+deb12u5_arm64.deb ...
+Unpacking gstreamer1.0-gl:arm64 (1.22.0-3+rpt1+deb12u5) ...
+Unpacking gstreamer1.0-gl:arm64 (1.22.0-3+rpt1+deb12u5) ...
+Selecting previously unselected package gstreamer1.0-gtk3:arm64.
+Selecting previously unselected package gstreamer1.0-gtk3:arm64.
+Preparing to unpack .../2-gstreamer1.0-gtk3_1.22.0-5+rpt2+deb12u3_arm64.deb ...
+Preparing to unpack .../2-gstreamer1.0-gtk3_1.22.0-5+rpt2+deb12u3_arm64.deb ...
+Unpacking gstreamer1.0-gtk3:arm64 (1.22.0-5+rpt2+deb12u3) ...
+Unpacking gstreamer1.0-gtk3:arm64 (1.22.0-5+rpt2+deb12u3) ...
+Selecting previously unselected package libopencore-amrnb0:arm64.
+Selecting previously unselected package libopencore-amrnb0:arm64.
+Preparing to unpack .../3-libopencore-amrnb0_0.1.6-1_arm64.deb ...
+Preparing to unpack .../3-libopencore-amrnb0_0.1.6-1_arm64.deb ...
+Unpacking libopencore-amrnb0:arm64 (0.1.6-1) ...
+Unpacking libopencore-amrnb0:arm64 (0.1.6-1) ...
+Selecting previously unselected package libopencore-amrwb0:arm64.
+Selecting previously unselected package libopencore-amrwb0:arm64.
+Preparing to unpack .../4-libopencore-amrwb0_0.1.6-1_arm64.deb ...
+Preparing to unpack .../4-libopencore-amrwb0_0.1.6-1_arm64.deb ...
+Unpacking libopencore-amrwb0:arm64 (0.1.6-1) ...
+Unpacking libopencore-amrwb0:arm64 (0.1.6-1) ...
+Selecting previously unselected package libsidplay1v5:arm64.
+Selecting previously unselected package libsidplay1v5:arm64.
+Preparing to unpack .../5-libsidplay1v5_1.36.60-1_arm64.deb ...
+Preparing to unpack .../5-libsidplay1v5_1.36.60-1_arm64.deb ...
+Unpacking libsidplay1v5:arm64 (1.36.60-1) ...
+Unpacking libsidplay1v5:arm64 (1.36.60-1) ...
+Selecting previously unselected package gstreamer1.0-plugins-ugly:arm64.
+Selecting previously unselected package gstreamer1.0-plugins-ugly:arm64.
+Preparing to unpack .../6-gstreamer1.0-plugins-ugly_1.22.0-2+deb12u1_arm64.deb ...
+Preparing to unpack .../6-gstreamer1.0-plugins-ugly_1.22.0-2+deb12u1_arm64.deb ...
+Unpacking gstreamer1.0-plugins-ugly:arm64 (1.22.0-2+deb12u1) ...
+Unpacking gstreamer1.0-plugins-ugly:arm64 (1.22.0-2+deb12u1) ...
+Selecting previously unselected package gstreamer1.0-pulseaudio:arm64.
+Selecting previously unselected package gstreamer1.0-pulseaudio:arm64.
+Preparing to unpack .../7-gstreamer1.0-pulseaudio_1.22.0-5+rpt2+deb12u3_arm64.deb ...
+Preparing to unpack .../7-gstreamer1.0-pulseaudio_1.22.0-5+rpt2+deb12u3_arm64.deb ...
+Unpacking gstreamer1.0-pulseaudio:arm64 (1.22.0-5+rpt2+deb12u3) ...
+Unpacking gstreamer1.0-pulseaudio:arm64 (1.22.0-5+rpt2+deb12u3) ...
+Selecting previously unselected package gstreamer1.0-qt5:arm64.
+Selecting previously unselected package gstreamer1.0-qt5:arm64.
+Preparing to unpack .../8-gstreamer1.0-qt5_1.22.0-5+rpt2+deb12u3_arm64.deb ...
+Preparing to unpack .../8-gstreamer1.0-qt5_1.22.0-5+rpt2+deb12u3_arm64.deb ...
+Unpacking gstreamer1.0-qt5:arm64 (1.22.0-5+rpt2+deb12u3) ...
+Unpacking gstreamer1.0-qt5:arm64 (1.22.0-5+rpt2+deb12u3) ...
+Selecting previously unselected package gstreamer1.0-tools.
+Selecting previously unselected package gstreamer1.0-tools.
+Preparing to unpack .../9-gstreamer1.0-tools_1.22.0-2+deb12u1_arm64.deb ...
+Preparing to unpack .../9-gstreamer1.0-tools_1.22.0-2+deb12u1_arm64.deb ...
+Unpacking gstreamer1.0-tools (1.22.0-2+deb12u1) ...
+Unpacking gstreamer1.0-tools (1.22.0-2+deb12u1) ...
+Setting up libsidplay1v5:arm64 (1.36.60-1) ...
+Setting up libsidplay1v5:arm64 (1.36.60-1) ...
+Setting up gstreamer1.0-gtk3:arm64 (1.22.0-5+rpt2+deb12u3) ...
+Setting up gstreamer1.0-gtk3:arm64 (1.22.0-5+rpt2+deb12u3) ...
+Setting up libopencore-amrwb0:arm64 (0.1.6-1) ...
+Setting up libopencore-amrwb0:arm64 (0.1.6-1) ...
+Setting up gstreamer1.0-tools (1.22.0-2+deb12u1) ...
+Setting up gstreamer1.0-tools (1.22.0-2+deb12u1) ...
+Setting up libopencore-amrnb0:arm64 (0.1.6-1) ...
+Setting up libopencore-amrnb0:arm64 (0.1.6-1) ...
+Setting up gstreamer1.0-plugins-ugly:arm64 (1.22.0-2+deb12u1) ...
+Setting up gstreamer1.0-plugins-ugly:arm64 (1.22.0-2+deb12u1) ...
+Setting up gstreamer1.0-pulseaudio:arm64 (1.22.0-5+rpt2+deb12u3) ...
+Setting up gstreamer1.0-pulseaudio:arm64 (1.22.0-5+rpt2+deb12u3) ...
+Setting up libgraphene-1.0-0:arm64 (1.10.8-1) ...
+Setting up libgraphene-1.0-0:arm64 (1.10.8-1) ...
+Setting up gstreamer1.0-qt5:arm64 (1.22.0-5+rpt2+deb12u3) ...
+Setting up gstreamer1.0-qt5:arm64 (1.22.0-5+rpt2+deb12u3) ...
+Setting up gstreamer1.0-gl:arm64 (1.22.0-3+rpt1+deb12u5) ...
+Setting up gstreamer1.0-gl:arm64 (1.22.0-3+rpt1+deb12u5) ...
+Processing triggers for man-db (2.11.2-2) ...
+Processing triggers for man-db (2.11.2-2) ...
+Processing triggers for libc-bin (2.36-9+rpt2+deb12u13) ...
+Processing triggers for libc-bin (2.36-9+rpt2+deb12u13) ...
+[0;32m✅ GStreamer установлен[0m
+SUCCESS: GStreamer установлен
+[0;34m================================[0m
+=== Установка зависимостей для камеры ===
+[0;34m🔥 Установка зависимостей для камеры[0m
+[0;34m================================[0m
+INFO: Установка минимальных зависимостей для PiCamera...
+[0;34mℹ️  Установка минимальных зависимостей для PiCamera...[0m
+EXECUTING: sudo apt install -y libcap-dev libcap2-dev libcap-ng-dev libcap-ng0 libcamera-dev libcamera-tools python3-libcamera python3-kms++ libgl1-mesa-dev libglu1-mesa-dev libdrm-dev
+Command: sudo apt install -y libcap-dev libcap2-dev libcap-ng-dev libcap-ng0 libcamera-dev libcamera-tools python3-libcamera python3-kms++ libgl1-mesa-dev libglu1-mesa-dev libdrm-dev
+
+WARNING: apt does not have a stable CLI interface. Use with caution in scripts.
+WARNING: apt does not have a stable CLI interface. Use with caution in scripts.
+
+
+
+Reading package lists...Reading package lists...
+
+Building dependency tree...Building dependency tree...
+Reading state information...
+Reading state information...
+
+libcap-ng0 is already the newest version (0.8.3-1+b3).
+libcamera-tools is already the newest version (0.5.2+rpt20250903-1~bpo12+1).
+python3-libcamera is already the newest version (0.5.2+rpt20250903-1~bpo12+1).
+python3-libcamera set to manually installed.
+python3-kms++ is already the newest version (0~git20250807.1813ada-1~bookworm).
+python3-kms++ set to manually installed.
+libgl1-mesa-dev is already the newest version (24.2.8-1~bpo12+rpt4).
+libgl1-mesa-dev set to manually installed.
+libglu1-mesa-dev is already the newest version (9.0.2-1.1).
+libglu1-mesa-dev set to manually installed.
+libdrm-dev is already the newest version (2.4.123-1~bpo12+1+rpt1).
+libdrm-dev set to manually installed.
+The following packages were automatically installed and are no longer required:
+libcap-ng0 is already the newest version (0.8.3-1+b3).
+libcamera-tools is already the newest version (0.5.2+rpt20250903-1~bpo12+1).
+python3-libcamera is already the newest version (0.5.2+rpt20250903-1~bpo12+1).
+python3-libcamera set to manually installed.
+python3-kms++ is already the newest version (0~git20250807.1813ada-1~bookworm).
+python3-kms++ set to manually installed.
+libgl1-mesa-dev is already the newest version (24.2.8-1~bpo12+rpt4).
+libgl1-mesa-dev set to manually installed.
+libglu1-mesa-dev is already the newest version (9.0.2-1.1).
+libglu1-mesa-dev set to manually installed.
+libdrm-dev is already the newest version (2.4.123-1~bpo12+1+rpt1).
+libdrm-dev set to manually installed.
+The following packages were automatically installed and are no longer required:
+  libbasicusageenvironment1 libgroupsock8 liblivemedia77 python3-v4l2
+Use 'sudo apt autoremove' to remove them.
+  libbasicusageenvironment1 libgroupsock8 liblivemedia77 python3-v4l2
+Use 'sudo apt autoremove' to remove them.
+The following NEW packages will be installed:
+The following NEW packages will be installed:
+  libcamera-dev libcap-dev libcap-ng-dev
+  libcamera-dev libcap-dev libcap-ng-dev
+0 upgraded, 3 newly installed, 0 to remove and 0 not upgraded.
+Need to get 521 kB of archives.
+After this operation, 3,192 kB of additional disk space will be used.
+Get:1 http://deb.debian.org/debian bookworm/main arm64 libcap-dev arm64 1:2.66-4+deb12u2 [450 kB]
+0 upgraded, 3 newly installed, 0 to remove and 0 not upgraded.
+Need to get 521 kB of archives.
+After this operation, 3,192 kB of additional disk space will be used.
+Get:1 http://deb.debian.org/debian bookworm/main arm64 libcap-dev arm64 1:2.66-4+deb12u2 [450 kB]
+Get:2 http://deb.debian.org/debian bookworm/main arm64 libcap-ng-dev arm64 0.8.3-1+b3 [31.4 kB]
+Get:2 http://deb.debian.org/debian bookworm/main arm64 libcap-ng-dev arm64 0.8.3-1+b3 [31.4 kB]
+Get:3 http://archive.raspberrypi.com/debian bookworm/main arm64 libcamera-dev arm64 0.5.2+rpt20250903-1~bpo12+1 [39.3 kB]
+Get:3 http://archive.raspberrypi.com/debian bookworm/main arm64 libcamera-dev arm64 0.5.2+rpt20250903-1~bpo12+1 [39.3 kB]
+Fetched 521 kB in 2s (296 kB/s)
+Fetched 521 kB in 2s (296 kB/s)
+Selecting previously unselected package libcamera-dev.
+(Reading database ... Selecting previously unselected package libcamera-dev.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... (Reading database ... 5%(Reading database ... 10%15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 40%(Reading database ... 45%(Reading database ... 45%(Reading database ... 50%(Reading database ... 50%(Reading database ... (Reading database ... 55%55%(Reading database ... 60%(Reading database ... 60%(Reading database ... 65%(Reading database ... 65%(Reading database ... 70%(Reading database ... 70%(Reading database ... 75%(Reading database ... 75%(Reading database ... (Reading database ... 80%80%(Reading database ... 85%(Reading database ... 85%(Reading database ... (Reading database ... 90%90%(Reading database ... 95%(Reading database ... 95%(Reading database ... 100%(Reading database ... 165274 files and directories currently installed.)
+(Reading database ... 100%(Reading database ... 165274 files and directories currently installed.)
+Preparing to unpack .../libcamera-dev_0.5.2+rpt20250903-1~bpo12+1_arm64.deb ...
+Preparing to unpack .../libcamera-dev_0.5.2+rpt20250903-1~bpo12+1_arm64.deb ...
+Unpacking libcamera-dev (0.5.2+rpt20250903-1~bpo12+1) ...
+Unpacking libcamera-dev (0.5.2+rpt20250903-1~bpo12+1) ...
+Selecting previously unselected package libcap-dev:arm64.
+Selecting previously unselected package libcap-dev:arm64.
+Preparing to unpack .../libcap-dev_1%3a2.66-4+deb12u2_arm64.deb ...
+Preparing to unpack .../libcap-dev_1%3a2.66-4+deb12u2_arm64.deb ...
+Unpacking libcap-dev:arm64 (1:2.66-4+deb12u2) ...
+Unpacking libcap-dev:arm64 (1:2.66-4+deb12u2) ...
+Selecting previously unselected package libcap-ng-dev:arm64.
+Selecting previously unselected package libcap-ng-dev:arm64.
+Preparing to unpack .../libcap-ng-dev_0.8.3-1+b3_arm64.deb ...
+Preparing to unpack .../libcap-ng-dev_0.8.3-1+b3_arm64.deb ...
+Unpacking libcap-ng-dev:arm64 (0.8.3-1+b3) ...
+Unpacking libcap-ng-dev:arm64 (0.8.3-1+b3) ...
+Setting up libcamera-dev (0.5.2+rpt20250903-1~bpo12+1) ...
+Setting up libcamera-dev (0.5.2+rpt20250903-1~bpo12+1) ...
+Setting up libcap-ng-dev:arm64 (0.8.3-1+b3) ...
+Setting up libcap-ng-dev:arm64 (0.8.3-1+b3) ...
+Setting up libcap-dev:arm64 (1:2.66-4+deb12u2) ...
+Setting up libcap-dev:arm64 (1:2.66-4+deb12u2) ...
+Processing triggers for man-db (2.11.2-2) ...
+Processing triggers for man-db (2.11.2-2) ...
+[0;32m✅ Зависимости для камеры установлены[0m
+SUCCESS: Зависимости для камеры установлены
+[0;34m================================[0m
+=== Настройка камеры ===
+[0;34m🔥 Настройка камеры[0m
+[0;34m================================[0m
+[0;34mℹ️  Включение камеры...[0m
+INFO: Включение камеры...
+EXECUTING: sudo raspi-config nonint do_camera 0
+Command: sudo raspi-config nonint do_camera 0
+[0;34mℹ️  Проверка камеры...[0m
+INFO: Проверка камеры...
+EXECUTING: vcgencmd get_camera
+Command: vcgencmd get_camera
+supported=0 detected=0, libcamera interfaces=0
+Camera status: supported=0 detected=0, libcamera interfaces=0
+[1;33m⚠️  Камера не обнаружена. Убедитесь, что она подключена.[0m
+WARNING: Камера не обнаружена. Убедитесь, что она подключена.
+CAMERA NOT DETECTED
+=== Создание виртуального окружения ===
+INFO: Создание виртуального окружения...
+[0;34m================================[0m
+[0;34m🔥 Создание виртуального окружения[0m
+[0;34m================================[0m
+[0;34mℹ️  Создание виртуального окружения...[0m
+EXECUTING: python3 -m venv fire_detection_env
+Command: python3 -m venv fire_detection_env
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                
