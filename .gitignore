@@ -148,3 +148,15 @@ Thumbs.db
 *.pt
 !yolov8n.pt
 !bestfire.pt
+
+# Raspberry Pi specific
+logs/
+recordings/
+fire_detection_env/
+*.log
+
+# System files
+.DS_Store
+Thumbs.db
+*.tmp
+*.temp
