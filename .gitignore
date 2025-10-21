@@ -153,7 +153,9 @@ Thumbs.db
 logs/
 recordings/
 fire_detection_env/
-*.log
+
+# Keep setup logs in repository for debugging
+!setup_log_*.log
 
 # System files
 .DS_Store
