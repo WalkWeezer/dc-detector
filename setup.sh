@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 🔥 DC-Detector Setup для Raspberry Pi
-# Единственный рабочий скрипт установки
+# Упрощенный рабочий скрипт установки
 # Версия: 1.0
 
 set -e
@@ -59,9 +59,9 @@ update_system() {
     print_success "Система обновлена"
 }
 
-# Установка системных зависимостей
-install_system_dependencies() {
-    print_header "Установка системных зависимостей"
+# Установка только необходимых пакетов
+install_essential() {
+    print_header "Установка необходимых пакетов"
     
     print_info "Установка основных пакетов..."
     sudo apt install -y \
@@ -121,11 +121,11 @@ install_gstreamer() {
     print_success "GStreamer установлен"
 }
 
-# Установка зависимостей для камеры
+# Установка минимальных зависимостей для камеры
 install_camera_dependencies() {
     print_header "Установка зависимостей для камеры"
     
-    print_info "Установка зависимостей для PiCamera..."
+    print_info "Установка минимальных зависимостей для PiCamera..."
     sudo apt install -y \
         libcap-dev \
         libcap2-dev \
@@ -136,7 +136,6 @@ install_camera_dependencies() {
         python3-libcamera \
         python3-kms++ \
         python3-pyqt5 \
-        python3-pyqt5.qtwidgets \
         qtbase5-dev \
         libqt5core5a \
         libqt5gui5 \
@@ -380,7 +379,7 @@ main() {
     
     check_system
     update_system
-    install_system_dependencies
+    install_essential
     install_gstreamer
     install_camera_dependencies
     setup_camera
