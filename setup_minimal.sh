@@ -59,7 +59,6 @@ install_essential() {
         libxvidcore-dev \
         libx264-dev \
         libgtk-3-dev \
-        libtbb2 \
         libtbb-dev \
         libdc1394-dev \
         v4l-utils \

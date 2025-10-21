@@ -1,16 +1,15 @@
 #!/bin/bash
 
-# 🔥 DC-Detector Simple Setup для Raspberry Pi
-# Упрощенная установка без проблемных пакетов
+# 🔥 DC-Detector Basic Setup для Raspberry Pi
+# Базовая установка только необходимых компонентов
 # Версия: 1.0
 
 set -e
 
 # Цвета
-RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
 NC='\033[0m'
 
 print_header() {
@@ -27,28 +26,8 @@ print_warning() {
     echo -e "${YELLOW}⚠️  $1${NC}"
 }
 
-print_error() {
-    echo -e "${RED}❌ $1${NC}"
-}
-
 print_info() {
     echo -e "${BLUE}ℹ️  $1${NC}"
-}
-
-# Проверка системы
-check_system() {
-    print_header "Проверка системы"
-    
-    if ! grep -q "Raspberry Pi" /proc/cpuinfo; then
-        print_warning "Этот скрипт предназначен для Raspberry Pi"
-        read -p "Продолжить установку? (y/N): " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            exit 1
-        fi
-    fi
-    
-    print_success "Система проверена"
 }
 
 # Обновление системы
@@ -59,9 +38,9 @@ update_system() {
     print_success "Система обновлена"
 }
 
-# Установка минимальных зависимостей
-install_minimal_dependencies() {
-    print_header "Установка минимальных зависимостей"
+# Установка только самых необходимых пакетов
+install_essential() {
+    print_header "Установка необходимых пакетов"
     
     print_info "Установка основных пакетов..."
     sudo apt install -y \
@@ -80,7 +59,6 @@ install_minimal_dependencies() {
         libxvidcore-dev \
         libx264-dev \
         libgtk-3-dev \
-        libtbb-dev \
         libdc1394-dev \
         v4l-utils \
         git \
@@ -88,19 +66,14 @@ install_minimal_dependencies() {
         curl \
         build-essential \
         cmake \
-        pkg-config \
-        libjpeg-dev \
-        libpng-dev \
-        libtiff-dev \
-        libwebp-dev \
-        libopenexr-dev
+        pkg-config
     
-    print_success "Основные зависимости установлены"
+    print_success "Основные пакеты установлены"
 }
 
-# Установка зависимостей для камеры
-install_camera_dependencies() {
-    print_header "Установка зависимостей для камеры"
+# Установка GStreamer
+install_gstreamer() {
+    print_header "Установка GStreamer"
     
     print_info "Установка GStreamer..."
     sudo apt install -y \
@@ -118,6 +91,13 @@ install_camera_dependencies() {
         gstreamer1.0-gtk3 \
         gstreamer1.0-qt5 \
         gstreamer1.0-pulseaudio
+    
+    print_success "GStreamer установлен"
+}
+
+# Установка зависимостей для камеры
+install_camera_deps() {
+    print_header "Установка зависимостей для камеры"
     
     print_info "Установка зависимостей для PiCamera..."
     sudo apt install -y \
@@ -191,7 +171,7 @@ create_venv() {
 }
 
 # Установка Python зависимостей
-install_python_dependencies() {
+install_python_deps() {
     print_header "Установка Python зависимостей"
     
     source fire_detection_env/bin/activate
@@ -227,35 +207,8 @@ create_directories() {
     print_success "Директории созданы"
 }
 
-# Настройка systemd сервиса
-setup_systemd() {
-    print_header "Настройка автозапуска"
-    
-    print_info "Создание systemd сервиса..."
-    sudo tee /etc/systemd/system/fire-detection.service > /dev/null <<EOF
-[Unit]
-Description=Fire Detection System
-After=network.target
-
-[Service]
-Type=simple
-User=pi
-WorkingDirectory=$(pwd)
-Environment=PATH=$(pwd)/fire_detection_env/bin
-ExecStart=$(pwd)/fire_detection_env/bin/python app_pi.py
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    sudo systemctl daemon-reload
-    print_success "Systemd сервис настроен"
-}
-
 # Создание скриптов управления
-create_management_scripts() {
+create_scripts() {
     print_header "Создание скриптов управления"
     
     # Скрипт запуска
@@ -292,6 +245,33 @@ EOF
 
     chmod +x *.sh
     print_success "Скрипты управления созданы"
+}
+
+# Настройка systemd сервиса
+setup_systemd() {
+    print_header "Настройка автозапуска"
+    
+    print_info "Создание systemd сервиса..."
+    sudo tee /etc/systemd/system/fire-detection.service > /dev/null <<EOF
+[Unit]
+Description=Fire Detection System
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=$(pwd)
+Environment=PATH=$(pwd)/fire_detection_env/bin
+ExecStart=$(pwd)/fire_detection_env/bin/python app_pi.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    sudo systemctl daemon-reload
+    print_success "Systemd сервис настроен"
 }
 
 # Настройка прав доступа
@@ -331,17 +311,11 @@ print('✅ Все основные модули работают')
     fi
 }
 
-# Получение IP адреса
-get_ip_address() {
-    IP_ADDRESS=$(hostname -I | awk '{print $1}')
-    echo "$IP_ADDRESS"
-}
-
 # Вывод информации о завершении
 show_completion_info() {
     print_header "Установка завершена!"
     
-    IP_ADDRESS=$(get_ip_address)
+    IP_ADDRESS=$(hostname -I | awk '{print $1}')
     
     echo -e "${GREEN}🎉 Система детекции огня готова к работе!${NC}"
     echo ""
@@ -368,20 +342,20 @@ show_completion_info() {
 
 # Главная функция
 main() {
-    print_header "DC-Detector Simple Setup"
-    print_info "Упрощенная установка системы детекции огня для Raspberry Pi"
+    print_header "DC-Detector Basic Setup"
+    print_info "Базовая установка системы детекции огня для Raspberry Pi"
     echo ""
     
-    check_system
     update_system
-    install_minimal_dependencies
-    install_camera_dependencies
+    install_essential
+    install_gstreamer
+    install_camera_deps
     setup_camera
     create_venv
-    install_python_dependencies
+    install_python_deps
     create_directories
+    create_scripts
     setup_systemd
-    create_management_scripts
     setup_permissions
     final_check
     show_completion_info
