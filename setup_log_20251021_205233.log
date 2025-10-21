@@ -1,0 +1,56 @@
+=== DC-Detector Setup ===
+INFO: Установка системы детекции огня для Raspberry Pi
+INFO: Лог установки: setup_log_20251021_205233.log
+[0;34m================================[0m
+[0;34m🔥 DC-Detector Setup[0m
+[0;34m================================[0m
+[0;34mℹ️  Установка системы детекции огня для Raspberry Pi[0m
+[0;34mℹ️  Лог установки: setup_log_20251021_205233.log[0m
+
+[0;34m================================[0m
+=== Проверка системы ===
+[0;34m🔥 Проверка системы[0m
+[0;34m================================[0m
+System info:
+Linux raspberrypi 6.12.47+rpt-rpi-v8 #1 SMP PREEMPT Debian 1:6.12.47-1+rpt1~bookworm (2025-09-16) aarch64 GNU/Linux
+Model		: Raspberry Pi 3 Model B Rev 1.2
+Linux version 6.12.47+rpt-rpi-v8 (serge@raspberrypi.com) (aarch64-linux-gnu-gcc-12 (Debian 12.2.0-14+deb12u1) 12.2.0, GNU ld (GNU Binutils for Debian) 2.40) #1 SMP PREEMPT Debian 1:6.12.47-1+rpt1~bookworm (2025-09-16)
+SUCCESS: Система проверена
+[0;32m✅ Система проверена[0m
+[0;34m================================[0m
+=== Обновление системы ===
+[0;34m🔥 Обновление системы[0m
+[0;34m================================[0m
+INFO: Обновление пакетов...
+[0;34mℹ️  Обновление пакетов...[0m
+EXECUTING: sudo apt update
+Command: sudo apt update
+
+WARNING: apt does not have a stable CLI interface. Use with caution in scripts.
+
+
+WARNING: apt does not have a stable CLI interface. Use with caution in scripts.
+
+Hit:1 http://deb.debian.org/debian bookworm InRelease
+Hit:2 http://deb.debian.org/debian-security bookworm-security InRelease
+Hit:3 http://deb.debian.org/debian bookworm-updates InRelease
+Hit:1 http://deb.debian.org/debian bookworm InRelease
+Hit:2 http://deb.debian.org/debian-security bookworm-security InRelease
+Hit:3 http://deb.debian.org/debian bookworm-updates InRelease
+Hit:4 http://archive.raspberrypi.com/debian bookworm InRelease
+Hit:4 http://archive.raspberrypi.com/debian bookworm InRelease
+Get:5 https://cli.github.com/packages stable InRelease [3,917 B]
+Get:5 https://cli.github.com/packages stable InRelease [3,917 B]
+Err:5 https://cli.github.com/packages stable InRelease
+  The following signatures couldn't be verified because the public key is not available: NO_PUBKEY 23F3D4EA75716059
+Err:5 https://cli.github.com/packages stable InRelease
+  The following signatures couldn't be verified because the public key is not available: NO_PUBKEY 23F3D4EA75716059
+Reading package lists...Reading package lists...
+
+W: GPG error: https://cli.github.com/packages stable InRelease: The following signatures couldn't be verified because the public key is not available: NO_PUBKEY 23F3D4EA75716059
+E: The repository 'https://cli.github.com/packages stable InRelease' is not signed.
+W: GPG error: https://cli.github.com/packages stable InRelease: The following signatures couldn't be verified because the public key is not available: NO_PUBKEY 23F3D4EA75716059
+E: The repository 'https://cli.github.com/packages stable InRelease' is not signed.
+ERROR: Ошибка обновления системы
+APT UPDATE FAILED
+[0;31m❌ Ошибка обновления системы[0m
