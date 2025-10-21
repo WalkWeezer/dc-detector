@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DC-Detector - Распознавание очага возгорания</title>
+    <link rel="stylesheet" href="styles.css">
+    <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady();" type="text/javascript"></script>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>🔥 DC-Detector</h1>
+            <p>Система распознавания очага возгорания в реальном времени</p>
+        </header>
+
+        <main class="main-content">
+            <div class="video-container">
+                <video id="video" autoplay muted playsinline></video>
+                <canvas id="canvas" style="display: none;"></canvas>
+                <div class="video-overlay">
+                    <div class="status-indicator" id="status">
+                        <span class="status-dot"></span>
+                        <span class="status-text">Подключение к камере...</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="controls">
+                <button id="startBtn" class="btn btn-primary">Запустить камеру</button>
+                <button id="stopBtn" class="btn btn-secondary" disabled>Остановить</button>
+                <button id="captureBtn" class="btn btn-accent" disabled>Сделать снимок</button>
+            </div>
+
+            <div class="settings-panel">
+                <h3>Настройки детектора</h3>
+                <div class="setting-item">
+                    <label for="sensitivitySlider">Чувствительность:</label>
+                    <input type="range" id="sensitivitySlider" min="0.01" max="1.0" step="0.01" value="0.1">
+                    <span id="sensitivityValue">0.1</span>
+                </div>
+                <div class="setting-item">
+                    <label for="motionSlider">Порог движения:</label>
+                    <input type="range" id="motionSlider" min="0.005" max="0.05" step="0.005" value="0.02">
+                    <span id="motionValue">0.02</span>
+                </div>
+                <div class="setting-item">
+                    <label for="pixelThresholdSlider">Чувствительность пикселей:</label>
+                    <input type="range" id="pixelThresholdSlider" min="5" max="50" step="5" value="15">
+                    <span id="pixelThresholdValue">15</span>
+                </div>
+                <div class="setting-item">
+                    <label for="stabilityFramesSlider">Стабильность (кадры):</label>
+                    <input type="range" id="stabilityFramesSlider" min="1" max="10" step="1" value="3">
+                    <span id="stabilityFramesValue">3</span>
+                </div>
+                <div class="setting-item">
+                    <label>
+                        <input type="checkbox" id="motionDetection" checked>
+                        Детекция движения
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <label>
+                        <input type="checkbox" id="showHighlights" checked>
+                        Выделение областей огня
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <label>
+                        <input type="checkbox" id="useOpenCV" checked>
+                        Использовать OpenCV (рекомендуется)
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <label for="mergeDistanceSlider">Объединение областей:</label>
+                    <input type="range" id="mergeDistanceSlider" min="0.01" max="0.2" step="0.01" value="0.05">
+                    <span id="mergeDistanceValue">5%</span>
+                </div>
+            </div>
+
+            <div class="info-panel">
+                <h3>Информация о системе</h3>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">Статус камеры:</span>
+                        <span class="info-value" id="cameraStatus">Отключена</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Разрешение:</span>
+                        <span class="info-value" id="resolution">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">FPS:</span>
+                        <span class="info-value" id="fps">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Обнаружение:</span>
+                        <span class="info-value" id="detection">Не активно</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Движение:</span>
+                        <span class="info-value" id="motionStatus">Нет</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Области огня:</span>
+                        <span class="info-value" id="fireRegionsCount">0</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p>&copy; 2024 DC-Detector. Демо-версия системы распознавания возгорания.</p>
+        </footer>
+    </div>
+
+    <script src="opencv-fire-detector.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
