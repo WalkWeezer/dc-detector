@@ -1,10 +1,15 @@
 #!/bin/bash
 
 # 🔥 DC-Detector Setup для Raspberry Pi
-# Упрощенный рабочий скрипт установки
+# Скрипт установки с логированием
 # Версия: 1.0
 
 set -e
+
+# Настройка логирования
+LOG_FILE="setup_log_$(date +%Y%m%d_%H%M%S).log"
+exec > >(tee -a "$LOG_FILE")
+exec 2>&1
 
 # Цвета
 GREEN='\033[0;32m'
@@ -17,33 +22,50 @@ print_header() {
     echo -e "${BLUE}================================${NC}"
     echo -e "${BLUE}🔥 $1${NC}"
     echo -e "${BLUE}================================${NC}"
+    echo "=== $1 ===" >> "$LOG_FILE"
 }
 
 print_success() {
     echo -e "${GREEN}✅ $1${NC}"
+    echo "SUCCESS: $1" >> "$LOG_FILE"
 }
 
 print_warning() {
     echo -e "${YELLOW}⚠️  $1${NC}"
+    echo "WARNING: $1" >> "$LOG_FILE"
 }
 
 print_error() {
     echo -e "${RED}❌ $1${NC}"
+    echo "ERROR: $1" >> "$LOG_FILE"
 }
 
 print_info() {
     echo -e "${BLUE}ℹ️  $1${NC}"
+    echo "INFO: $1" >> "$LOG_FILE"
+}
+
+# Функция для логирования команд
+log_command() {
+    echo "EXECUTING: $1" >> "$LOG_FILE"
+    echo "Command: $1" >> "$LOG_FILE"
 }
 
 # Проверка системы
 check_system() {
     print_header "Проверка системы"
     
+    echo "System info:" >> "$LOG_FILE"
+    uname -a >> "$LOG_FILE"
+    cat /proc/cpuinfo | grep Model >> "$LOG_FILE"
+    cat /proc/version >> "$LOG_FILE"
+    
     if ! grep -q "Raspberry Pi" /proc/cpuinfo; then
         print_warning "Этот скрипт предназначен для Raspberry Pi"
         read -p "Продолжить установку? (y/N): " -n 1 -r
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            print_error "Установка отменена пользователем"
             exit 1
         fi
     fi
@@ -55,46 +77,37 @@ check_system() {
 update_system() {
     print_header "Обновление системы"
     print_info "Обновление пакетов..."
-    sudo apt update
-    print_success "Система обновлена"
+    
+    log_command "sudo apt update"
+    sudo apt update 2>&1 | tee -a "$LOG_FILE"
+    
+    if [ ${PIPESTATUS[0]} -eq 0 ]; then
+        print_success "Система обновлена"
+    else
+        print_error "Ошибка обновления системы"
+        echo "APT UPDATE FAILED" >> "$LOG_FILE"
+        exit 1
+    fi
 }
 
-# Установка только необходимых пакетов
+# Установка только самых необходимых пакетов
 install_essential() {
     print_header "Установка необходимых пакетов"
     
     print_info "Установка основных пакетов..."
-    sudo apt install -y \
-        python3-pip \
-        python3-venv \
-        python3-dev \
-        python3-opencv \
-        libopencv-dev \
-        libhdf5-dev \
-        libhdf5-serial-dev \
-        libatlas-base-dev \
-        libavcodec-dev \
-        libavformat-dev \
-        libswscale-dev \
-        libv4l-dev \
-        libxvidcore-dev \
-        libx264-dev \
-        libgtk-3-dev \
-        libdc1394-dev \
-        v4l-utils \
-        git \
-        wget \
-        curl \
-        build-essential \
-        cmake \
-        pkg-config \
-        libjpeg-dev \
-        libpng-dev \
-        libtiff-dev \
-        libwebp-dev \
-        libopenexr-dev
     
-    print_success "Основные пакеты установлены"
+    PACKAGES="python3-pip python3-venv python3-dev python3-opencv libopencv-dev libhdf5-dev libhdf5-serial-dev libatlas-base-dev libavcodec-dev libavformat-dev libswscale-dev libv4l-dev libxvidcore-dev libx264-dev libgtk-3-dev libdc1394-dev v4l-utils git wget curl build-essential cmake pkg-config libjpeg-dev libpng-dev libtiff-dev libwebp-dev libopenexr-dev"
+    
+    log_command "sudo apt install -y $PACKAGES"
+    sudo apt install -y $PACKAGES 2>&1 | tee -a "$LOG_FILE"
+    
+    if [ ${PIPESTATUS[0]} -eq 0 ]; then
+        print_success "Основные пакеты установлены"
+    else
+        print_error "Ошибка установки основных пакетов"
+        echo "ESSENTIAL PACKAGES INSTALLATION FAILED" >> "$LOG_FILE"
+        exit 1
+    fi
 }
 
 # Установка GStreamer
@@ -102,23 +115,19 @@ install_gstreamer() {
     print_header "Установка GStreamer"
     
     print_info "Установка GStreamer..."
-    sudo apt install -y \
-        libgstreamer1.0-dev \
-        libgstreamer-plugins-base1.0-dev \
-        gstreamer1.0-plugins-base \
-        gstreamer1.0-plugins-good \
-        gstreamer1.0-plugins-bad \
-        gstreamer1.0-plugins-ugly \
-        gstreamer1.0-libav \
-        gstreamer1.0-tools \
-        gstreamer1.0-x \
-        gstreamer1.0-alsa \
-        gstreamer1.0-gl \
-        gstreamer1.0-gtk3 \
-        gstreamer1.0-qt5 \
-        gstreamer1.0-pulseaudio
     
-    print_success "GStreamer установлен"
+    GSTREAMER_PACKAGES="libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools gstreamer1.0-x gstreamer1.0-alsa gstreamer1.0-gl gstreamer1.0-gtk3 gstreamer1.0-qt5 gstreamer1.0-pulseaudio"
+    
+    log_command "sudo apt install -y $GSTREAMER_PACKAGES"
+    sudo apt install -y $GSTREAMER_PACKAGES 2>&1 | tee -a "$LOG_FILE"
+    
+    if [ ${PIPESTATUS[0]} -eq 0 ]; then
+        print_success "GStreamer установлен"
+    else
+        print_error "Ошибка установки GStreamer"
+        echo "GSTREAMER INSTALLATION FAILED" >> "$LOG_FILE"
+        exit 1
+    fi
 }
 
 # Установка минимальных зависимостей для камеры
@@ -126,20 +135,19 @@ install_camera_dependencies() {
     print_header "Установка зависимостей для камеры"
     
     print_info "Установка минимальных зависимостей для PiCamera..."
-    sudo apt install -y \
-        libcap-dev \
-        libcap2-dev \
-        libcap-ng-dev \
-        libcap-ng0 \
-        libcamera-dev \
-        libcamera-tools \
-        python3-libcamera \
-        python3-kms++ \
-        libgl1-mesa-dev \
-        libglu1-mesa-dev \
-        libdrm-dev
     
-    print_success "Зависимости для камеры установлены"
+    CAMERA_PACKAGES="libcap-dev libcap2-dev libcap-ng-dev libcap-ng0 libcamera-dev libcamera-tools python3-libcamera python3-kms++ libgl1-mesa-dev libglu1-mesa-dev libdrm-dev"
+    
+    log_command "sudo apt install -y $CAMERA_PACKAGES"
+    sudo apt install -y $CAMERA_PACKAGES 2>&1 | tee -a "$LOG_FILE"
+    
+    if [ ${PIPESTATUS[0]} -eq 0 ]; then
+        print_success "Зависимости для камеры установлены"
+    else
+        print_error "Ошибка установки зависимостей для камеры"
+        echo "CAMERA DEPENDENCIES INSTALLATION FAILED" >> "$LOG_FILE"
+        exit 1
+    fi
 }
 
 # Настройка камеры
@@ -147,13 +155,19 @@ setup_camera() {
     print_header "Настройка камеры"
     
     print_info "Включение камеры..."
-    sudo raspi-config nonint do_camera 0
+    log_command "sudo raspi-config nonint do_camera 0"
+    sudo raspi-config nonint do_camera 0 2>&1 | tee -a "$LOG_FILE"
     
     print_info "Проверка камеры..."
-    if vcgencmd get_camera | grep -q "supported=1 detected=1"; then
+    log_command "vcgencmd get_camera"
+    CAMERA_STATUS=$(vcgencmd get_camera 2>&1 | tee -a "$LOG_FILE")
+    echo "Camera status: $CAMERA_STATUS" >> "$LOG_FILE"
+    
+    if echo "$CAMERA_STATUS" | grep -q "supported=1 detected=1"; then
         print_success "Камера обнаружена и готова к работе"
     else
         print_warning "Камера не обнаружена. Убедитесь, что она подключена."
+        echo "CAMERA NOT DETECTED" >> "$LOG_FILE"
     fi
 }
 
@@ -162,13 +176,31 @@ create_venv() {
     print_header "Создание виртуального окружения"
     
     print_info "Создание виртуального окружения..."
-    python3 -m venv fire_detection_env
-    source fire_detection_env/bin/activate
+    log_command "python3 -m venv fire_detection_env"
+    python3 -m venv fire_detection_env 2>&1 | tee -a "$LOG_FILE"
+    
+    if [ ${PIPESTATUS[0]} -eq 0 ]; then
+        print_success "Виртуальное окружение создано"
+    else
+        print_error "Ошибка создания виртуального окружения"
+        echo "VENV CREATION FAILED" >> "$LOG_FILE"
+        exit 1
+    fi
+    
+    print_info "Активация виртуального окружения..."
+    source fire_detection_env/bin/activate 2>&1 | tee -a "$LOG_FILE"
     
     print_info "Обновление pip..."
-    pip install --upgrade pip
+    log_command "pip install --upgrade pip"
+    pip install --upgrade pip 2>&1 | tee -a "$LOG_FILE"
     
-    print_success "Виртуальное окружение создано"
+    if [ ${PIPESTATUS[0]} -eq 0 ]; then
+        print_success "Pip обновлен"
+    else
+        print_error "Ошибка обновления pip"
+        echo "PIP UPDATE FAILED" >> "$LOG_FILE"
+        exit 1
+    fi
 }
 
 # Установка Python зависимостей
@@ -178,21 +210,54 @@ install_python_dependencies() {
     source fire_detection_env/bin/activate
     
     print_info "Установка PyTorch для ARM..."
-    pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+    log_command "pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu"
+    pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu 2>&1 | tee -a "$LOG_FILE"
+    
+    if [ ${PIPESTATUS[0]} -eq 0 ]; then
+        print_success "PyTorch установлен"
+    else
+        print_error "Ошибка установки PyTorch"
+        echo "PYTORCH INSTALLATION FAILED" >> "$LOG_FILE"
+        exit 1
+    fi
     
     print_info "Установка основных зависимостей..."
-    pip install ultralytics==8.0.196
-    pip install opencv-python-headless==4.8.1.78
-    pip install flask==2.3.3
-    pip install numpy==1.24.3
-    pip install pillow==10.0.1
-    pip install psutil==5.9.5
+    PYTHON_PACKAGES="ultralytics==8.0.196 opencv-python-headless==4.8.1.78 flask==2.3.3 numpy==1.24.3 pillow==10.0.1 psutil==5.9.5"
+    
+    log_command "pip install $PYTHON_PACKAGES"
+    pip install $PYTHON_PACKAGES 2>&1 | tee -a "$LOG_FILE"
+    
+    if [ ${PIPESTATUS[0]} -eq 0 ]; then
+        print_success "Основные Python зависимости установлены"
+    else
+        print_error "Ошибка установки основных Python зависимостей"
+        echo "PYTHON PACKAGES INSTALLATION FAILED" >> "$LOG_FILE"
+        exit 1
+    fi
     
     print_info "Установка picamera2..."
-    pip install picamera2==0.3.12
+    log_command "pip install picamera2==0.3.12"
+    pip install picamera2==0.3.12 2>&1 | tee -a "$LOG_FILE"
+    
+    if [ ${PIPESTATUS[0]} -eq 0 ]; then
+        print_success "Picamera2 установлен"
+    else
+        print_error "Ошибка установки picamera2"
+        echo "PICAMERA2 INSTALLATION FAILED" >> "$LOG_FILE"
+        exit 1
+    fi
     
     print_info "Установка дополнительных зависимостей..."
-    pip install gpiozero==1.6.2
+    log_command "pip install gpiozero==1.6.2"
+    pip install gpiozero==1.6.2 2>&1 | tee -a "$LOG_FILE"
+    
+    if [ ${PIPESTATUS[0]} -eq 0 ]; then
+        print_success "Дополнительные зависимости установлены"
+    else
+        print_error "Ошибка установки дополнительных зависимостей"
+        echo "ADDITIONAL PACKAGES INSTALLATION FAILED" >> "$LOG_FILE"
+        exit 1
+    fi
     
     print_success "Python зависимости установлены"
 }
@@ -201,9 +266,8 @@ install_python_dependencies() {
 create_directories() {
     print_header "Создание директорий"
     
-    mkdir -p logs
-    mkdir -p recordings
-    mkdir -p models
+    log_command "mkdir -p logs recordings models"
+    mkdir -p logs recordings models 2>&1 | tee -a "$LOG_FILE"
     
     print_success "Директории созданы"
 }
@@ -213,6 +277,8 @@ setup_systemd() {
     print_header "Настройка автозапуска"
     
     print_info "Создание systemd сервиса..."
+    log_command "Creating systemd service"
+    
     sudo tee /etc/systemd/system/fire-detection.service > /dev/null <<EOF
 [Unit]
 Description=Fire Detection System
@@ -231,7 +297,9 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
 
-    sudo systemctl daemon-reload
+    log_command "sudo systemctl daemon-reload"
+    sudo systemctl daemon-reload 2>&1 | tee -a "$LOG_FILE"
+    
     print_success "Systemd сервис настроен"
 }
 
@@ -271,7 +339,9 @@ EOF
 journalctl -u fire-detection -f
 EOF
 
-    chmod +x *.sh
+    log_command "chmod +x *.sh"
+    chmod +x *.sh 2>&1 | tee -a "$LOG_FILE"
+    
     print_success "Скрипты управления созданы"
 }
 
@@ -279,11 +349,13 @@ EOF
 setup_permissions() {
     print_header "Настройка прав доступа"
     
-    chmod +x *.sh
-    chown -R pi:pi .
+    log_command "chmod +x *.sh && chown -R pi:pi ."
+    chmod +x *.sh 2>&1 | tee -a "$LOG_FILE"
+    chown -R pi:pi . 2>&1 | tee -a "$LOG_FILE"
     
     # Добавление пользователя в группу video
-    sudo usermod -a -G video $USER
+    log_command "sudo usermod -a -G video $USER"
+    sudo usermod -a -G video $USER 2>&1 | tee -a "$LOG_FILE"
     
     print_success "Права доступа настроены"
 }
@@ -295,6 +367,7 @@ final_check() {
     source fire_detection_env/bin/activate
     
     print_info "Проверка импортов..."
+    log_command "python -c 'import cv2, ultralytics, numpy, flask, psutil'"
     python -c "
 import cv2
 import ultralytics
@@ -302,13 +375,24 @@ import numpy as np
 import flask
 import psutil
 print('✅ Все основные модули работают')
-" 2>/dev/null && print_success "Все модули импортированы успешно" || print_error "Ошибка импорта модулей"
+" 2>&1 | tee -a "$LOG_FILE"
+    
+    if [ ${PIPESTATUS[0]} -eq 0 ]; then
+        print_success "Все модули импортированы успешно"
+    else
+        print_error "Ошибка импорта модулей"
+        echo "MODULE IMPORT FAILED" >> "$LOG_FILE"
+    fi
     
     print_info "Проверка камеры..."
-    if vcgencmd get_camera | grep -q "supported=1 detected=1"; then
+    log_command "vcgencmd get_camera"
+    CAMERA_CHECK=$(vcgencmd get_camera 2>&1 | tee -a "$LOG_FILE")
+    
+    if echo "$CAMERA_CHECK" | grep -q "supported=1 detected=1"; then
         print_success "Камера готова к работе"
     else
         print_warning "Камера не обнаружена"
+        echo "CAMERA NOT READY" >> "$LOG_FILE"
     fi
 }
 
@@ -345,12 +429,18 @@ show_completion_info() {
     echo -e "${YELLOW}⚠️  Важно: Перезагрузите Raspberry Pi для активации камеры!${NC}"
     echo -e "   ${YELLOW}sudo reboot${NC}"
     echo ""
+    echo -e "${BLUE}📄 Лог установки сохранен в: $LOG_FILE${NC}"
+    echo ""
 }
+
+# Обработка ошибок
+trap 'print_error "Установка прервана на этапе: $BASH_COMMAND"; echo "INSTALLATION INTERRUPTED at: $BASH_COMMAND" >> "$LOG_FILE"; exit 1' ERR
 
 # Главная функция
 main() {
     print_header "DC-Detector Setup"
     print_info "Установка системы детекции огня для Raspberry Pi"
+    print_info "Лог установки: $LOG_FILE"
     echo ""
     
     check_system
