@@ -43,37 +43,15 @@ check_files() {
     fi
 }
 
-# Создание и активация виртуального окружения
-setup_venv() {
-    print_info "Настройка виртуального окружения..."
-    
-    # Удаление старого окружения если есть
-    if [ -d "venv" ]; then
-        print_info "Удаление старого виртуального окружения..."
-        rm -rf venv
+# Проверка виртуального окружения
+check_venv() {
+    if [ ! -d "venv" ]; then
+        print_error "Виртуальное окружение не найдено"
+        print_info "Сначала запустите: ./setup.sh"
+        exit 1
     fi
     
-    # Создание нового виртуального окружения
-    print_info "Создание виртуального окружения..."
-    python3 -m venv venv
-    
-    # Активация виртуального окружения
-    print_info "Активация виртуального окружения..."
-    source venv/bin/activate
-    
-    # Обновление pip
-    print_info "Обновление pip..."
-    pip install --upgrade pip
-    
-    # Установка зависимостей
-    print_info "Установка зависимостей..."
-    if [ -f "requirements.txt" ]; then
-        pip install -r requirements.txt
-    else
-        pip install opencv-python ultralytics flask numpy pillow
-    fi
-    
-    print_success "Виртуальное окружение создано и настроено"
+    print_success "Виртуальное окружение найдено"
 }
 
 # Проверка камеры
@@ -94,9 +72,14 @@ check_camera() {
 start_app() {
     print_header "Запуск DC-Detector"
     
-    # Проверка модулей (виртуальное окружение уже активировано)
+    # Активация виртуального окружения
+    print_info "Активация виртуального окружения..."
+    source venv/bin/activate
+    
+    # Проверка модулей
     python3 -c "import cv2, ultralytics, flask, numpy" || {
         print_error "Не все модули установлены"
+        print_info "Запустите: ./setup.sh"
         exit 1
     }
     
@@ -117,7 +100,7 @@ start_app() {
 # Основная функция
 main() {
     check_files
-    setup_venv
+    check_venv
     check_camera
     start_app
 }

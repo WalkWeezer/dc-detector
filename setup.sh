@@ -39,7 +39,7 @@ update_system() {
 }
 
 # Установка системных зависимостей
-install_dependencies() {
+install_system_dependencies() {
     print_info "Установка системных зависимостей..."
     
     sudo apt install -y \
@@ -76,6 +76,50 @@ install_dependencies() {
         python3-libcamera
     
     print_success "Системные зависимости установлены"
+}
+
+# Создание виртуального окружения
+create_venv() {
+    print_info "Создание виртуального окружения..."
+    
+    # Удаление старого окружения если есть
+    if [ -d "venv" ]; then
+        print_info "Удаление старого виртуального окружения..."
+        rm -rf venv
+    fi
+    
+    # Создание нового виртуального окружения
+    python3 -m venv venv
+    
+    if [ -d "venv" ]; then
+        print_success "Виртуальное окружение создано"
+    else
+        print_error "Не удалось создать виртуальное окружение"
+        exit 1
+    fi
+}
+
+# Установка Python зависимостей
+install_python_dependencies() {
+    print_info "Установка Python зависимостей..."
+    
+    # Активация виртуального окружения
+    source venv/bin/activate
+    
+    # Обновление pip
+    print_info "Обновление pip..."
+    pip install --upgrade pip
+    
+    # Установка зависимостей
+    if [ -f "requirements.txt" ]; then
+        print_info "Установка зависимостей из requirements.txt..."
+        pip install -r requirements.txt
+    else
+        print_info "Установка основных зависимостей..."
+        pip install opencv-python ultralytics flask numpy pillow
+    fi
+    
+    print_success "Python зависимости установлены"
 }
 
 # Настройка камеры
@@ -117,21 +161,39 @@ verify_installation() {
         exit 1
     fi
     
-    print_success "Все системные зависимости установлены корректно"
+    # Проверка виртуального окружения
+    if [ -d "venv" ]; then
+        print_success "Виртуальное окружение найдено"
+        
+        # Проверка Python модулей в виртуальном окружении
+        source venv/bin/activate
+        python3 -c "import cv2, ultralytics, flask, numpy" || {
+            print_error "Не все Python модули установлены"
+            exit 1
+        }
+        print_success "Все Python модули установлены корректно"
+    else
+        print_error "Виртуальное окружение не найдено"
+        exit 1
+    fi
+    
+    print_success "Все зависимости установлены корректно"
 }
 
 # Основная функция
 main() {
-    print_header "DC-Detector - Установка системных зависимостей"
+    print_header "DC-Detector - Полная установка"
     
     update_system
-    install_dependencies
+    install_system_dependencies
     setup_camera
+    create_venv
+    install_python_dependencies
     verify_installation
     
     print_header "Установка завершена!"
     print_success "Теперь запустите: ./start.sh"
-    print_info "start.sh автоматически создаст виртуальное окружение и установит Python зависимости"
+    print_info "start.sh только запустит приложение (все уже установлено)"
 }
 
 main "$@"
