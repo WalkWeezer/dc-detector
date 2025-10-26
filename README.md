@@ -99,7 +99,13 @@ chmod +x start.sh
    chmod +x setup.sh
    ```
 
-2. **Запустите с правами sudo:**
+2. **Если ошибка с репозиториями:**
+   ```bash
+   chmod +x fix_repos.sh
+   ./fix_repos.sh
+   ```
+
+3. **Запустите с правами sudo:**
    ```bash
    sudo ./setup.sh
    ```
