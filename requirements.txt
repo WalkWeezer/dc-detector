@@ -12,9 +12,6 @@ eventlet==0.33.3
 # Для PiCamera
 picamera2==0.3.12
 
-# Для libcamera
-libcamera==0.0.1
-
 # Оптимизация для Raspberry Pi
 torch==2.0.1
 torchvision==0.15.2

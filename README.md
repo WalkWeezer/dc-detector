@@ -77,18 +77,24 @@ chmod +x start.sh
 
 ### Если start.sh не работает:
 
-1. **Сначала запустите setup.sh:**
+1. **Если ошибка с libcamera или Python модулями:**
+   ```bash
+   chmod +x fix_venv.sh
+   ./fix_venv.sh
+   ```
+
+2. **Сначала запустите setup.sh:**
    ```bash
    chmod +x setup.sh
    ./setup.sh
    ```
 
-2. **Проверьте права:**
+3. **Проверьте права:**
    ```bash
    chmod +x start.sh
    ```
 
-3. **Проверьте Python:**
+4. **Проверьте Python:**
    ```bash
    python3 --version
    # Должна быть версия 3.8+
