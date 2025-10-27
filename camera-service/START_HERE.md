@@ -97,6 +97,32 @@ docker-compose down
 - Включить камеру: `sudo raspi-config` → Interface Options → Camera → Enable
 - Проверить камеру: `libcamera-hello --timeout 2000`
 
+## 🔧 Решение проблем
+
+### Ошибка: `TypeError: kwargs_from_env() got an unexpected keyword argument 'ssl_version'`
+
+Если при запуске `docker-compose up -d --build` возникает эта ошибка, используйте встроенную команду Docker:
+
+```bash
+# Используйте docker compose (без дефиса) вместо docker-compose
+docker compose up -d --build
+```
+
+Или обновите docker-compose на Raspberry Pi:
+
+```bash
+sudo pip3 uninstall docker-compose -y
+sudo pip3 install docker-compose==1.29.2
+```
+
+### Команды с docker compose (новый способ)
+
+Все команды выше работают и с новой синтаксисом:
+- `docker compose up -d --build` - запуск
+- `docker compose logs -f` - просмотр логов
+- `docker compose ps` - статус
+- `docker compose down` - остановка
+
 ## 🎯 Что дальше?
 
 Этот сервис - основа для других сервисов:
