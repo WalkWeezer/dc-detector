@@ -2,6 +2,17 @@
 
 Сервис детекции огня на базе YOLO для анализа видеопотока от camera-service.
 
+## ⚠️ Важно для Raspberry Pi
+
+На Raspberry Pi требуется установка PyTorch через официальный сайт:
+```bash
+# Для ARM64 (Raspberry Pi 4+, OS 64-bit)
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# Для ARM32 (Raspberry Pi 4, OS 32-bit)
+# Используйте предустановку из образа или скомпилируйте из исходников
+```
+
 ## Возможности
 
 - 🔍 Детекция огня в реальном времени
@@ -19,9 +30,19 @@
 
 ### Установка и запуск
 
+#### На обычном компьютере
+
 ```bash
 cd detection-service
 pip3 install -r requirements.txt
+python3 detection_server.py
+```
+
+#### На Raspberry Pi (с предустановленным PyTorch)
+
+```bash
+cd detection-service
+pip3 install flask opencv-python numpy requests
 python3 detection_server.py
 ```
 
