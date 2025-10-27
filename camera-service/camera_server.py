@@ -4,13 +4,21 @@ Camera Service - Универсальный сервис для работы с 
 Поддерживает: PiCamera, Picamera2, Web Camera (OpenCV)
 """
 
-import cv2
 import threading
 import time
 import logging
 from flask import Flask, Response
 from typing import Optional, Tuple
 import os
+
+# Условный импорт OpenCV - только для веб-камер
+try:
+    import cv2
+    CV2_AVAILABLE = True
+except ImportError:
+    CV2_AVAILABLE = False
+    logger = logging.getLogger(__name__)
+    logger.warning("OpenCV не установлен - поддержка USB веб-камер недоступна")
 
 # Настройка логирования
 logging.basicConfig(
@@ -80,6 +88,10 @@ class CameraManager:
     
     def try_webcam(self) -> bool:
         """Попытка инициализировать веб-камеру через OpenCV"""
+        if not CV2_AVAILABLE:
+            logger.debug("OpenCV недоступен - веб-камеры не поддерживаются")
+            return False
+        
         try:
             cap = cv2.VideoCapture(0)
             if not cap.isOpened():
@@ -128,32 +140,53 @@ class CameraManager:
                 return None
             
             try:
+                frame_bytes = None
+                
                 if self.camera_type == 'picamera2':
+                    # Picamera2 возвращает массив в формате RGB
                     frame = self.camera.capture_array()
-                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                    # Конвертируем в JPEG
+                    from PIL import Image
+                    img = Image.fromarray(frame)
+                    import io
+                    buf = io.BytesIO()
+                    img.save(buf, format='JPEG', quality=85)
+                    frame_bytes = buf.getvalue()
                 
                 elif self.camera_type == 'webcam':
+                    if not CV2_AVAILABLE:
+                        return None
                     ret, frame = self.camera.read()
                     if not ret:
                         return None
+                    # Кодируем в JPEG через OpenCV
+                    ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                    if not ret:
+                        return None
+                    frame_bytes = buffer.tobytes()
                 
                 elif self.camera_type == 'picamera':
                     # Для PiCamera делаем захват
                     import picamera.array
+                    import numpy as np
                     output = picamera.array.PiRGBArray(self.camera)
-                    self.camera.capture(output, format='bgr', use_video_port=True)
+                    self.camera.capture(output, format='rgb', use_video_port=True)
                     frame = output.array
                     if frame is None or frame.size == 0:
                         return None
+                    # Конвертируем в JPEG
+                    from PIL import Image
+                    img = Image.fromarray(frame)
+                    import io
+                    buf = io.BytesIO()
+                    img.save(buf, format='JPEG', quality=85)
+                    frame_bytes = buf.getvalue()
                 
-                # Подготавливаем кадр для стрима
-                ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-                if not ret:
+                if frame_bytes:
+                    self.current_frame = frame_bytes
+                    return (True, frame_bytes)
+                else:
                     return None
-                
-                frame_bytes = buffer.tobytes()
-                self.current_frame = frame_bytes
-                return (True, frame_bytes)
                 
             except Exception as e:
                 logger.error(f"Ошибка захвата кадра: {e}")
