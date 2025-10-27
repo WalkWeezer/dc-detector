@@ -6,11 +6,20 @@ RUN apt-get update && apt-get install -y \
     g++ \
     make \
     cmake \
+    pkg-config \
+    python3-dev \
     libgl1 \
     libglib2.0-0t64 \
     libsm6 \
     libxext6 \
     libgomp1 \
+    libjpeg-dev \
+    libpng-dev \
+    libtiff-dev \
+    libavcodec-dev \
+    libavformat-dev \
+    libswscale-dev \
+    libv4l-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
