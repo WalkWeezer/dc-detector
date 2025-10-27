@@ -193,52 +193,66 @@ def index():
         <style>
             body {{ 
                 margin: 0; 
-                padding: 20px; 
+                padding: 10px; 
                 background: #1a1a1a; 
                 color: white; 
                 font-family: Arial, sans-serif;
             }}
-            .container {{ max-width: 1200px; margin: 0 auto; }}
-            h1 {{ color: #ff4444; text-align: center; }}
+            .container {{ 
+                max-width: 600px; 
+                margin: 10px auto; 
+            }}
+            h1 {{ 
+                color: #ff4444; 
+                text-align: center; 
+                font-size: 18px;
+                margin: 5px 0;
+            }}
             .status {{ 
                 background: rgba(255,255,255,0.1); 
-                padding: 20px; 
+                padding: 10px; 
                 border-radius: 8px; 
-                margin: 20px 0;
+                margin: 10px 0;
+                font-size: 12px;
             }}
             .alert {{ 
                 background: rgba(255, 68, 68, 0.3); 
                 border: 2px solid #ff4444; 
-                padding: 15px; 
+                padding: 10px; 
                 border-radius: 8px; 
-                margin: 20px 0;
+                margin: 10px 0;
+                font-size: 14px;
             }}
             .safe {{ 
                 background: rgba(76, 175, 80, 0.3); 
                 border: 2px solid #4CAF50; 
-                padding: 15px; 
+                padding: 10px; 
                 border-radius: 8px; 
-                margin: 20px 0;
+                margin: 10px 0;
+                font-size: 14px;
             }}
             .detection-image {{
-                max-width: 100%;
-                border: 3px solid #333;
-                border-radius: 10px;
-                margin: 20px 0;
+                width: 320px;
+                height: 240px;
+                object-fit: contain;
+                border: 2px solid #333;
+                border-radius: 8px;
+                margin: 10px 0;
             }}
             .info-grid {{
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-                gap: 15px;
-                margin: 20px 0;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                margin: 10px 0;
             }}
             .info-box {{
                 background: rgba(255,255,255,0.05);
-                padding: 15px;
+                padding: 8px;
                 border-radius: 8px;
+                font-size: 12px;
             }}
             .metric {{
-                font-size: 2em;
+                font-size: 1.5em;
                 font-weight: bold;
                 color: #4CAF50;
             }}

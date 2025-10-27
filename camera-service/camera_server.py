@@ -238,28 +238,39 @@ def index():
         <style>
             body {{ 
                 margin: 0; 
-                padding: 20px; 
+                padding: 10px; 
                 background: #1a1a1a; 
                 color: white; 
                 font-family: Arial, sans-serif;
             }}
-            .container {{ max-width: 1000px; margin: 0 auto; }}
-            h1 {{ color: #4CAF50; text-align: center; }}
+            .container {{ 
+                max-width: 600px; 
+                margin: 10px auto; 
+            }}
+            h1 {{ 
+                color: #4CAF50; 
+                text-align: center; 
+                font-size: 18px;
+                margin: 5px 0;
+            }}
             .status {{ 
                 background: rgba(255,255,255,0.1); 
-                padding: 15px; 
+                padding: 10px; 
                 border-radius: 8px; 
-                margin: 20px 0;
+                margin: 10px 0;
+                font-size: 12px;
             }}
             .video-container {{ 
                 text-align: center; 
-                margin: 20px 0; 
+                margin: 10px 0; 
             }}
             img {{ 
-                max-width: 100%; 
-                border: 3px solid #333; 
-                border-radius: 10px;
-                box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+                width: 320px;
+                height: 240px;
+                object-fit: contain;
+                border: 2px solid #333; 
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.3);
             }}
             .camera-info {{ 
                 background: rgba(76, 175, 80, 0.2); 
