@@ -13,22 +13,24 @@
 
 ## Быстрый запуск
 
-### Вариант 1: Docker (рекомендуется)
+### На Raspberry Pi
 
 ```bash
 cd camera-service
-docker-compose up -d --build
+sudo apt-get install python3-picamera2 python3-picamera -y
+pip3 install -r requirements.txt
+python3 camera_server.py
+```
+
+### На обычном компьютере
+
+```bash
+cd camera-service
+pip3 install -r requirements.txt
+python3 camera_server.py
 ```
 
 Сервис будет доступен по адресу: http://localhost:8000
-
-### Вариант 2: Нативный запуск
-
-```bash
-cd camera-service
-pip install -r requirements.txt
-python camera_server.py
-```
 
 ## API Endpoints
 
@@ -68,9 +70,7 @@ curl http://localhost:8000/health
 
 ## Остановка
 
-```bash
-docker-compose down
-```
+Нажмите `Ctrl+C` в терминале, где запущен сервис.
 
 ## Особенности
 
