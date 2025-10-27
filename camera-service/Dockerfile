@@ -3,7 +3,7 @@ FROM python:3.11-slim
 # Установка системных зависимостей
 RUN apt-get update && apt-get install -y \
     libgl1 \
-    libglib2.0-0 \
+    libglib2.0-0t64 \
     libsm6 \
     libxext6 \
     libgomp1 \
