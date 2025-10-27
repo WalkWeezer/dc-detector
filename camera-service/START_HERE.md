@@ -15,22 +15,34 @@ Camera Service - это универсальный сервис для рабо�
 
 ## 🚀 Быстрый запуск
 
-### Вариант 1: Docker (рекомендуется)
+### На Raspberry Pi
 
 ```bash
 cd camera-service
-docker-compose up -d --build
+
+# Установить системные зависимости
+sudo apt-get install python3-picamera2 python3-picamera -y
+
+# Установить Python зависимости
+pip3 install -r requirements.txt
+
+# Запустить сервис
+python3 camera_server.py
+```
+
+### На обычном компьютере
+
+```bash
+cd camera-service
+
+# Установить Python зависимости
+pip3 install -r requirements.txt
+
+# Запустить сервис
+python3 camera_server.py
 ```
 
 Сервис будет доступен по адресу: **http://localhost:8000**
-
-### Вариант 2: Нативный запуск (для Raspberry Pi)
-
-```bash
-cd camera-service
-pip3 install -r requirements.txt
-python3 camera_server.py
-```
 
 ## 📡 API Endpoints
 
@@ -44,7 +56,7 @@ python3 camera_server.py
 ### Подключение видеопотока в HTML
 
 ```html
-<img src="http://camera-service:8000/video_feed" alt="Camera Stream">
+<img src="http://localhost:8000/video_feed" alt="Camera Stream">
 ```
 
 ### Проверка статуса через curl
@@ -66,21 +78,17 @@ curl http://localhost:8000/status
 
 ### Посмотреть логи
 
-```bash
-docker-compose logs -f
-```
+Сервис выводит логи в консоль. Для остановки используйте `Ctrl+C`.
 
-### Проверить статус контейнера
+### Проверить статус сервиса
 
 ```bash
-docker-compose ps
+curl http://localhost:8000/status
 ```
 
 ### Остановить сервис
 
-```bash
-docker-compose down
-```
+Нажмите `Ctrl+C` в терминале, где запущен сервис.
 
 ## 📝 Порядок проверки камер
 
@@ -99,29 +107,35 @@ docker-compose down
 
 ## 🔧 Решение проблем
 
-### Ошибка: `TypeError: kwargs_from_env() got an unexpected keyword argument 'ssl_version'`
+### Ошибка при установке зависимостей
 
-Если при запуске `docker-compose up -d --build` возникает эта ошибка, используйте встроенную команду Docker:
-
-```bash
-# Используйте docker compose (без дефиса) вместо docker-compose
-docker compose up -d --build
-```
-
-Или обновите docker-compose на Raspberry Pi:
+Если возникают проблемы с установкой пакетов на Raspberry Pi:
 
 ```bash
-sudo pip3 uninstall docker-compose -y
-sudo pip3 install docker-compose==1.29.2
+# Обновить систему
+sudo apt-get update
+sudo apt-get upgrade -y
+
+# Установить Python зависимости
+sudo apt-get install python3-pip python3-venv -y
+pip3 install --upgrade pip
+pip3 install -r requirements.txt
 ```
 
-### Команды с docker compose (новый способ)
+### Камера не обнаружена
 
-Все команды выше работают и с новой синтаксисом:
-- `docker compose up -d --build` - запуск
-- `docker compose logs -f` - просмотр логов
-- `docker compose ps` - статус
-- `docker compose down` - остановка
+На Raspberry Pi проверьте, что камера включена:
+
+```bash
+sudo raspi-config
+# Interface Options → Camera → Enable
+```
+
+Затем перезагрузите систему и проверьте камеру:
+
+```bash
+libcamera-hello --timeout 2000
+```
 
 ## 🎯 Что дальше?
 

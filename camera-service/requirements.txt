@@ -3,5 +3,7 @@ numpy==1.24.3
 Pillow==10.1.0
 urllib3==2.0.7
 Werkzeug==2.3.7
+# Дополнительно для Raspberry Pi (установить вручную если нужно):
+# sudo apt-get install python3-picamera2 python3-picamera
 # opencv-python опционален - нужен только для USB веб-камер
 
