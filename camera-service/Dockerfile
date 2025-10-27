@@ -1,10 +1,9 @@
 FROM python:3.11-slim
 
-# Установка системных зависимостей
-RUN apt-get update && apt-get install -y \
+# Установка системных зависимостей с retry
+RUN apt-get update || apt-get update || apt-get update && \
+    apt-get install -y --no-install-recommends \
     python3-dev \
-    libjpeg-dev \
-    zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
