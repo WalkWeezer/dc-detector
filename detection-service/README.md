@@ -4,14 +4,93 @@
 
 ## ⚠️ Важно для Raspberry Pi
 
-На Raspberry Pi требуется установка PyTorch через официальный сайт:
-```bash
-# Для ARM64 (Raspberry Pi 4+, OS 64-bit)
-pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+Установка PyTorch на Raspberry Pi требует специальных действий, так как официальные wheels могут быть недоступны.
 
-# Для ARM32 (Raspberry Pi 4, OS 32-bit)
-# Используйте предустановку из образа или скомпилируйте из исходников
+### Шаг 1: Определите архитектуру системы
+
+```bash
+uname -m
 ```
+
+- `aarch64` или `arm64` = 64-bit система
+- `armv7l` или `armhf` = 32-bit система
+
+### Шаг 2: Установка PyTorch
+
+#### Для ARM64 (64-bit OS) - Raspberry Pi 4/5 с 64-bit OS:
+
+**Вариант 1: Попробуйте официальные wheels (может не работать):**
+```bash
+pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+```
+
+**Вариант 2: Используйте piwheels (рекомендуется):**
+```bash
+pip3 install --upgrade pip
+pip3 install torch torchvision
+```
+
+**Вариант 3: Установите через apt (если доступно):**
+```bash
+sudo apt-get update
+sudo apt-get install python3-pytorch python3-torchvision
+```
+
+#### Для ARM32 (32-bit OS) - Raspberry Pi с 32-bit OS:
+
+**Вариант 1: Используйте pre-built wheels от сообщества:**
+```bash
+pip3 install --upgrade pip
+pip3 install torch==1.13.0 torchvision==0.14.0 --index-url https://download.pytorch.org/whl/cpu
+```
+
+**Вариант 2: Используйте piwheels:**
+```bash
+pip3 install --upgrade pip
+pip3 install torch torchvision
+```
+
+**Вариант 3: Установите минимальную версию:**
+```bash
+pip3 install torch torchvision --extra-index-url https://download.pytorch.org/whl/cpu
+```
+
+**Вариант 4: Компиляция из исходников (долго, но надежно):**
+```bash
+# Требует много времени (4-6 часов) и места (2-3GB)
+sudo apt-get install libopenblas-dev libblas-dev libatlas-base-dev liblapack-dev
+pip3 install torch torchvision --no-binary torch,torchvision
+```
+
+### Шаг 3: Установите ultralytics
+
+После успешной установки PyTorch:
+```bash
+pip3 install ultralytics
+```
+
+### Решение проблем
+
+Если установка не удается:
+
+1. **Проверьте версию Python:**
+   ```bash
+   python3 --version
+   ```
+   Рекомендуется Python 3.8-3.11.
+
+2. **Обновите pip и установите зависимости:**
+   ```bash
+   pip3 install --upgrade pip setuptools wheel
+   sudo apt-get install python3-dev
+   ```
+
+3. **Попробуйте установить конкретные версии:**
+   ```bash
+   pip3 install torch==2.0.0 torchvision==0.15.0
+   ```
+
+4. **Альтернатива: Используйте ONNX Runtime вместо PyTorch** (требует модификации кода)
 
 ## Возможности
 
