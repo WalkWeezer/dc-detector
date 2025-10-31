@@ -1,163 +1,162 @@
-# 🔥 DC-Detector - Модульная система детекции
+# 🔥 DC-Detector 2.0
 
-Модульная система детекции огня на базе микросервисов.
+Переосмысленная система детекции огня с четырьмя контейнерами:
 
-## 🏗️ Архитектура
+- `frontend` — SPA на Vue (по наследию `yachi-ground-station`), отдаётся из nginx.
+- `backend` — Node.js модульный монолит: REST API, управление камерами, учёт детекций, интеграция с БД.
+- `detection` — Python/YOLO воркер: захват видеопотока, инференс, события в бэкенд.
+- `db` — Postgres 16 (метаданные, пользователи, детекции).
 
-Проект разбит на отдельные сервисы, каждый из которых может быть запущен независимо:
+Разработка — Windows/amd64, деплой — Raspberry Pi (Debian 64‑bit, arm64). Один набор Dockerfile собирается в multi‑arch образы.
 
-### 📷 Camera Service
-Универсальный сервис для работы с камерами. Автоматически определяет и использует доступную камеру (PiCamera, Picamera2, USB веб-камера).
+## 📦 Структура
 
-### 🔥 Detection Service  
-Сервис детекции огня на базе YOLO. Анализирует видеопоток от camera-service в реальном времени.
+```
+.
+├── docker/
+│   ├── backend.Dockerfile
+│   ├── detection.Dockerfile
+│   └── frontend.Dockerfile
+├── docker-compose.yml            # dev/локальный запуск
+├── docker-compose.prod.yml       # override для Raspberry Pi
+├── services/
+│   ├── backend/
+│   │   ├── src/
+│   │   └── package.json
+│   └── detection/
+│       ├── detection_server.py
+│       ├── models/
+│       └── requirements.txt
+├── frontend/
+│   └── yachi-ground-station/
+├── infra/
+│   └── db/migrations/            # SQL миграции Postgres
+└── archive/                      # legacy код (к удалению после миграции)
+```
 
-## 🚀 Быстрый старт
+## ⚙️ Требования
 
-### Запуск Camera Service
+- Docker 24+, Docker Compose v2 (Windows: Desktop).
+- Node.js 20 (локальная разработка фронта/бэка без контейнеров — опционально).
+- Python 3.11 (локальный запуск detection — опционально).
+
+## 🚀 Быстрый старт (dev, Windows/macOS/Linux)
+
+1. Создайте `.env` в корне проекта (пример ниже) и при необходимости измените параметры подключения.
+
+2. Поместите модель в `services/detection/models/bestfire.pt` (или используйте bind-монтирование по умолчанию).
+
+3. Запустите стек:
+   ```bash
+   docker compose up --build
+   ```
+
+4. Доступы:
+   - Frontend: <http://localhost>
+   - Backend API: <http://localhost:8080>
+   - Detection health: <http://localhost:8001/health>
+   - Postgres: `localhost:5432` (логин/пароль `postgres/postgres`).
+
+Пример `.env`:
+```dotenv
+PORT=8080
+DATABASE_URL=postgres://postgres:postgres@db:5432/postgres
+DETECTION_URL=http://detection:8001
+JWT_SECRET=change-me
+
+CAMERA_MODE=local
+CAMERA_SOURCE=0
+MODEL_PATH=models/bestfire.pt
+CAMERA_ID=camera-default
+BACKEND_NOTIFY_URL=http://backend:8080/internal/detections
+CAMERA_CONFIG_URL=http://backend:8080/internal/cameras/camera-default
+```
+
+## 🐍 Detection service
+
+- Захват видеопотока:
+  - `CAMERA_MODE=local` + `CAMERA_SOURCE=0` — локальная UVC камера.
+  - `CAMERA_MODE=http` + `CAMERA_SERVICE_URL=http://camera-host/video_feed` — MJPEG поток.
+  - `CAMERA_CONFIG_URL=http://backend:8080/internal/cameras/<id>` — автоматическое обновление настроек из бэка.
+- `/detect` — синхронный REST (изображение base64/URL).
+- `/refresh-config` — принудительное обновление конфига.
+- Отправляет события в `backend` (`/internal/detections`).
+
+## 🟩 Backend (Node.js)
+
+- REST:
+  - `GET/POST/PATCH /api/cameras`
+  - `GET /api/detections`
+  - `GET /api/detections/status`
+  - `POST /api/detections/run` — прокси к `detection`.
+- Внутренние маршруты (не публикуются наружу):
+  - `GET /internal/cameras/:id`
+  - `POST /internal/detections`
+- Postgres: миграции SQL (таблицы `users`, `cameras`, `detections`).
+
+## 🧱 База данных
+
+SQL миграции лежат в `infra/db/migrations`. При старте backend выполняет `runMigrations()` автоматически.
+
+## 🏁 Raspberry Pi / прод режим
+
+1. Соберите/push-ните multi‑arch образы (amd64+arm64) через Docker Buildx:
+   ```bash
+   docker buildx create --use
+   docker buildx build \
+     --platform linux/amd64,linux/arm64 \
+     -t <registry>/dc-detector/backend:latest \
+     -f docker/backend.Dockerfile . --push
+   # то же для frontend и detection
+   ```
+
+2. На Raspberry Pi создайте `.env` с параметрами продакшена (секреты, RTSP URL).
+
+3. Запустите:
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+   ```
+
+`docker-compose.prod.yml` добавляет `shm_size`, tmpfs и ограничения ресурсов для `detection`, а также `NODE_ENV=production`.
+
+## 🔧 Полезные команды
+
+- Логи: `docker compose logs -f backend detection`
+- Выполнить миграции вручную: `docker compose exec backend node src/server.js`
+- Просмотреть состояние БД: `docker compose exec db psql -U postgres`
+
+## 🧑‍💻 Разработка с hot-reload
+
+В репозитории есть `docker-compose.override.yml` (dev-override). Он автоматически подхватывается `docker compose` и включает горячую перезагрузку кода.
+
+- Backend (Node 20): запускается как `node --watch src/server.js`, каталог `services/backend/src` примонтирован внутрь контейнера. Любые правки `.js` применяются сразу.
+- Detection (Python/Flask): переменные `DEBUG=1` и `WATCHDOG_FORCE_POLLING=1` включены, файл `services/detection/detection_server.py` примонтирован. Правки применяются автоматически.
+- Frontend (по умолчанию nginx): весь каталог `frontend/yachi-ground-station` примонтирован в `/usr/share/nginx/html` — правки HTML/CSS/JS видны мгновенно на `http://localhost`.
+
+Опционально: полноценный Vite HMR
 
 ```bash
-cd camera-service
-
-# На Raspberry Pi
-sudo apt-get install python3-picamera2 python3-picamera -y
-pip3 install -r requirements.txt
-python3 camera_server.py
-
-# На обычном компьютере
-pip3 install -r requirements.txt
-python3 camera_server.py
+docker compose --profile dev up -d   # поднимет frontend-dev на http://localhost:5173
 ```
 
-Сервис будет доступен по адресу: http://localhost:8000
-
-### Запуск Detection Service
+Базовый dev без Vite (nginx статика) — просто:
 
 ```bash
-# Убедитесь, что camera-service запущен на порту 8000
-cd detection-service
-pip3 install -r requirements.txt
-python3 detection_server.py
+docker compose up -d
 ```
 
-Сервис будет доступен по адресу: http://localhost:8001
+## 🧹 Очистка legacy
 
-### Использование видеопотока
+- После миграции удалить каталоги `camera-service/`, `detection-service/`, `archive/original-project/` и старые скрипты (`start.bat`, `start.ps1`, `start.sh`).
+- Модели переместить из корня в `services/detection/models/`.
 
-Подключение к видеопотоку из другого приложения:
-```html
-<img src="http://localhost:8000/video_feed" alt="Camera Stream">
-<img src="http://localhost:8001/detection_frame" alt="Detection Results">
-```
+## 🤝 Вклад
 
-## 📦 Структура проекта
-
-```
-DC-Detector/
-├── camera-service/          # Сервис камеры (порт 8000)
-│   ├── camera_server.py     # Основной код сервиса
-│   ├── requirements.txt     # Python зависимости
-│   ├── README.md            # Документация сервиса
-│   └── START_HERE.md        # Быстрый старт
-├── detection-service/       # Сервис детекции огня (порт 8001)
-│   ├── detection_server.py # Основной код сервиса
-│   ├── requirements.txt     # Python зависимости
-│   └── README.md            # Документация сервиса
-├── archive/                 # Архив старого проекта
-│   └── original-project/   # Оригинальный монолитный проект
-├── bestfire.pt              # Модель YOLO для детекции огня
-├── yolov8n.pt               # Базовая модель YOLOv8
-└── README.md                # Этот файл
-```
-
-## 🔧 Сервисы
-
-### Camera Service
-- **Порт:** 8000
-- **API:** `/video_feed`, `/status`, `/health`
-- **Поддержка:** PiCamera, Picamera2, USB веб-камеры
-- **Формат:** MJPEG видеопоток
-- **Документация:** [camera-service/README.md](camera-service/README.md)
-
-### Detection Service
-- **Порт:** 8001
-- **API:** `/api/detection`, `/detection_frame`, `/health`
-- **Модель:** YOLO (bestfire.pt)
-- **Функции:** Детекция огня в реальном времени
-- **Документация:** [detection-service/README.md](detection-service/README.md)
-
-## 📊 Планируемые сервисы
-
-- 📊 **API Gateway** - Единая точка входа для всех сервисов
-- 💾 **Storage Service** - Хранение записей и метаданных
-- 📡 **Notification Service** - Уведомления (email, SMS, push)
-
-## 🎯 Использование
-
-### Запуск сервиса
-
-```bash
-cd camera-service
-python3 camera_server.py
-```
-
-### Остановка сервиса
-
-Нажмите `Ctrl+C` в терминале, где запущен сервис.
-
-## 📝 API
-
-### Camera Service
-
-- `GET /` - Веб-интерфейс
-- `GET /video_feed` - MJPEG видеопоток
-- `GET /status` - Статус камеры (JSON)
-- `GET /health` - Health check
-
-Пример статуса:
-```json
-{
-  "camera_type": "webcam",
-  "running": true,
-  "status": "active"
-}
-```
-
-### Detection Service
-
-- `GET /` - Веб-интерфейс с результатами
-- `GET /api/detection` - Статус детекции (JSON)
-- `GET /detection_frame` - Кадр с детекциями
-- `GET /health` - Health check
-
-Пример детекции:
-```json
-{
-  "detected": true,
-  "count": 2,
-  "confidence": 0.87,
-  "last_detection": 1698405000.0,
-  "detections": [...]
-}
-```
-
-## 🔒 Безопасность
-
-Для работы с камерами на Raspberry Pi требуется доступ к устройствам камеры.
-
-## 📞 Поддержка
-
-Если возникли проблемы:
-1. Проверьте статус сервиса: `curl http://localhost:8000/status`
-2. Убедитесь, что камера доступна: `libcamera-hello` (на Raspberry Pi)
-3. Проверьте установку зависимостей: `pip3 list`
+1. Создайте ветку.
+2. Выполните `docker compose build` и убедитесь, что сервисы проходят health-check.
+3. Обновите документацию при изменениях API или конфигурации.
 
 ## 📄 Лицензия
 
-MIT License
-
-## 🙏 Благодарности
-
-- Ultralytics за YOLO модель
-- Raspberry Pi Foundation
-- OpenCV сообщество
+MIT

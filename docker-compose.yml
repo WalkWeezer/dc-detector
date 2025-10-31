@@ -1,0 +1,69 @@
+version: "3.9"
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    environment:
+      - PORT=8080
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/postgres
+      - DETECTION_URL=http://detection:8001
+    depends_on:
+      db:
+        condition: service_healthy
+      detection:
+        condition: service_started
+    ports:
+      - "8080:8080"
+    networks: [app]
+
+  detection:
+    build:
+      context: .
+      dockerfile: docker/detection.Dockerfile
+    environment:
+      - CAMERA_MODE=local
+      - CAMERA_SOURCE=0
+      - MODEL_PATH=models/bestfire.pt
+      - BACKEND_NOTIFY_URL=http://backend:8080/internal/detections
+      - CAMERA_ID=camera-default
+      - CAMERA_CONFIG_URL=http://backend:8080/internal/cameras/camera-default
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    volumes:
+      - ./services/detection/models:/app/models
+    networks: [app]
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    networks: [app]
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks: [app]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+networks:
+  app: {}
+
+volumes:
+  pg_data: {}
+
+

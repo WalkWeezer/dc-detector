@@ -1,0 +1,36 @@
+services:
+  backend:
+    environment:
+      - NODE_ENV=development
+    command: node --watch src/server.js
+    volumes:
+      - ./services/backend/src:/app/src
+
+  detection:
+    environment:
+      - DEBUG=1
+      - WATCHDOG_FORCE_POLLING=1
+    command: python detection_server.py
+    volumes:
+      - ./services/detection/detection_server.py:/app/detection_server.py
+      - ./services/detection/models:/app/models
+
+  # Optional: run Vite dev server for frontend instead of nginx
+  frontend-dev:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ./frontend/yachi-ground-station:/app
+    command: sh -c "npm ci && npm run dev -- --host"
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    profiles: ["dev"]
+
+  # Simple static live-reload via nginx serving mounted files
+  frontend:
+    volumes:
+      - ./frontend/yachi-ground-station:/usr/share/nginx/html:ro
+
+

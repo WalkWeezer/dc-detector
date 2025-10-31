@@ -1,0 +1,26 @@
+version: "3.9"
+
+services:
+  backend:
+    environment:
+      NODE_ENV: production
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 512M
+
+  detection:
+    shm_size: 512m
+    tmpfs:
+      - /tmp:rw,exec,nosuid,nodev,size=256m
+    deploy:
+      resources:
+        limits:
+          cpus: "3"
+          memory: 1500M
+
+  frontend:
+    environment:
+      NODE_ENV: production
+
