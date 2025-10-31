@@ -16,6 +16,8 @@ services:
       - /tmp:rw,exec,nosuid,nodev,size=256m
     devices:
       - "${VIDEO_DEVICE:-/dev/video0}:${VIDEO_DEVICE:-/dev/video0}"
+    environment:
+      - CAMERA_INDEX=${CAMERA_INDEX:-0}
     deploy:
       resources:
         limits:

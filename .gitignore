@@ -20,9 +20,9 @@ logs/
 recordings/
 
 # Model files (большие файлы)
-*.pt
-*.pth
-*.onnx
+# *.pt
+# *.pth
+# *.onnx
 
 # OS
 .DS_Store
