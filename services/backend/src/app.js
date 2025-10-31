@@ -2,7 +2,6 @@ import express from 'express'
 import cors from 'cors'
 import morgan from 'morgan'
 import { config } from './config.js'
-import { camerasRouter } from './routes/cameras.js'
 import { detectionsRouter } from './routes/detections.js'
 import { internalRouter } from './routes/internal.js'
 
@@ -16,7 +15,6 @@ export function createApp() {
     res.json({ status: 'ok' })
   })
 
-  app.use('/api/cameras', camerasRouter)
   app.use('/api/detections', detectionsRouter)
   app.use('/internal', internalRouter)
 

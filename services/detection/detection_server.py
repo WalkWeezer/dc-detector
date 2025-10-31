@@ -19,12 +19,9 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-CAMERA_ID_ENV = os.getenv('CAMERA_ID', 'camera-default')
-DEFAULT_CAMERA_MODE = os.getenv('CAMERA_MODE', 'http')
-DEFAULT_CAMERA_SOURCE = os.getenv('CAMERA_SOURCE', '0')
-DEFAULT_CAMERA_STREAM = os.getenv('CAMERA_SERVICE_URL') or DEFAULT_CAMERA_SOURCE
-CAMERA_CONFIG_URL = os.getenv('CAMERA_CONFIG_URL')
-CONFIG_REFRESH_INTERVAL = float(os.getenv('CAMERA_CONFIG_REFRESH', '15.0'))
+DEFAULT_CAMERA_INDEX = int(os.getenv('CAMERA_INDEX', '0'))
+CAMERA_SCAN_LIMIT = int(os.getenv('CAMERA_SCAN_LIMIT', '5'))
+CAPTURE_RETRY_DELAY = float(os.getenv('CAPTURE_RETRY_DELAY', '1.0'))
 
 MODEL_PATH = os.getenv('MODEL_PATH', 'models/bestfire.pt')
 CONFIDENCE_THRESHOLD = float(os.getenv('CONFIDENCE_THRESHOLD', '0.5'))
@@ -37,7 +34,8 @@ _notify_lock = threading.Lock()
 _last_notification_ts = 0.0
 
 detection_results = {
-    'camera_id': CAMERA_ID_ENV,
+    'active_camera': DEFAULT_CAMERA_INDEX,
+    'available_cameras': [],
     'detected': False,
     'count': 0,
     'confidence': 0.0,
@@ -64,15 +62,13 @@ class DetectionService:
         self.running = False
         self.thread: Optional[threading.Thread] = None
 
-        self.camera_id = CAMERA_ID_ENV
-        self.camera_mode = DEFAULT_CAMERA_MODE.lower()
-        self.camera_source = DEFAULT_CAMERA_SOURCE
-        self.camera_stream = DEFAULT_CAMERA_STREAM
-        self.camera_config_url = CAMERA_CONFIG_URL
-        self.config_refresh_interval = CONFIG_REFRESH_INTERVAL
-        self.last_config_fetch = 0.0
+        self.camera_scan_limit = CAMERA_SCAN_LIMIT
+        self.capture_retry_delay = CAPTURE_RETRY_DELAY
+        self._camera_lock = threading.Lock()
+        self._available_cameras: List[int] = []
+        self.camera_index = DEFAULT_CAMERA_INDEX
 
-        self._refresh_camera_config(force=True)
+        self.scan_cameras(force=True)
 
     def start(self):
         if self.running:
@@ -86,119 +82,95 @@ class DetectionService:
         if self.thread:
             self.thread.join(timeout=2)
 
-    def _refresh_camera_config(self, force: bool = False) -> bool:
-        if not self.camera_config_url:
-            return False
-        now = time.time()
-        if not force and (now - self.last_config_fetch) < self.config_refresh_interval:
-            return False
-        try:
-            response = requests.get(self.camera_config_url, timeout=2)
-            response.raise_for_status()
-            data = response.json()
-            self.camera_id = data.get('id', self.camera_id)
-            if data.get('mode'):
-                self.camera_mode = str(data['mode']).lower()
-            if data.get('source'):
-                self.camera_source = str(data['source'])
-                if self.camera_mode != 'local':
-                    self.camera_stream = self.camera_source
-            if data.get('rtsp_url'):
-                self.camera_stream = data['rtsp_url']
-            self.last_config_fetch = now
-            logger.info('📡 Конфигурация камеры обновлена: id=%s mode=%s source=%s', self.camera_id, self.camera_mode, self.camera_stream)
-            return True
-        except Exception as exc:
-            logger.warning('⚠️ Не удалось обновить конфигурацию камеры: %s', exc)
-            return False
+    def scan_cameras(self, *, force: bool = False) -> List[int]:
+        with self._camera_lock:
+            if self._available_cameras and not force:
+                return list(self._available_cameras)
 
-    def _open_local_capture(self):
-        src = self.camera_source
-        if str(src).isdigit():
-            cap = cv2.VideoCapture(int(src))
-        else:
-            cap = cv2.VideoCapture(src, cv2.CAP_FFMPEG)
-        if not cap or not cap.isOpened():
-            raise RuntimeError(f'Не удалось открыть локальный источник: {src}')
-        return cap
+            cameras: List[int] = []
+            for index in range(self.camera_scan_limit + 1):
+                cap = cv2.VideoCapture(index)
+                if cap is not None and cap.isOpened():
+                    if index not in cameras:
+                        cameras.append(index)
+                    cap.release()
+                else:
+                    if cap is not None:
+                        cap.release()
+                    if index == self.camera_index and index not in cameras:
+                        cameras.append(index)
+
+            if cameras:
+                if self.camera_index not in cameras:
+                    self.camera_index = cameras[0]
+            detection_results['active_camera'] = self.camera_index
+            detection_results['available_cameras'] = cameras
+
+            self._available_cameras = cameras
+            return list(cameras)
+
+    def get_camera_index(self) -> int:
+        with self._camera_lock:
+            return self.camera_index
+
+    def set_camera(self, index: int) -> int:
+        index = int(index)
+        if index < 0:
+            raise ValueError('Camera index must be non-negative')
+
+        with self._camera_lock:
+            self.camera_index = index
+            detection_results['active_camera'] = index
+            if index not in self._available_cameras:
+                self._available_cameras.append(index)
+                self._available_cameras.sort()
+            detection_results['available_cameras'] = list(self._available_cameras)
+        return index
 
     def _detection_loop(self):
+        current_index: Optional[int] = None
+        cap: Optional[cv2.VideoCapture] = None
         while self.running:
             try:
-                self._refresh_camera_config()
-                mode = self.camera_mode
-                if mode == 'local':
-                    self._consume_local()
-                else:
-                    self._consume_stream()
-            except Exception as exc:
-                logger.error('Ошибка в цикле детекции: %s', exc)
-                time.sleep(1.0)
-        self.running = False
+                desired_index = self.get_camera_index()
+                if desired_index != current_index or cap is None or not cap.isOpened():
+                    if cap is not None:
+                        cap.release()
+                    cap = self._open_capture(desired_index)
+                    if cap is None:
+                        current_index = None
+                        time.sleep(self.capture_retry_delay)
+                        continue
+                    current_index = desired_index
 
-    def _consume_local(self):
-        try:
-            cap = self._open_local_capture()
-        except Exception as exc:
-            logger.error('Не удалось открыть локальную камеру: %s', exc)
-            time.sleep(1.0)
-            return
-
-        current_source = self.camera_source
-        current_mode = self.camera_mode
-        try:
-            while self.running:
                 ret, frame = cap.read()
                 if not ret or frame is None:
                     time.sleep(0.02)
                     continue
                 self.analyze_frame(frame)
-                if self._refresh_camera_config():
-                    if self.camera_mode != current_mode or self.camera_source != current_source:
-                        logger.info('🎛️ Конфигурация камеры изменена, перезапуск потока')
-                        break
-        finally:
+            except Exception as exc:
+                logger.error('Ошибка в цикле детекции: %s', exc)
+                time.sleep(1.0)
+        if cap is not None:
             cap.release()
+        self.running = False
 
-    def _consume_stream(self):
-        url = self.camera_stream or self.camera_source
-        if not url:
-            logger.warning('HTTP поток камеры не задан')
-            time.sleep(1.0)
-            return
-        logger.info('🎥 Подключение к потоку %s', url)
-        try:
-            response = requests.get(url, stream=True, timeout=5)
-            response.raise_for_status()
-        except Exception as exc:
-            logger.error('Не удалось подключиться к потоку %s: %s', url, exc)
-            time.sleep(1.0)
-            return
+    def _open_capture(self, index: int) -> Optional[cv2.VideoCapture]:
+        if index < 0:
+            logger.error('Индекс камеры должен быть неотрицательным, получено %s', index)
+            return None
 
-        bytes_buffer = b''
-        current_url = url
-        try:
-            for chunk in response.iter_content(chunk_size=4096):
-                if not self.running:
-                    break
-                if not chunk:
-                    continue
-                bytes_buffer += chunk
-                start = bytes_buffer.find(b'\xff\xd8')
-                end = bytes_buffer.find(b'\xff\xd9')
-                if start != -1 and end != -1 and end > start:
-                    jpg = bytes_buffer[start:end + 2]
-                    bytes_buffer = bytes_buffer[end + 2:]
-                    frame = cv2.imdecode(np.frombuffer(jpg, np.uint8), cv2.IMREAD_COLOR)
-                    if frame is not None:
-                        self.analyze_frame(frame)
-                if self._refresh_camera_config():
-                    new_url = self.camera_stream or self.camera_source
-                    if self.camera_mode == 'local' or new_url != current_url:
-                        logger.info('🔁 URL потока изменился, переподключаемся')
-                        break
-        finally:
-            response.close()
+        logger.info('🎥 Подключение к локальной камере %s', index)
+        cap = cv2.VideoCapture(index)
+        if not cap or not cap.isOpened():
+            if cap is not None:
+                cap.release()
+            logger.error('Не удалось открыть локальную камеру: %s', index)
+            self.scan_cameras(force=True)
+            return None
+
+        detection_results['active_camera'] = index
+        return cap
 
     def _infer(self, frame: np.ndarray) -> Tuple[List[dict], np.ndarray]:
         results = self.model(frame, conf=CONFIDENCE_THRESHOLD, verbose=False)
@@ -226,7 +198,7 @@ class DetectionService:
 
         if update_state:
             detection_results.update({
-                'camera_id': self.camera_id,
+                'active_camera': self.get_camera_index(),
                 'detected': bool(detections),
                 'count': len(detections),
                 'confidence': confidence,
@@ -239,7 +211,7 @@ class DetectionService:
             self._schedule_notification(detections, confidence, timestamp)
 
         return {
-            'cameraId': self.camera_id,
+            'cameraIndex': self.get_camera_index(),
             'detected': bool(detections),
             'confidence': confidence,
             'detections': detections,
@@ -257,7 +229,6 @@ class DetectionService:
             _last_notification_ts = now
 
         payload = {
-            'cameraId': self.camera_id,
             'detected': True,
             'confidence': confidence,
             'detections': detections,
@@ -282,6 +253,22 @@ class DetectionService:
 detection_service = DetectionService(MODEL_PATH)
 
 
+def _mjpeg_generator():
+    boundary = b'--frame'
+    while True:
+        frame = detection_results.get('frame_with_detections')
+        if frame is not None:
+            yield (
+                boundary + b"\r\n"
+                + b'Content-Type: image/jpeg\r\n'
+                + b'Content-Length: ' + str(len(frame)).encode() + b"\r\n\r\n"
+                + frame + b"\r\n"
+            )
+            time.sleep(0.1)
+        else:
+            time.sleep(0.2)
+
+
 @app.get('/')
 def index():
     state = detection_results.copy()
@@ -297,10 +284,42 @@ def detection_frame():
     return Response(frame, mimetype='image/jpeg')
 
 
+@app.get('/video_feed')
+def video_feed():
+    response = Response(_mjpeg_generator(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Connection'] = 'keep-alive'
+    return response
+
+
+@app.get('/cameras')
+def cameras():
+    cameras_list = detection_service.scan_cameras(force=True)
+    return jsonify({
+        'available': cameras_list,
+        'active': detection_service.get_camera_index()
+    })
+
+
+@app.patch('/cameras/<int:index>')
+def set_camera(index: int):
+    try:
+        active = detection_service.set_camera(index)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    cameras_list = detection_service.scan_cameras(force=True)
+    return jsonify({
+        'active': active,
+        'available': cameras_list
+    })
+
+
 @app.get('/api/detection')
 def api_detection():
     return jsonify({
-        'cameraId': detection_results.get('camera_id'),
+        'activeCamera': detection_results.get('active_camera'),
+        'availableCameras': detection_results.get('available_cameras', []),
         'detected': detection_results.get('detected', False),
         'count': detection_results.get('count', 0),
         'confidence': detection_results.get('confidence', 0.0),
@@ -334,19 +353,8 @@ def detect_once():
         return jsonify({'error': 'Unable to decode image'}), 400
 
     result = detection_service.analyze_frame(frame, update_state=False, notify=False)
-    result['cameraId'] = payload.get('cameraId', detection_service.camera_id)
+    result['cameraIndex'] = detection_service.get_camera_index()
     return jsonify(result)
-
-
-@app.post('/refresh-config')
-def refresh_config():
-    updated = detection_service._refresh_camera_config(force=True)
-    return jsonify({
-        'updated': updated,
-        'cameraId': detection_service.camera_id,
-        'mode': detection_service.camera_mode,
-        'source': detection_service.camera_source
-    })
 
 
 @app.get('/health')
@@ -354,8 +362,8 @@ def health():
     return jsonify({
         'status': 'ok',
         'running': detection_service.running,
-        'cameraId': detection_service.camera_id,
-        'mode': detection_service.camera_mode
+        'activeCamera': detection_service.get_camera_index(),
+        'availableCameras': detection_results.get('available_cameras', [])
     })
 
 

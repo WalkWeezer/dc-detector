@@ -1,8 +1,8 @@
 FROM node:20-alpine AS build
 WORKDIR /app
-COPY frontend/yachi-ground-station/package.json frontend/yachi-ground-station/package-lock.json* ./
+COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm ci || true
-COPY frontend/yachi-ground-station ./
+COPY frontend ./
 RUN npm run build || echo "No build script, using static index.html"
 
 FROM nginx:alpine

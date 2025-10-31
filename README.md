@@ -3,9 +3,9 @@
 Переосмысленная система детекции огня с четырьмя контейнерами:
 
 - `frontend` — SPA на Vue (по наследию `yachi-ground-station`), отдаётся из nginx.
-- `backend` — Node.js модульный монолит: REST API, управление камерами, учёт детекций, интеграция с БД.
+- `backend` — Node.js модульный монолит: REST API и учёт детекций, интеграция с БД.
 - `detection` — Python/YOLO воркер: захват видеопотока, инференс, события в бэкенд.
-- `db` — Postgres 16 (метаданные, пользователи, детекции).
+- `db` — Postgres 16 (детекции).
 
 Разработка — Windows/amd64, деплой — Raspberry Pi (Debian 64‑bit, arm64). Один набор Dockerfile собирается в multi‑arch образы.
 
@@ -28,7 +28,6 @@
 │       ├── models/
 │       └── requirements.txt
 ├── frontend/
-│   └── yachi-ground-station/
 ├── infra/
 │   └── db/migrations/            # SQL миграции Postgres
 └── archive/                      # legacy код (к удалению после миграции)
@@ -64,35 +63,34 @@ DATABASE_URL=postgres://postgres:postgres@db:5432/postgres
 DETECTION_URL=http://detection:8001
 JWT_SECRET=change-me
 
-CAMERA_MODE=local
-CAMERA_SOURCE=0
+CAMERA_INDEX=0
+CAMERA_SCAN_LIMIT=5
+CAPTURE_RETRY_DELAY=1.0
 MODEL_PATH=models/bestfire.pt
-CAMERA_ID=camera-default
 BACKEND_NOTIFY_URL=http://backend:8080/internal/detections
-CAMERA_CONFIG_URL=http://backend:8080/internal/cameras/camera-default
 ```
 
 ## 🐍 Detection service
 
-- Захват видеопотока:
-  - `CAMERA_MODE=local` + `CAMERA_SOURCE=0` — локальная UVC камера.
-  - `CAMERA_MODE=http` + `CAMERA_SERVICE_URL=http://camera-host/video_feed` — MJPEG поток.
-  - `CAMERA_CONFIG_URL=http://backend:8080/internal/cameras/<id>` — автоматическое обновление настроек из бэка.
-- `/detect` — синхронный REST (изображение base64/URL).
-- `/refresh-config` — принудительное обновление конфига.
+- Автоматически сканирует локальные веб-камеры (индексы `0..CAMERA_SCAN_LIMIT`) и запускает поток с активного устройства.
+- Эндпоинты:
+  - `GET /cameras` — обновляет список доступных камер и выдаёт текущую.
+  - `PATCH /cameras/<index>` — переключение на конкретную камеру.
+  - `GET /video_feed` — MJPEG поток с наложенными детекциями.
+  - `GET /api/detection` — текущее состояние детектора.
+  - `POST /detect` — синхронный REST (изображение base64/URL).
 - Отправляет события в `backend` (`/internal/detections`).
 
 ## 🟩 Backend (Node.js)
 
 - REST:
-  - `GET/POST/PATCH /api/cameras`
   - `GET /api/detections`
   - `GET /api/detections/status`
+  - `GET /api/detections/stream` — прокси MJPEG-потока с detection-сервиса
   - `POST /api/detections/run` — прокси к `detection`.
 - Внутренние маршруты (не публикуются наружу):
-  - `GET /internal/cameras/:id`
   - `POST /internal/detections`
-- Postgres: миграции SQL (таблицы `users`, `cameras`, `detections`).
+- Postgres: миграции SQL (таблица `detections`).
 
 ## 🧱 База данных
 

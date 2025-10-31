@@ -20,7 +20,7 @@ services:
     image: node:20-alpine
     working_dir: /app
     volumes:
-      - ./frontend/yachi-ground-station:/app
+      - ./frontend:/app
     command: sh -c "npm ci && npm run dev -- --host"
     ports:
       - "5173:5173"
@@ -31,6 +31,6 @@ services:
   # Simple static live-reload via nginx serving mounted files
   frontend:
     volumes:
-      - ./frontend/yachi-ground-station:/usr/share/nginx/html:ro
+      - ./frontend:/usr/share/nginx/html:ro
 
 

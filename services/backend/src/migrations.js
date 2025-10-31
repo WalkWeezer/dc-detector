@@ -5,7 +5,7 @@ import { query, getClient } from './db.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-const migrationsDir = path.resolve(__dirname, '../../infra/db/migrations')
+const migrationsDir = path.resolve(__dirname, '../infra/db/migrations')
 
 export async function runMigrations() {
   await ensureMigrationsTable()
