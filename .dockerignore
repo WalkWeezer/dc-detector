@@ -1,0 +1,16 @@
+# Exclude VCS and OS cruft
+.git
+**/.DS_Store
+
+# Do not send local node_modules to Docker build context
+frontend/node_modules
+**/node_modules
+
+# Editor caches
+.cursor
+.idea
+.vscode
+
+# Large runtime data
+data
+
