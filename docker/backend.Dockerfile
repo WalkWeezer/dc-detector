@@ -1,8 +1,10 @@
 FROM node:20-bullseye-slim
 WORKDIR /app
 
-COPY services/backend/package*.json ./
-RUN npm install --omit=dev && npm cache clean --force
+# Копируем только package.json, чтобы не тянуть старый lock с нативными зависимостями (например, canvas)
+COPY services/backend/package.json ./
+# Устанавливаем без dev и optional зависимостей (избегаем сборки нативных модулей на Pi)
+RUN npm install --omit=dev --omit=optional --no-audit --no-fund && npm cache clean --force
 
 COPY services/backend ./
 COPY infra/db/migrations ./infra/db/migrations
