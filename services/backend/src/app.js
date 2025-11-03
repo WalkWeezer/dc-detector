@@ -1,6 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import morgan from 'morgan'
+import path from 'node:path'
 import { config } from './config.js'
 import { detectionsRouter } from './routes/detections.js'
 import { internalRouter } from './routes/internal.js'
@@ -19,6 +20,10 @@ export function createApp() {
   app.use('/api/detections', detectionsRouter)
   app.use('/api/config', configRouter)
   app.use('/internal', internalRouter)
+
+  // Раздача файлов данных (графики, сохраненные гифки и т.д.)
+  const dataRoot = path.resolve(process.cwd(), 'data')
+  app.use('/files', express.static(dataRoot, { fallthrough: true, index: false }))
 
   // eslint-disable-next-line no-unused-vars
   app.use((err, _req, res, _next) => {

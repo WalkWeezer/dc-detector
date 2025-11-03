@@ -42,6 +42,9 @@
   let isEditingNames = false;
   let previousTrackIds = [];
   let lastDetections = [];
+  // Кольцевой буфер последних кадров для сохранения
+  const frameBuffer = [];
+  const frameBufferMax = 15; // ~2-3 секунды при 5-7 FPS
 
   function updateStatus(text, state = "idle") {
     statusIndicator.textContent = text;
@@ -264,13 +267,22 @@
     const colorSpan = document.createElement('span');
     details.append(confSpan, colorSpan);
 
-    const input = document.createElement('input');
+        const input = document.createElement('input');
     input.type = 'text';
     input.className = 'detection-item-name-input';
     input.placeholder = 'Имя объекта (не сохраняется)';
     input.dataset.trackId = String(trackId);
 
-    row.append(header, details, input);
+        // Кнопка сохранения
+        const saveBtn = document.createElement('button');
+        saveBtn.textContent = 'Сохранить';
+        saveBtn.style.marginTop = '8px';
+        saveBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await saveDetection(trackId);
+        });
+
+        row.append(header, details, input, saveBtn);
     container.appendChild(row);
 
     row.addEventListener('click', (e) => {
@@ -464,6 +476,46 @@
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   }
 
+  async function saveDetection(trackId) {
+    try {
+      // Найти детекцию с таким trackId из последнего списка
+      const det = (lastDetections || []).find(d => (Number.isFinite(d.trackId) ? d.trackId : d.id) === trackId);
+      if (!det) {
+        alert('Детекция не найдена для сохранения');
+        return;
+      }
+      const detectionPayload = {
+        trackId: Number.isFinite(det.trackId) ? det.trackId : det.id,
+        bbox: Array.isArray(det.bbox) ? det.bbox.slice(0, 4).map(Number) : null,
+        label: typeof det.label === 'string' ? det.label : 'object',
+        classId: Number.isFinite(det.classId) ? det.classId : null,
+        confidence: Number(det.confidence ?? 0) || 0,
+        cameraIndex: null,
+        model: activeModel,
+        capturedAt: Math.floor(Date.now() / 1000)
+      };
+      const payload = {
+        detection: detectionPayload,
+        frames: frameBuffer.slice(-frameBufferMax),
+        fps: Math.max(1, Math.round(1000 / uploadIntervalMs))
+      };
+
+      const response = await fetch(`${backendOrigin}/api/detections/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const result = await readResponsePayload(response);
+      if (!response.ok) {
+        throw new Error(readErrorMessage(result, 'Не удалось сохранить детекцию'));
+      }
+      alert('Сохранено: ' + (result.gifPath || 'OK'));
+    } catch (err) {
+      console.error('Ошибка сохранения детекции', err);
+      alert('Ошибка сохранения: ' + (err instanceof Error ? err.message : 'Unknown'));
+    }
+  }
+
   function drawDetections(detections = []) {
     clearOverlay();
     if (!detections.length) {
@@ -541,6 +593,11 @@
     try {
       captureCtx.drawImage(videoEl, 0, 0, captureCanvas.width, captureCanvas.height);
       const dataUrl = captureCanvas.toDataURL("image/jpeg", 0.85);
+      // Буферизация последних кадров для сохранения гифок
+      frameBuffer.push(dataUrl);
+      if (frameBuffer.length > frameBufferMax) {
+        frameBuffer.splice(0, frameBuffer.length - frameBufferMax);
+      }
       const base64Data = dataUrl.split(",")[1];
 
       const response = await fetch(`${backendOrigin}/api/detections/run`, {

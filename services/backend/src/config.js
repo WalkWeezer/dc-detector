@@ -7,7 +7,8 @@ export const config = {
   port: Number.parseInt(process.env.PORT ?? '8080', 10),
   detectionServiceUrl: process.env.DETECTION_URL ?? DEFAULT_DETECTION_URL,
   detectionsDataDir: path.resolve(process.cwd(), process.env.DETECTIONS_DIR ?? 'data/detections'),
-  jsonLimit: process.env.JSON_LIMIT ?? '1mb',
+  // Увеличенный лимит для загрузки кадров (gif сохранение)
+  jsonLimit: process.env.JSON_LIMIT ?? '25mb',
   logFormat: process.env.LOG_FORMAT ?? 'dev'
 }
 

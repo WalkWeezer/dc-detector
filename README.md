@@ -1,11 +1,10 @@
 # 🔥 DC-Detector 2.0
 
-Переосмысленная система детекции огня с четырьмя контейнерами:
+Переосмысленная система детекции огня с тремя контейнерами:
 
 - `frontend` — SPA на Vue (по наследию `yachi-ground-station`), отдаётся из nginx.
-- `backend` — Node.js модульный монолит: REST API и учёт детекций, интеграция с БД.
+- `backend` — Node.js REST API: прокси к detection-сервису и файловое хранилище детекций.
 - `detection` — Python/YOLO воркер: захват видеопотока, инференс, события в бэкенд.
-- `db` — Postgres 16 (детекции).
 
 Разработка — Windows/amd64, деплой — Raspberry Pi (Debian 64‑bit, arm64). Один набор Dockerfile собирается в multi‑arch образы.
 
@@ -28,8 +27,10 @@
 │       ├── models/
 │       └── requirements.txt
 ├── frontend/
+├── data/
+│   └── detections/               # JSON-файлы с результатами детекции (по датам)
 ├── infra/
-│   └── db/migrations/            # SQL миграции Postgres
+│   └── db/migrations/            # legacy SQL миграции (не используются)
 └── archive/                      # legacy код (к удалению после миграции)
 ```
 
@@ -54,19 +55,18 @@
    - Frontend: <http://localhost>
    - Backend API: <http://localhost:8080>
    - Detection health: <http://localhost:8001/health>
-   - Postgres: `localhost:5432` (логин/пароль `postgres/postgres`).
 
 Пример `.env`:
 ```dotenv
 PORT=8080
-DATABASE_URL=postgres://postgres:postgres@db:5432/postgres
 DETECTION_URL=http://detection:8001
+DETECTIONS_DIR=data/detections
 JWT_SECRET=change-me
 
 CAMERA_INDEX=0
 CAMERA_SCAN_LIMIT=5
 CAPTURE_RETRY_DELAY=1.0
-MODEL_PATH=models/bestfire.pt
+MODEL_PATH=models/yolov8n.pt
 BACKEND_NOTIFY_URL=http://backend:8080/internal/detections
 ```
 
@@ -88,13 +88,16 @@ BACKEND_NOTIFY_URL=http://backend:8080/internal/detections
   - `GET /api/detections/status`
   - `GET /api/detections/stream` — прокси MJPEG-потока с detection-сервиса
   - `POST /api/detections/run` — прокси к `detection`.
+- `GET /api/detections/models`, `POST /api/detections/models` — управление моделью детекции.
 - Внутренние маршруты (не публикуются наружу):
   - `POST /internal/detections`
-- Postgres: миграции SQL (таблица `detections`).
+- Хранит результаты в JSON-файлах (`data/detections/YYYY-MM-DD.json`).
 
-## 🧱 База данных
+## 🗃️ Хранилище детекций
 
-SQL миграции лежат в `infra/db/migrations`. При старте backend выполняет `runMigrations()` автоматически.
+- Backend автоматически создаёт каталог `data/detections` и ведёт файлы по датам (`YYYY-MM-DD.json`).
+- Каждый объект содержит уникальный `id`, `trackId`, метки `firstSeen/lastSeen`, bbox и актуальную уверенность.
+- Детекции с одинаковым `trackId` обновляются (не дублируются).
 
 ## 🏁 Raspberry Pi / прод режим
 
@@ -127,9 +130,9 @@ SQL миграции лежат в `infra/db/migrations`. При старте ba
 
 ## 🔧 Полезные команды
 
-- Логи: `docker compose logs -f backend detection`
-- Выполнить миграции вручную: `docker compose exec backend node src/server.js`
-- Просмотреть состояние БД: `docker compose exec db psql -U postgres`
+- Логи: `docker compose logs -f backend detection frontend`
+- Просмотреть актуальные файлы детекций: `ls data/detections`
+- Очистить данные детекций: удалить соответствующий `data/detections/YYYY-MM-DD.json`
 
 ## 🧑‍💻 Разработка с hot-reload
 

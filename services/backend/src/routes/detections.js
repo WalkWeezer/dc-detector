@@ -1,7 +1,7 @@
 import express from 'express'
 import { Readable } from 'node:stream'
 import { config } from '../config.js'
-import { listDetections, upsertDetections } from '../storage/detectionsStore.js'
+import { listDetections, upsertDetections, listSavedDetections, saveUserDetection } from '../storage/detectionsStore.js'
 
 export const detectionsRouter = express.Router()
 export const internalDetectionsRouter = express.Router()
@@ -134,6 +134,32 @@ detectionsRouter.post('/run', async (req, res) => {
     res.status(502).json({ error: 'Detection service unreachable', details: err.message })
   } finally {
     clearTimeout(timeout)
+  }
+})
+
+// Saved detections API
+detectionsRouter.get('/saved', async (req, res, next) => {
+  try {
+    const { date } = req.query
+    const normalizedDate = typeof date === 'string' && date.trim() ? date.trim() : undefined
+    const result = await listSavedDetections(normalizedDate)
+    res.json(result)
+  } catch (err) {
+    next(err)
+  }
+})
+
+detectionsRouter.post('/save', async (req, res) => {
+  try {
+    const { detection, frames, fps } = req.body ?? {}
+    if (!detection || !Array.isArray(frames) || frames.length === 0) {
+      return res.status(400).json({ error: 'detection and frames are required' })
+    }
+    const payload = await saveUserDetection({ detection, frames, fps: Number(fps) || 5 })
+    res.status(201).json(payload)
+  } catch (err) {
+    console.error('Save error', err)
+    res.status(500).json({ error: 'Unable to save detection', details: err.message })
   }
 })
 

@@ -5,15 +5,14 @@ services:
       dockerfile: docker/backend.Dockerfile
     environment:
       - PORT=8080
-      - DATABASE_URL=postgres://postgres:postgres@db:5432/postgres
       - DETECTION_URL=http://detection:8001
     depends_on:
-      db:
-        condition: service_healthy
       detection:
         condition: service_started
     ports:
       - "8080:8080"
+    volumes:
+      - ./data:/app/data
     networks: [app]
 
   detection:
@@ -23,7 +22,7 @@ services:
     environment:
       - CAMERA_INDEX=0
       - CAMERA_SCAN_LIMIT=5
-      - MODEL_PATH=models/bestfire.pt
+      - MODEL_PATH=models/yolov8n.pt
       - BACKEND_NOTIFY_URL=http://backend:8080/internal/detections
     dns:
       - 8.8.8.8
@@ -42,25 +41,5 @@ services:
       - "80:80"
     networks: [app]
 
-  db:
-    image: postgres:16-alpine
-    environment:
-      - POSTGRES_PASSWORD=postgres
-    volumes:
-      - pg_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-    networks: [app]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-
 networks:
   app: {}
-
-volumes:
-  pg_data: {}
-
-
