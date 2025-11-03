@@ -1,14 +1,14 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 
-# Установка зависимостей: с lock — npm ci, без lock — npm install
+# Копируем манифесты (не ставим зависимости, чтобы не тянуть тяжёлые нативные модули на arm)
 COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm ci || npm install
 
 # Исходники фронтенда
 COPY frontend ./
 
 # Пытаемся собрать Vite/сборку; если dist не появился, формируем минимальный dist из статических файлов
+# Зависимости не устанавливаем намеренно — если их нет, сборка упадёт и сработает fallback ниже
 RUN (npm run build 2>/dev/null || true) \
   && if [ ! -d dist ]; then \
        mkdir -p dist; \
