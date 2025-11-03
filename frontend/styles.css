@@ -213,6 +213,32 @@ select:disabled {
   height: 100%;
 }
 
+/* Saved grid */
+.saved-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+}
+.saved-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(23, 33, 54, 0.6);
+  border: 1px solid rgba(114, 139, 191, 0.25);
+  border-radius: 8px;
+  padding: 8px;
+}
+.saved-card img {
+  width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+.saved-caption {
+  font-size: 0.8rem;
+  color: #93a4d2;
+  word-break: break-all;
+}
+
 .detections-list h2, .config-panel h2 {
   margin: 0 0 16px;
   font-size: 1.2rem;

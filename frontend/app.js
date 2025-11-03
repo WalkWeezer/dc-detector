@@ -510,6 +510,11 @@
         throw new Error(readErrorMessage(result, 'Не удалось сохранить детекцию'));
       }
       alert('Сохранено: ' + (result.gifPath || 'OK'));
+      // Если открыта вкладка сохранённых — обновить список
+      const savedTabActive = document.getElementById('tab-saved')?.classList.contains('active');
+      if (savedTabActive) {
+        loadSavedDetections();
+      }
     } catch (err) {
       console.error('Ошибка сохранения детекции', err);
       alert('Ошибка сохранения: ' + (err instanceof Error ? err.message : 'Unknown'));
@@ -884,6 +889,9 @@
     document.querySelectorAll('.tab-panel').forEach(panel => {
       panel.classList.toggle('active', panel.id === `tab-${name}`);
     });
+    if (name === 'saved') {
+      loadSavedDetections();
+    }
   }
   document.querySelectorAll('.tab-button').forEach(btn => {
     btn.addEventListener('click', () => selectTab(btn.dataset.tab));
@@ -899,6 +907,62 @@
   statusUpdateInterval = setInterval(updateDetectionsStatus, 1000);
   loadModels();
   startWebcam();
+
+  // -------- Saved list logic ---------
+  async function loadSavedDetections(dateValue) {
+    try {
+      const params = new URLSearchParams();
+      if (dateValue) params.set('date', dateValue);
+      const response = await fetch(`${backendOrigin}/api/detections/saved?${params.toString()}`);
+      const payload = await readResponsePayload(response);
+      if (!response.ok) {
+        throw new Error(readErrorMessage(payload, 'Не удалось загрузить сохранённые'));
+      }
+      const items = Array.isArray(payload.items) ? payload.items : [];
+      renderSavedList(items);
+    } catch (err) {
+      console.error('Ошибка загрузки сохранённых', err);
+      renderSavedList([]);
+    }
+  }
+
+  function renderSavedList(items) {
+    const container = document.getElementById('saved-list-container');
+    if (!container) return;
+    container.innerHTML = '';
+    if (!items.length) {
+      const p = document.createElement('p');
+      p.style.color = '#93a4d2';
+      p.style.textAlign = 'center';
+      p.style.padding = '16px';
+      p.textContent = 'Нет сохранённых элементов';
+      container.appendChild(p);
+      return;
+    }
+
+    items.forEach(item => {
+      const card = document.createElement('div');
+      card.className = 'saved-card';
+      const img = document.createElement('img');
+      img.src = item.gifPath || '';
+      img.alt = item.id;
+      img.loading = 'lazy';
+      const caption = document.createElement('div');
+      caption.className = 'saved-caption';
+      caption.textContent = item.id;
+      card.append(img, caption);
+      container.appendChild(card);
+    });
+  }
+
+  const refreshSavedBtn = document.getElementById('refresh-saved-btn');
+  if (refreshSavedBtn) {
+    refreshSavedBtn.addEventListener('click', () => {
+      const dateInput = document.getElementById('saved-date');
+      const value = dateInput && dateInput.value ? dateInput.value : undefined;
+      loadSavedDetections(value);
+    });
+  }
 })();
 
 

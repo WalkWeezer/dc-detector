@@ -366,6 +366,7 @@
             <button class="tab-button active" data-tab="status">Состояние</button>
             <button class="tab-button" data-tab="list">Список</button>
             <button class="tab-button" data-tab="config">Конфигурация</button>
+            <button class="tab-button" data-tab="saved">Сохранённые</button>
           </div>
           <div class="tab-panels">
             <section class="info-panel tab-panel active" id="tab-status" aria-live="polite">
@@ -438,6 +439,15 @@
                 </label>
               </div>
               <button id="save-config-btn">Сохранить конфигурацию</button>
+            </section>
+
+            <section class="detections-list tab-panel" id="tab-saved">
+              <h2>Сохранённые</h2>
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+                <input type="date" id="saved-date" />
+                <button id="refresh-saved-btn">Обновить</button>
+              </div>
+              <div id="saved-list-container" class="saved-grid"></div>
             </section>
           </div>
         </aside>

@@ -1,4 +1,4 @@
-import { promises as fs } from 'node:fs'
+import { promises as fs, createWriteStream } from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { config } from '../config.js'
@@ -238,6 +238,44 @@ async function toRgbaBuffer(jpegBuffer, targetWidth) {
   return { width: decoded.width, height: decoded.height, data: decoded.data }
 }
 
+function computeCropRectFromBBox(bbox, imgW, imgH) {
+  if (!Array.isArray(bbox) || bbox.length < 4 || !Number.isFinite(imgW) || !Number.isFinite(imgH)) {
+    return { left: 0, top: 0, width: Math.max(1, imgW || 1), height: Math.max(1, imgH || 1) }
+  }
+  const [x1, y1, x2, y2] = bbox.map(Number)
+  let w = Math.max(1, Math.round(x2 - x1))
+  let h = Math.max(1, Math.round(y2 - y1))
+  // Паддинги, чтобы объект не обрезался при небольших сдвигах
+  const padX = Math.max(10, Math.round(w * 0.1))
+  const padY = Math.max(10, Math.round(h * 0.1))
+  const cx = Math.round((x1 + x2) / 2)
+  const cy = Math.round((y1 + y2) / 2)
+  let left = Math.max(0, cx - Math.round(w / 2) - padX)
+  let top = Math.max(0, cy - Math.round(h / 2) - padY)
+  let right = Math.min(imgW, cx + Math.round(w / 2) + padX)
+  let bottom = Math.min(imgH, cy + Math.round(h / 2) + padY)
+  left = Math.max(0, left)
+  top = Math.max(0, top)
+  const width = Math.max(1, right - left)
+  const height = Math.max(1, bottom - top)
+  return { left: Math.floor(left), top: Math.floor(top), width: Math.floor(width), height: Math.floor(height) }
+}
+
+async function toRgbaBufferCropped(jpegBuffer, cropRect, targetWidth) {
+  let buf = jpegBuffer
+  try {
+    const s = sharp(jpegBuffer)
+    const meta = await s.metadata()
+    const rect = cropRect || { left: 0, top: 0, width: meta.width || 1, height: meta.height || 1 }
+    buf = await s.extract(rect).resize({ width: targetWidth }).jpeg({ quality: 85 }).toBuffer()
+  } catch {
+    // fallback: try simple resize
+    buf = await sharp(jpegBuffer).resize({ width: targetWidth }).jpeg({ quality: 85 }).toBuffer()
+  }
+  const decoded = JPEG.decode(buf, { useTArray: true })
+  return { width: decoded.width, height: decoded.height, data: decoded.data }
+}
+
 export async function saveUserDetection({ detection, frames = [], fps = 5 }) {
   if (!detection || !Array.isArray(frames) || frames.length === 0) {
     throw new Error('detection and frames are required')
@@ -254,14 +292,25 @@ export async function saveUserDetection({ detection, frames = [], fps = 5 }) {
   const limit = Math.min(frames.length, 30)
   const pick = frames.slice(-limit)
 
-  // Build GIF
+  // Build GIF: кроп по bbox детекции
   const targetWidth = 320
   const rgbaFrames = []
+  let cropRect = null
+  // Рассчитать cropRect один раз по первой картинке и bbox
+  if (Array.isArray(detection?.bbox)) {
+    try {
+      const firstBuf = parseDataUrl(pick[0])
+      const meta = await sharp(firstBuf).metadata()
+      cropRect = computeCropRectFromBBox(detection.bbox, meta.width || 0, meta.height || 0)
+    } catch {
+      cropRect = null
+    }
+  }
   for (const dataUrl of pick) {
     const jpegBuf = parseDataUrl(dataUrl)
     if (jpegBuf.length === 0) continue
     // eslint-disable-next-line no-await-in-loop
-    const frame = await toRgbaBuffer(jpegBuf, targetWidth)
+    const frame = await toRgbaBufferCropped(jpegBuf, cropRect, targetWidth)
     rgbaFrames.push(frame)
   }
   if (rgbaFrames.length === 0) {
@@ -270,20 +319,27 @@ export async function saveUserDetection({ detection, frames = [], fps = 5 }) {
   const w = rgbaFrames[0].width
   const h = rgbaFrames[0].height
   const encoder = new GIFEncoder(w, h)
-  // Render to buffer via stream
-  const gifChunks = []
-  encoder.createReadStream().on('data', (c) => gifChunks.push(c))
-  encoder.start()
-  encoder.setRepeat(0)
-  encoder.setDelay(Math.max(50, Math.round(1000 / Math.max(1, fps))))
-  encoder.setQuality(10)
-  for (const fr of rgbaFrames) {
-    encoder.addFrame(fr.data)
-  }
-  encoder.finish()
-  const gifBuffer = Buffer.concat(gifChunks)
 
-  // Save JSON and GIF
+  // Stream encoder output directly to the file and wait for finish to ensure integrity
+  await new Promise((resolve, reject) => {
+    const ws = createWriteStream(gifFile)
+    encoder.createReadStream()
+      .on('error', reject)
+      .pipe(ws)
+      .on('finish', resolve)
+      .on('error', reject)
+
+    encoder.start()
+    encoder.setRepeat(0)
+    encoder.setDelay(Math.max(50, Math.round(1000 / Math.max(1, fps))))
+    encoder.setQuality(10)
+    for (const fr of rgbaFrames) {
+      encoder.addFrame(fr.data)
+    }
+    encoder.finish()
+  })
+
+  // Save JSON metadata
   const payload = {
     id,
     date: dateKey,
@@ -293,7 +349,6 @@ export async function saveUserDetection({ detection, frames = [], fps = 5 }) {
     jsonPath: `/files/detections/saved/${dateKey}/${id}.json`
   }
   await fs.writeFile(jsonFile, JSON.stringify(payload, null, 2), 'utf8')
-  await fs.writeFile(gifFile, gifBuffer)
 
   return payload
 }
