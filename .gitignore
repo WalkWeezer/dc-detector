@@ -33,3 +33,18 @@ Thumbs.db
 
 # Архив (содержит старые файлы)
 archive/
+
+# Runtime data
+data/detections/*.json
+
+# Node/NPM
+node_modules/
+**/node_modules/
+**/package-lock.json
+frontend/dist/
+
+# Local data directory (runtime artifacts: gifs, saved detections, tracker dumps)
+data/
+
+# Cursor/Editor
+.cursor/

@@ -1,13 +1,1128 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Yachi Ground Station</title>
+    <title>DC-Detector</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <style>
+      /* Fallback minimal layout in case styles.css is not loaded */
+      main{width:95vw;height:94vh;overflow:hidden;padding:24px;border-radius:16px}
+      .layout{display:grid;grid-template-columns:2fr 1fr;gap:20px;height:calc(100% - 48px);align-items:stretch}
+      .sidebar{display:flex;flex-direction:column;min-width:0}
+      .tabs{display:flex;gap:8px;margin-bottom:12px}
+      .tab-button{flex:1 1 0;cursor:pointer}
+      .tab-panels{position:relative;flex:1 1 auto;min-height:0}
+      .tab-panel{position:absolute;inset:0;display:none;overflow:auto}
+      .tab-panel.active{display:block}
+    </style>
+    <!--
+      :root {
+        color-scheme: dark;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #0b0d17;
+        color: #f4f4f8;
+        font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      }
+
+      main {
+        width: 95vw;
+        padding: 24px 24px 24px 24px;
+        border-radius: 16px;
+        background: linear-gradient(160deg, rgba(33, 45, 72, 0.9), rgba(12, 18, 32, 0.92));
+        box-shadow: 0 30px 60px rgba(0, 0, 0, 0.35);
+        height: 94vh;
+        overflow: hidden;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-weight: 600;
+        font-size: clamp(1.6rem, 2.2vw, 2.3rem);
+      }
+
+      p.subtitle {
+        margin: 0 0 24px;
+        color: #93a4d2;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 20px;
+        height: calc(100% - 48px);
+        align-items: stretch;
+      }
+
+      .preview {
+        position: relative;
+        border-radius: 12px;
+        overflow: hidden;
+        background: #070910;
+        aspect-ratio: 16 / 9;
+        height: 100%;
+      }
+
+      video,
+      canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      video {
+        filter: saturate(1.05) contrast(1.05);
+      }
+
+      #overlay {
+        pointer-events: none;
+      }
+
+      .info {
+        display: flex;
+        align-items: stretch;
+        flex-direction: column;
+        gap: 16px;
+        padding: 16px;
+        border-radius: 12px;
+        background: rgba(14, 18, 33, 0.8);
+        border: 1px solid rgba(114, 139, 191, 0.25);
+      }
+
+      .info-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.95rem;
+      }
+
+      .info-row.control {
+        justify-content: flex-start;
+        gap: 12px;
+      }
+
+      .info-row.control label {
+        flex: 0 0 auto;
+        color: #d6e2ff;
+      }
+
+      .info-row.control select {
+        flex: 1 1 auto;
+      }
+
+      select {
+        background: rgba(23, 33, 54, 0.9);
+        border: 1px solid rgba(114, 139, 191, 0.4);
+        color: #e5edff;
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 0.95rem;
+        min-width: 0;
+        appearance: none;
+        cursor: pointer;
+      }
+
+      select:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .info-row span.value {
+        font-variant-numeric: tabular-nums;
+        font-weight: 600;
+        color: #7ee5ff;
+      }
+
+      #status-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+      }
+
+      #status-indicator::before {
+        content: "";
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #ffb347;
+        box-shadow: 0 0 12px rgba(255, 132, 0, 0.85);
+        transition: background 0.2s ease;
+      }
+
+      #status-indicator.detected::before {
+        background: #30f77f;
+        box-shadow: 0 0 16px rgba(48, 247, 127, 0.9);
+      }
+
+      #status-indicator.error::before {
+        background: #ff5460;
+        box-shadow: 0 0 16px rgba(255, 84, 96, 0.9);
+      }
+
+      #error-message {
+        color: #ff7f8a;
+        min-height: 1.2em;
+      }
+
+      .sidebar {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+
+      .tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+
+      .tab-button {
+        flex: 1 1 0;
+        background: rgba(23, 33, 54, 0.8);
+        border: 1px solid rgba(114, 139, 191, 0.35);
+        color: #e5edff;
+        border-radius: 8px;
+        padding: 8px 10px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .tab-button.active {
+        background: rgba(33, 45, 72, 0.9);
+        border-color: rgba(114, 139, 191, 0.6);
+      }
+
+      .tab-panels {
+        position: relative;
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+
+      .tab-panel {
+        position: absolute;
+        inset: 0;
+        display: none;
+        overflow: auto;
+      }
+
+      .tab-panel.active {
+        display: block;
+      }
+
+      .detections-list, .config-panel, .info-panel {
+        padding: 16px;
+        border-radius: 12px;
+        background: rgba(14, 18, 33, 0.8);
+        border: 1px solid rgba(114, 139, 191, 0.25);
+        height: 100%;
+      }
+
+      .detections-list h2, .config-panel h2 {
+        margin: 0 0 16px;
+        font-size: 1.2rem;
+        font-weight: 600;
+      }
+
+      #detections-list-container {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-height: 300px;
+        overflow-y: auto;
+      }
+
+      .detection-item {
+        padding: 12px;
+        border-radius: 8px;
+        background: rgba(23, 33, 54, 0.6);
+        border: 2px solid transparent;
+        cursor: pointer;
+        transition: border-color 0.2s, background 0.2s;
+      }
+
+      .detection-item:hover {
+        background: rgba(33, 45, 72, 0.8);
+      }
+
+      .detection-item.selected {
+        border-color: #7ee5ff;
+        background: rgba(33, 45, 72, 0.9);
+      }
+
+      .detection-item-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+      }
+
+      .detection-item-track {
+        font-weight: 600;
+        color: #7ee5ff;
+      }
+
+      .detection-item-label {
+        color: #d6e2ff;
+        font-size: 0.9rem;
+      }
+
+      .detection-item-details {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        font-size: 0.85rem;
+        color: #93a4d2;
+      }
+
+      .detection-item-name-input {
+        width: 100%;
+        background: rgba(23, 33, 54, 0.9);
+        border: 1px solid rgba(114, 139, 191, 0.4);
+        color: #e5edff;
+        border-radius: 4px;
+        padding: 4px 8px;
+        font-size: 0.9rem;
+        margin-top: 4px;
+      }
+
+      .config-group {
+        margin-bottom: 16px;
+      }
+
+      .config-group label {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: #d6e2ff;
+        font-size: 0.95rem;
+      }
+
+      .config-group input[type="number"] {
+        width: 120px;
+        background: rgba(23, 33, 54, 0.9);
+        border: 1px solid rgba(114, 139, 191, 0.4);
+        color: #e5edff;
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 0.95rem;
+      }
+
+      #save-config-btn {
+        width: 100%;
+        background: rgba(48, 247, 127, 0.2);
+        border: 1px solid rgba(48, 247, 127, 0.5);
+        color: #30f77f;
+        border-radius: 8px;
+        padding: 10px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.2s, border-color 0.2s;
+      }
+
+      #save-config-btn:hover {
+        background: rgba(48, 247, 127, 0.3);
+        border-color: rgba(48, 247, 127, 0.7);
+      }
+
+      #save-config-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      @media (max-width: 1024px) {
+        .layout {
+          grid-template-columns: 1.6fr 1fr;
+        }
+      }
+    -->
   </head>
   <body>
-    <h1>Yachi Ground Station</h1>
-    <p>Frontend placeholder. Connects to backend on /api.</p>
+    <main>
+      <h1>DC-Detector — поток с веб-камеры</h1>
+
+      <div class="layout">
+        <div class="preview">
+          <video id="webcam" autoplay playsinline muted></video>
+          <canvas id="overlay"></canvas>
+        </div>
+
+        <aside class="sidebar">
+          <div class="tabs">
+            <button class="tab-button active" data-tab="status">Состояние</button>
+            <button class="tab-button" data-tab="list">Список</button>
+            <button class="tab-button" data-tab="config">Конфигурация</button>
+          </div>
+          <div class="tab-panels">
+            <section class="info-panel tab-panel active" id="tab-status" aria-live="polite">
+              <div class="info-row control">
+                <label for="model-select">Модель</label>
+                <select id="model-select" disabled>
+                  <option value="">Загрузка…</option>
+                </select>
+              </div>
+              <div class="info-row">
+                <span>Состояние</span>
+                <span id="status-indicator">Подключение камеры…</span>
+              </div>
+              <div class="info-row">
+                <span>Кол-во детекций</span>
+                <span class="value" id="detection-count">—</span>
+              </div>
+              <div class="info-row">
+                <span>Последний объект</span>
+                <span class="value" id="last-detection-label">—</span>
+              </div>
+              <div class="info-row">
+                <span>Макс. уверенность</span>
+                <span class="value" id="detection-confidence">—</span>
+              </div>
+              <div class="info-row">
+                <span>Активная модель</span>
+                <span class="value" id="active-model">—</span>
+              </div>
+              <div class="info-row">
+                <span>Последний отклик</span>
+                <span class="value" id="last-update">—</span>
+              </div>
+              <div class="info-row">
+                <span>Интервал</span>
+                <span class="value" id="capture-interval">—</span>
+              </div>
+              <p id="error-message"></p>
+            </section>
+
+            <section class="detections-list tab-panel" id="tab-list">
+              <h2>Активные детекции</h2>
+              <div id="detections-list-container"></div>
+            </section>
+
+            <section class="config-panel tab-panel" id="tab-config">
+              <h2>Конфигурация</h2>
+              <div class="config-group">
+                <label>
+                  <span>FPS отправки кадров:</span>
+                  <input type="number" id="config-fps" min="0.1" max="60" step="0.1" title="FPS отправки кадров в бэкенд: выше — меньше задержка, выше нагрузка" />
+                </label>
+              </div>
+              <div class="config-group">
+                <label>
+                  <span>IOU Threshold:</span>
+                  <input type="number" id="config-iou" min="0" max="1" step="0.01" title="IoU‑порог сопоставления bbox между кадрами (0..1). Выше — строже сопоставление" />
+                </label>
+              </div>
+              <div class="config-group">
+                <label>
+                  <span>Max Age:</span>
+                  <input type="number" id="config-max-age" min="1" max="100" step="1" title="Максимум пропусков (кадров) до удаления трека" />
+                </label>
+              </div>
+              <div class="config-group">
+                <label>
+                  <span>Min Hits:</span>
+                  <input type="number" id="config-min-hits" min="1" max="100" step="1" title="Минимум попаданий (кадров) для подтверждения трека" />
+                </label>
+              </div>
+              <button id="save-config-btn">Сохранить конфигурацию</button>
+            </section>
+          </div>
+        </aside>
+      </div>
+    </main>
+
+    <script src="./app.js"></script>
+    <!--
+      const videoEl = document.getElementById("webcam");
+      const overlayEl = document.getElementById("overlay");
+      const overlayCtx = overlayEl.getContext("2d");
+      const statusIndicator = document.getElementById("status-indicator");
+      const detectionCountEl = document.getElementById("detection-count");
+      const detectionConfidenceEl = document.getElementById("detection-confidence");
+      const lastUpdateEl = document.getElementById("last-update");
+      const lastDetectionLabelEl = document.getElementById("last-detection-label");
+      const captureIntervalEl = document.getElementById("capture-interval");
+      const errorMessageEl = document.getElementById("error-message");
+      const modelSelect = document.getElementById("model-select");
+      const activeModelEl = document.getElementById("active-model");
+
+      let uploadIntervalMs = 400;
+      const captureCanvas = document.createElement("canvas");
+      const captureCtx = captureCanvas.getContext("2d", { willReadFrequently: true });
+      const backendOrigin = window.location.hostname === "localhost"
+        ? "http://localhost:8080"
+        : window.location.origin;
+
+      let uploadTimer = null;
+      let isUploading = false;
+      let isSwitchingModel = false;
+      let availableModels = [];
+      let activeModel = null;
+      let trackerConfig = {
+        capture_fps: 2.5,
+        iou_threshold: 0.3,
+        max_age: 5,
+        min_hits: 1,
+        colors: {
+          fire: "#ff0000",
+          smoke: "#808080",
+          object: "#40ffbc"
+        }
+      };
+      let detectionNames = new Map(); // trackId -> name
+      const detectionItemElements = new Map(); // trackId -> DOM element
+      let selectedTrackId = null;
+      let statusUpdateInterval = null;
+      let isEditingNames = false;
+      let previousTrackIds = [];
+
+      function updateStatus(text, state = "idle") {
+        statusIndicator.textContent = text;
+        statusIndicator.classList.remove("detected", "error");
+        if (state === "detected") {
+          statusIndicator.classList.add("detected");
+        } else if (state === "error") {
+          statusIndicator.classList.add("error");
+        }
+      }
+
+      function resizeCanvases() {
+        const width = videoEl.videoWidth || 640;
+        const height = videoEl.videoHeight || 480;
+        captureCanvas.width = width;
+        captureCanvas.height = height;
+        overlayEl.width = width;
+        overlayEl.height = height;
+      }
+
+      function scheduleNextUpload(delay = uploadIntervalMs) {
+        clearTimeout(uploadTimer);
+        uploadTimer = window.setTimeout(captureAndUploadFrame, delay);
+      }
+
+      function clearOverlay() {
+        overlayCtx.clearRect(0, 0, overlayEl.width, overlayEl.height);
+      }
+
+      function readErrorMessage(payload, fallback = "Сервис детекции не ответил") {
+        if (typeof payload === "string") {
+          const trimmed = payload.trim();
+          return trimmed ? trimmed.slice(0, 160) : fallback;
+        }
+        if (payload && typeof payload.error === "string" && payload.error) {
+          return payload.error;
+        }
+        return fallback;
+      }
+
+      async function readResponsePayload(response) {
+        const contentType = response.headers.get("content-type") ?? "";
+        if (contentType.includes("application/json")) {
+          return response.json();
+        }
+        return response.text();
+      }
+
+      function renderModelOptions(models = [], nextActive = activeModel) {
+        if (!modelSelect) {
+          return;
+        }
+
+        const normalized = Array.from(new Set((models ?? []).filter((name) => typeof name === "string" && name.length)));
+        if (typeof nextActive === "string" && nextActive.length && !normalized.includes(nextActive)) {
+          normalized.push(nextActive);
+        }
+        normalized.sort((a, b) => a.localeCompare(b));
+
+        availableModels = normalized;
+        modelSelect.innerHTML = "";
+
+        if (!normalized.length) {
+          const option = document.createElement("option");
+          option.value = "";
+          option.textContent = "Модели не найдены";
+          option.disabled = true;
+          option.selected = true;
+          modelSelect.append(option);
+          modelSelect.disabled = true;
+          return;
+        }
+
+        normalized.forEach((name) => {
+          const option = document.createElement("option");
+          option.value = name;
+          option.textContent = name;
+          if (name === nextActive) {
+            option.selected = true;
+          }
+          modelSelect.append(option);
+        });
+
+        modelSelect.disabled = isSwitchingModel;
+        if (typeof nextActive === "string" && nextActive.length) {
+          modelSelect.value = nextActive;
+        } else {
+          modelSelect.selectedIndex = 0;
+        }
+      }
+
+      function updateActiveModel(name) {
+        activeModel = typeof name === "string" && name.length ? name : null;
+        if (activeModelEl) {
+          activeModelEl.textContent = activeModel ?? "—";
+        }
+        if (modelSelect && activeModel && modelSelect.value !== activeModel) {
+          modelSelect.value = activeModel;
+        }
+      }
+
+      async function loadTrackerConfig() {
+        try {
+          const response = await fetch(`${backendOrigin}/api/config/tracker`);
+          const config = await readResponsePayload(response);
+          if (!response.ok) {
+            throw new Error(readErrorMessage(config, "Не удалось загрузить конфигурацию"));
+          }
+          
+          trackerConfig = config;
+          uploadIntervalMs = 1000 / (config.capture_fps || 2.5);
+          
+          if (captureIntervalEl) {
+            captureIntervalEl.textContent = `${Math.round(uploadIntervalMs)} мс (${config.capture_fps || 2.5} FPS)`;
+          }
+
+          // Обновить поля формы
+          const fpsInput = document.getElementById("config-fps");
+          const iouInput = document.getElementById("config-iou");
+          const maxAgeInput = document.getElementById("config-max-age");
+          const minHitsInput = document.getElementById("config-min-hits");
+          
+          if (fpsInput) fpsInput.value = config.capture_fps || 2.5;
+          if (iouInput) iouInput.value = config.iou_threshold || 0.3;
+          if (maxAgeInput) maxAgeInput.value = config.max_age || 5;
+          if (minHitsInput) minHitsInput.value = config.min_hits || 1;
+
+          return config;
+        } catch (error) {
+          console.error("Не удалось загрузить конфигурацию трекера", error);
+          errorMessageEl.textContent = error instanceof Error ? error.message : "Не удалось загрузить конфигурацию";
+          return null;
+        }
+      }
+
+      async function saveTrackerConfig() {
+        const fpsInput = document.getElementById("config-fps");
+        const iouInput = document.getElementById("config-iou");
+        const maxAgeInput = document.getElementById("config-max-age");
+        const minHitsInput = document.getElementById("config-min-hits");
+
+        const updates = {
+          capture_fps: fpsInput ? Number(fpsInput.value) : trackerConfig.capture_fps,
+          iou_threshold: iouInput ? Number(iouInput.value) : trackerConfig.iou_threshold,
+          max_age: maxAgeInput ? Number(maxAgeInput.value) : trackerConfig.max_age,
+          min_hits: minHitsInput ? Number(minHitsInput.value) : trackerConfig.min_hits
+        };
+
+        try {
+          const response = await fetch(`${backendOrigin}/api/config/tracker`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(updates)
+          });
+
+          const payload = await readResponsePayload(response);
+          if (!response.ok) {
+            throw new Error(readErrorMessage(payload, "Не удалось сохранить конфигурацию"));
+          }
+
+          trackerConfig = { ...trackerConfig, ...payload };
+          uploadIntervalMs = 1000 / (trackerConfig.capture_fps || 2.5);
+          
+          if (captureIntervalEl) {
+            captureIntervalEl.textContent = `${Math.round(uploadIntervalMs)} мс (${trackerConfig.capture_fps || 2.5} FPS)`;
+          }
+
+          errorMessageEl.textContent = "";
+          alert("Конфигурация сохранена");
+        } catch (error) {
+          console.error("Ошибка сохранения конфигурации", error);
+          errorMessageEl.textContent = error instanceof Error ? error.message : "Не удалось сохранить конфигурацию";
+        }
+      }
+
+      function ensureDetectionRow(trackId, labelName) {
+        const container = document.getElementById('detections-list-container');
+        let row = detectionItemElements.get(trackId);
+        if (row) return row;
+
+        const color = getColorForLabel(labelName);
+        row = document.createElement('div');
+        row.className = 'detection-item';
+        row.dataset.trackId = String(trackId);
+        row.style.borderLeftColor = color;
+
+        const header = document.createElement('div');
+        header.className = 'detection-item-header';
+        const trackSpan = document.createElement('span');
+        trackSpan.className = 'detection-item-track';
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'detection-item-label';
+        header.append(trackSpan, labelSpan);
+
+        const details = document.createElement('div');
+        details.className = 'detection-item-details';
+        const confSpan = document.createElement('span');
+        const colorSpan = document.createElement('span');
+        details.append(confSpan, colorSpan);
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'detection-item-name-input';
+        input.placeholder = 'Имя объекта (не сохраняется)';
+        input.dataset.trackId = String(trackId);
+
+        row.append(header, details, input);
+        container.appendChild(row);
+
+        row.addEventListener('click', (e) => {
+          if (e.target.classList.contains('detection-item-name-input')) return;
+          const id = parseInt(row.dataset.trackId);
+          selectedTrackId = selectedTrackId === id ? null : id;
+          document.querySelectorAll('#detections-list-container .detection-item').forEach(el => {
+            el.classList.toggle('selected', el === row && selectedTrackId === id);
+          });
+          updateDetectionsDisplay();
+        });
+
+        input.addEventListener('focus', () => { isEditingNames = true; });
+        input.addEventListener('blur', () => { isEditingNames = false; });
+        input.addEventListener('change', (e) => {
+          const id = parseInt(e.target.dataset.trackId);
+          const name = e.target.value.trim();
+          if (name) detectionNames.set(id, name); else detectionNames.delete(id);
+          updateDetectionsDisplay();
+        });
+        input.addEventListener('click', (e) => e.stopPropagation());
+
+        detectionItemElements.set(trackId, row);
+        return row;
+      }
+
+      function syncDetectionsList(detections = []) {
+        const container = document.getElementById('detections-list-container');
+        if (!container) return;
+        if (isEditingNames) return;
+
+        // Remove rows that are not present anymore
+        const currentIds = new Set(detections.map(d => (Number.isFinite(d.trackId) ? d.trackId : d.id)).filter(Boolean));
+        for (const [id, el] of detectionItemElements.entries()) {
+          if (!currentIds.has(id)) {
+            el.remove();
+            detectionItemElements.delete(id);
+          }
+        }
+
+        if (detections.length === 0) {
+          if (!container.querySelector('.empty-msg')) {
+            const p = document.createElement('p');
+            p.className = 'empty-msg';
+            p.style.color = '#93a4d2';
+            p.style.textAlign = 'center';
+            p.style.padding = '16px';
+            p.textContent = 'Нет активных детекций';
+            container.innerHTML = '';
+            container.appendChild(p);
+          }
+          return;
+        }
+        const empty = container.querySelector('.empty-msg');
+        if (empty) empty.remove();
+
+        // Sort detections by trackId for stable order
+        const sorted = detections.slice().sort((a, b) => {
+          const A = Number.isFinite(a.trackId) ? a.trackId : 0;
+          const B = Number.isFinite(b.trackId) ? b.trackId : 0;
+          return A - B;
+        });
+
+        // Update or create rows
+        sorted.forEach(det => {
+          const trackId = Number.isFinite(det.trackId) ? det.trackId : det.id;
+          const labelName = typeof det.label === 'string' && det.label.length ? det.label : 'object';
+          const row = ensureDetectionRow(trackId, labelName);
+
+          row.classList.toggle('selected', selectedTrackId === trackId);
+          row.style.borderLeftColor = getColorForLabel(labelName);
+          const [header, details, input] = row.children;
+          const [trackSpan, labelSpan] = header.children;
+          const [confSpan, colorSpan] = details.children;
+          trackSpan.textContent = `#${trackId}`;
+          labelSpan.textContent = labelName;
+          const confidence = Math.max(0, Math.min(100, Math.round((Number(det.confidence ?? 0) || 0) * 1000) / 10));
+          confSpan.textContent = `Уверенность: ${confidence.toFixed(1)}%`;
+          const col = getColorForLabel(labelName);
+          colorSpan.innerHTML = `Цвет: <span style="color: ${col}">${col}</span>`;
+          if (!isEditingNames && document.activeElement !== input) {
+            input.value = detectionNames.get(trackId) || '';
+          }
+        });
+      }
+
+      let lastDetections = [];
+
+      async function updateDetectionsStatus() {
+        try {
+          const response = await fetch(`${backendOrigin}/api/detections/status`);
+          const payload = await readResponsePayload(response);
+          if (!response.ok) {
+            return;
+          }
+
+          const detections = Array.isArray(payload.detections) ? payload.detections : [];
+          const listDetections = Array.isArray(payload.stableDetections) ? payload.stableDetections : detections;
+          const nextTrackIds = listDetections.map(d => (Number.isFinite(d.trackId) ? d.trackId : d.id)).filter(Boolean);
+          
+          if (JSON.stringify(nextTrackIds) !== JSON.stringify(previousTrackIds)) {
+            lastDetections = listDetections;
+            previousTrackIds = nextTrackIds;
+            if (!isEditingNames) syncDetectionsList(listDetections);
+          }
+
+          // Использовать детекции для обновления отрисовки, если они есть
+          if (detections.length > 0) {
+            drawDetections(detections);
+          }
+        } catch (error) {
+          console.error("Ошибка обновления статуса детекций", error);
+        }
+      }
+
+      function updateDetectionsDisplay() {
+        // Обновить отрисовку с последними детекциями
+        if (lastDetections.length > 0) {
+          drawDetections(lastDetections);
+        }
+      }
+
+      async function loadModels() {
+        if (!modelSelect) {
+          return;
+        }
+        try {
+          modelSelect.disabled = true;
+          const response = await fetch(`${backendOrigin}/api/detections/models`);
+          const payload = await readResponsePayload(response);
+          if (!response.ok) {
+            throw new Error(readErrorMessage(payload, "Не удалось получить список моделей"));
+          }
+
+          const models = Array.isArray(payload.models) ? payload.models : [];
+          const nextActive = typeof payload.active === "string" ? payload.active : null;
+          renderModelOptions(models, nextActive ?? activeModel);
+          updateActiveModel(nextActive ?? activeModel);
+        } catch (error) {
+          console.error("Не удалось загрузить список моделей", error);
+          errorMessageEl.textContent = error instanceof Error ? error.message : "Не удалось получить список моделей";
+          renderModelOptions([], activeModel);
+        } finally {
+          if (modelSelect && availableModels.length && !isSwitchingModel) {
+            modelSelect.disabled = false;
+          }
+        }
+      }
+
+      async function switchModel(modelName) {
+        if (!modelSelect || !modelName || modelName === activeModel || isSwitchingModel) {
+          if (modelSelect && activeModel) {
+            modelSelect.value = activeModel;
+          }
+          return;
+        }
+
+        isSwitchingModel = true;
+        modelSelect.disabled = true;
+        try {
+          const response = await fetch(`${backendOrigin}/api/detections/models`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: modelName })
+          });
+          const payload = await readResponsePayload(response);
+          if (!response.ok) {
+            throw new Error(readErrorMessage(payload, "Не удалось переключить модель"));
+          }
+
+          const models = Array.isArray(payload.models) ? payload.models : availableModels;
+          const nextActive = typeof payload.active === "string" ? payload.active : modelName;
+          renderModelOptions(models, nextActive);
+          updateActiveModel(nextActive);
+          errorMessageEl.textContent = "";
+        } catch (error) {
+          console.error("Ошибка переключения модели", error);
+          errorMessageEl.textContent = error instanceof Error ? error.message : "Не удалось переключить модель";
+        } finally {
+          isSwitchingModel = false;
+          if (modelSelect) {
+            modelSelect.disabled = availableModels.length === 0;
+            if (activeModel) {
+              modelSelect.value = activeModel;
+            }
+          }
+        }
+      }
+
+      if (modelSelect) {
+        modelSelect.addEventListener("change", (event) => {
+          const value = event.target.value;
+          if (!value) {
+            return;
+          }
+          switchModel(value);
+        });
+      }
+
+      // Tabs logic
+      function selectTab(name) {
+        document.querySelectorAll('.tab-button').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.tab === name);
+        });
+        document.querySelectorAll('.tab-panel').forEach(panel => {
+          panel.classList.toggle('active', panel.id === `tab-${name}`);
+        });
+      }
+
+      document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.addEventListener('click', () => selectTab(btn.dataset.tab));
+      });
+
+      selectTab('status');
+
+      function hexToRgba(hex, alpha = 1) {
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      }
+
+      function getColorForLabel(label) {
+        const normalizedLabel = (label || "object").toLowerCase();
+        return trackerConfig.colors[normalizedLabel] || trackerConfig.colors.object || "#40ffbc";
+      }
+
+      function drawDetections(detections = []) {
+        clearOverlay();
+        if (!detections.length) {
+          return;
+        }
+
+        overlayCtx.font = "16px 'Segoe UI', sans-serif";
+        overlayCtx.fillStyle = "rgba(10, 17, 31, 0.8)";
+        overlayCtx.textBaseline = "top";
+
+        detections.forEach((det) => {
+          if (!Array.isArray(det.bbox)) {
+            return;
+          }
+          const [x1, y1, x2, y2] = det.bbox.map(Number);
+          const width = x2 - x1;
+          const height = y2 - y1;
+
+          const labelName = typeof det.label === "string" && det.label.length ? det.label : "object";
+          const trackId = typeof det.trackId === "number" && Number.isFinite(det.trackId)
+            ? det.trackId
+            : (det.id ?? "?");
+          
+          const isSelected = selectedTrackId === trackId;
+          const color = getColorForLabel(labelName);
+          const strokeColor = hexToRgba(color, 0.9);
+          const lineWidth = isSelected ? 5 : 3;
+
+          overlayCtx.strokeStyle = strokeColor;
+          overlayCtx.lineWidth = lineWidth;
+          overlayCtx.strokeRect(x1, y1, width, height);
+
+          const customName = detectionNames.get(trackId);
+          const displayName = customName || labelName;
+          const confidencePercent = Math.max(0, Math.min(100, Math.round((Number(det.confidence ?? 0) || 0) * 1000) / 10));
+          const label = `${displayName} #${trackId} ${confidencePercent.toFixed(1)}%`;
+          const textWidth = overlayCtx.measureText(label).width + 12;
+          const textHeight = 24;
+          const textX = Math.max(0, Math.min(x1, overlayEl.width - textWidth));
+          const textY = Math.max(0, y1 - textHeight - 4);
+
+          overlayCtx.fillRect(textX, textY, textWidth, textHeight);
+          overlayCtx.fillStyle = strokeColor;
+          overlayCtx.fillText(label, textX + 6, textY + 4);
+          overlayCtx.fillStyle = "rgba(10, 17, 31, 0.8)";
+        });
+      }
+
+      async function captureAndUploadFrame() {
+        if (isUploading || isSwitchingModel) {
+          scheduleNextUpload(100);
+          return;
+        }
+
+        if (videoEl.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+          scheduleNextUpload(200);
+          return;
+        }
+
+        isUploading = true;
+        errorMessageEl.textContent = "";
+
+        try {
+          captureCtx.drawImage(videoEl, 0, 0, captureCanvas.width, captureCanvas.height);
+          const dataUrl = captureCanvas.toDataURL("image/jpeg", 0.85);
+          const base64Data = dataUrl.split(",")[1];
+
+          const response = await fetch(`${backendOrigin}/api/detections/run`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image: base64Data })
+          });
+
+          const payload = await readResponsePayload(response);
+
+          if (!response.ok) {
+            throw new Error(readErrorMessage(payload));
+          }
+
+          const result = typeof payload === "string" ? {} : payload;
+
+          const detected = Boolean(result.detected);
+          const detections = Array.isArray(result.detections) ? result.detections : [];
+          const confidence = Number(result.confidence ?? 0);
+
+          updateStatus(detected ? "Обнаружены объекты" : "Объекты не обнаружены", detected ? "detected" : "idle");
+          detectionCountEl.textContent = detections.length.toString();
+          detectionConfidenceEl.textContent = confidence > 0 ? confidence.toFixed(3) : "0.000";
+          lastUpdateEl.textContent = new Date().toLocaleTimeString();
+
+          if (lastDetectionLabelEl) {
+            if (detections.length) {
+              const bestDetection = detections.reduce((best, current) => (
+                Number(current?.confidence ?? 0) > Number(best?.confidence ?? 0) ? current : best
+              ), detections[0]);
+              const labelName = typeof bestDetection.label === "string" && bestDetection.label.length
+                ? bestDetection.label
+                : "object";
+              const trackId = typeof bestDetection.trackId === "number" && Number.isFinite(bestDetection.trackId)
+                ? bestDetection.trackId
+                : (bestDetection.id ?? "?");
+              lastDetectionLabelEl.textContent = `${labelName} #${trackId}`;
+            } else {
+              lastDetectionLabelEl.textContent = "—";
+            }
+          }
+
+          if (typeof result.model === "string" && result.model.length) {
+            if (!availableModels.includes(result.model)) {
+              renderModelOptions([...availableModels, result.model], result.model);
+            }
+            updateActiveModel(result.model);
+          }
+
+          drawDetections(detections);
+
+          // Список обновляется через status-пул, чтобы избежать лишних перерисовок
+        } catch (error) {
+          console.error("Ошибка при отправке кадра", error);
+          updateStatus("Ошибка обмена", "error");
+          errorMessageEl.textContent = error instanceof Error ? error.message : "Неизвестная ошибка";
+          if (lastDetectionLabelEl) {
+            lastDetectionLabelEl.textContent = "—";
+          }
+          clearOverlay();
+        } finally {
+          isUploading = false;
+          scheduleNextUpload(uploadIntervalMs);
+        }
+      }
+
+      async function startWebcam() {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          updateStatus("Браузер не поддерживает getUserMedia", "error");
+          errorMessageEl.textContent = "Используйте современный браузер (Chrome/Edge/Firefox).";
+          return;
+        }
+
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              facingMode: "environment"
+            },
+            audio: false
+          });
+
+          videoEl.srcObject = stream;
+          updateStatus("Камера подключена");
+
+          videoEl.addEventListener("loadedmetadata", () => {
+            resizeCanvases();
+            scheduleNextUpload(200);
+          });
+
+          window.addEventListener("resize", () => {
+            if (videoEl.videoWidth) {
+              resizeCanvases();
+            }
+          });
+        } catch (error) {
+          console.error("Не удалось получить доступ к веб-камере", error);
+          updateStatus("Нет доступа к камере", "error");
+          errorMessageEl.textContent =
+            error instanceof Error ? error.message : "Браузер отклонил запрос. Разрешите доступ к камере.";
+        }
+      }
+
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) {
+          clearTimeout(uploadTimer);
+          uploadTimer = null;
+          if (statusUpdateInterval) {
+            clearInterval(statusUpdateInterval);
+            statusUpdateInterval = null;
+          }
+        } else {
+          if (!isUploading) {
+            scheduleNextUpload(200);
+          }
+          if (!statusUpdateInterval) {
+            statusUpdateInterval = setInterval(updateDetectionsStatus, 1000);
+          }
+        }
+      });
+
+      // Инициализация конфигурации и UI
+      loadTrackerConfig().then(() => {
+        const saveBtn = document.getElementById("save-config-btn");
+        if (saveBtn) {
+          saveBtn.addEventListener("click", saveTrackerConfig);
+        }
+      });
+
+      // Запуск обновления статуса детекций
+      statusUpdateInterval = setInterval(updateDetectionsStatus, 1000);
+
+      loadModels();
+      startWebcam();
+    -->
   </body>
   </html>
 

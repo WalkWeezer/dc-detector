@@ -1,37 +1,17 @@
 import express from 'express'
 import { Readable } from 'node:stream'
-import { query } from '../db.js'
 import { config } from '../config.js'
+import { listDetections, upsertDetections } from '../storage/detectionsStore.js'
 
 export const detectionsRouter = express.Router()
 export const internalDetectionsRouter = express.Router()
 
 detectionsRouter.get('/', async (req, res, next) => {
   try {
-    const { from, to, limit = '100' } = req.query
-    const conditions = []
-    const values = []
-
-    if (from) {
-      values.push(new Date(from))
-      conditions.push(`created_at >= $${values.length}`)
-    }
-    if (to) {
-      values.push(new Date(to))
-      conditions.push(`created_at <= $${values.length}`)
-    }
-
-    const sql = `
-      SELECT id, detected, confidence, payload, captured_at, created_at
-      FROM detections
-      ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}
-      ORDER BY created_at DESC
-      LIMIT $${values.length + 1}
-    `
-
-    values.push(Math.min(Number(limit) || 100, 500))
-    const { rows } = await query(sql, values)
-    res.json(rows)
+    const { date } = req.query
+    const normalizedDate = typeof date === 'string' && date.trim() ? date.trim() : undefined
+    const result = await listDetections(normalizedDate)
+    res.json(result)
   } catch (err) {
     next(err)
   }
@@ -49,6 +29,47 @@ detectionsRouter.get('/status', async (_req, res) => {
     }
     const body = await response.json()
     res.json(body)
+  } catch (err) {
+    res.status(502).json({ error: 'Detection service unreachable', details: err.message })
+  } finally {
+    clearTimeout(timeout)
+  }
+})
+
+detectionsRouter.get('/models', async (_req, res) => {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 2000)
+  try {
+    const response = await fetch(`${config.detectionServiceUrl}/models`, {
+      signal: controller.signal
+    })
+    const body = await response.json()
+    if (!response.ok) {
+      return res.status(response.status).json(body)
+    }
+    res.json(body)
+  } catch (err) {
+    res.status(502).json({ error: 'Detection service unreachable', details: err.message })
+  } finally {
+    clearTimeout(timeout)
+  }
+})
+
+detectionsRouter.post('/models', async (req, res) => {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 5000)
+  try {
+    const response = await fetch(`${config.detectionServiceUrl}/models`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body ?? {}),
+      signal: controller.signal
+    })
+    const result = await response.json()
+    if (!response.ok) {
+      return res.status(response.status).json(result)
+    }
+    res.json(result)
   } catch (err) {
     res.status(502).json({ error: 'Detection service unreachable', details: err.message })
   } finally {
@@ -118,16 +139,18 @@ detectionsRouter.post('/run', async (req, res) => {
 
 internalDetectionsRouter.post('/', async (req, res, next) => {
   try {
-    const { detected, confidence, detections, capturedAt } = req.body ?? {}
-    const payload = detections ?? []
-    const capturedDate = capturedAt ? new Date(Number(capturedAt) * 1000) : null
-    const { rows } = await query(
-      `INSERT INTO detections (detected, confidence, payload, captured_at)
-       VALUES ($1, $2, $3::jsonb, $4)
-       RETURNING id` ,
-      [Boolean(detected), Number(confidence ?? 0), JSON.stringify(payload), capturedDate]
-    )
-    res.status(201).json({ id: rows[0].id })
+    const { detections, capturedAt, cameraIndex, model } = req.body ?? {}
+    if (!Array.isArray(detections) || detections.length === 0) {
+      return res.status(400).json({ error: 'detections array is required' })
+    }
+
+    const result = await upsertDetections(detections, {
+      capturedAt: Number(capturedAt) || Date.now() / 1000,
+      cameraIndex: typeof cameraIndex === 'number' ? cameraIndex : null,
+      model: typeof model === 'string' ? model : null
+    })
+
+    res.status(201).json({ date: result?.date, count: result?.detections?.length ?? 0 })
   } catch (err) {
     next(err)
   }

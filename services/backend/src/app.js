@@ -4,6 +4,7 @@ import morgan from 'morgan'
 import { config } from './config.js'
 import { detectionsRouter } from './routes/detections.js'
 import { internalRouter } from './routes/internal.js'
+import { configRouter } from './routes/config.js'
 
 export function createApp() {
   const app = express()
@@ -16,6 +17,7 @@ export function createApp() {
   })
 
   app.use('/api/detections', detectionsRouter)
+  app.use('/api/config', configRouter)
   app.use('/internal', internalRouter)
 
   // eslint-disable-next-line no-unused-vars
