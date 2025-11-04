@@ -17,7 +17,6 @@ FROM nginx:alpine
 COPY --from=build /app/dist/ /usr/share/nginx/html/
 # Nginx config and dev certs (for https access to enable getUserMedia on IP)
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
-COPY docker/certs/ /etc/nginx/certs/
 RUN apk add --no-cache openssl \
   && if [ ! -f /etc/nginx/certs/dev.key ] || [ ! -f /etc/nginx/certs/dev.crt ]; then \
        mkdir -p /etc/nginx/certs \
