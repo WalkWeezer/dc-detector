@@ -1,0 +1,27 @@
+services:
+  frontend-build:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - frontend_dist:/dist
+    command: >-
+      sh -c "\
+      if [ -f package-lock.json ]; then \
+        npm ci --prefer-offline --no-audit --no-fund; \
+      else \
+        npm install --no-audit --no-fund; \
+      fi \
+      && npm run build \
+      && rm -rf /dist/* \
+      && cp -r dist/* /dist/"
+
+  frontend:
+    depends_on:
+      frontend-build:
+        condition: service_completed_successfully
+    volumes:
+      - frontend_dist:/usr/share/nginx/html:ro
+
+volumes:
+  frontend_dist: {}
