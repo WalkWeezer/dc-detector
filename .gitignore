@@ -47,4 +47,7 @@ frontend/dist/
 data/
 
 # Cursor/Editor
+.env
+*.local
+r.plan.md
 .cursor/
