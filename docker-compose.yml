@@ -1,5 +1,6 @@
 services:
   backend:
+    env_file: .env
     build:
       context: .
       dockerfile: docker/backend.Dockerfile
@@ -16,6 +17,7 @@ services:
     networks: [app]
 
   detection:
+    env_file: .env
     build:
       context: .
       dockerfile: docker/detection.Dockerfile
