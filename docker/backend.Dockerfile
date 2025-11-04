@@ -1,9 +1,17 @@
 FROM node:20-bullseye-slim
 WORKDIR /app
 
+# Устанавливаем инструменты сборки для нативных модулей (sharp) на ARM
+RUN apt-get update && apt-get install -y \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
 # Копируем только package.json, чтобы не тянуть старый lock с нативными зависимостями (например, canvas)
 COPY services/backend/package.json ./
 # Устанавливаем без dev и optional зависимостей (избегаем сборки нативных модулей на Pi)
+ENV SHARP_IGNORE_GLOBAL_LIBVIPS=1
 RUN npm install --omit=dev --omit=optional --no-audit --no-fund && npm cache clean --force
 
 COPY services/backend ./
