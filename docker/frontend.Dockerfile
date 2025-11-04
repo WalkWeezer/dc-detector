@@ -12,6 +12,11 @@ RUN if [ -f package-lock.json ]; then \
 # Копируем исходники и собираем
 COPY frontend ./
 RUN npm run build
+# Ensure legacy plain files are present in dist if Vite didn't bundle them
+RUN mkdir -p dist \
+  && [ -f app.js ] && [ ! -f dist/app.js ] && cp -f app.js dist/app.js || true \
+  && [ -f styles.css ] && [ ! -f dist/styles.css ] && cp -f styles.css dist/styles.css || true \
+  && [ -f index.html ] && [ ! -f dist/index.html ] && cp -f index.html dist/index.html || true
 
 FROM nginx:alpine
 COPY --from=build /app/dist/ /usr/share/nginx/html/
