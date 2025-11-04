@@ -4,12 +4,10 @@
 - Windows dev — Vite hot‑reload, удобная разработка
 - Raspberry Pi — собранный фронт под nginx, рабочий режим
 
-Скрипты `start.*` больше не используются.
-
 ## 1. Подготовка окружения
 
 1. Установите Docker Desktop (Windows/macOS) или Docker Engine + Compose v2 (Linux).
-2. Создайте файл `.env` в корне проекта (пример — в `README.md`).
+2. (Опционально) скопируйте `env.example` в `.env` и измените при необходимости.
 3. Поместите модель YOLO в `services/detection/models/bestfire.pt`.
 
 ## 2. Windows dev (горячая перезагрузка фронтенда)

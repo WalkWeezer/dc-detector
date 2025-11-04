@@ -15,7 +15,6 @@ ENV SHARP_IGNORE_GLOBAL_LIBVIPS=1
 RUN npm install --omit=dev --include=optional --no-audit --no-fund && npm cache clean --force
 
 COPY services/backend ./
-COPY infra/db/migrations ./infra/db/migrations
 
 ENV NODE_ENV=production
 EXPOSE 8080

@@ -16,8 +16,9 @@
 │   ├── backend.Dockerfile
 │   ├── detection.Dockerfile
 │   └── frontend.Dockerfile
-├── docker-compose.yml            # dev/локальный запуск
-├── docker-compose.prod.yml       # override для Raspberry Pi
+├── docker-compose.yml            # базовый compose
+├── docker-compose.dev.yml        # Windows dev (Vite hot-reload)
+├── docker-compose.pi.yml         # Raspberry Pi (прод-сборка фронта)
 ├── services/
 │   ├── backend/
 │   │   ├── src/
@@ -29,8 +30,7 @@
 ├── frontend/
 ├── data/
 │   └── detections/               # JSON-файлы с результатами детекции (по датам)
-├── infra/
-│   └── db/migrations/            # legacy SQL миграции (не используются)
+├── infra/                        # legacy, удалено
 └── archive/                      # legacy код (к удалению после миграции)
 ```
 
@@ -42,7 +42,7 @@
 
 ## 🚀 Быстрый старт (dev, Windows/macOS/Linux)
 
-1. Создайте `.env` в корне проекта (пример ниже) и при необходимости измените параметры подключения.
+1. (Опционально) скопируйте `env.example` в `.env` и при необходимости измените параметры.
 
 2. Поместите модель в `services/detection/models/bestfire.pt` (или используйте bind-монтирование по умолчанию).
 
@@ -56,7 +56,7 @@
    - Backend API: <http://localhost:8080>
    - Detection health: <http://localhost:8001/health>
 
-Пример `.env`:
+Пример `.env` (или см. `env.example`):
 ```dotenv
 PORT=8080
 DETECTION_URL=http://detection:8001
@@ -120,15 +120,14 @@ BACKEND_NOTIFY_URL=http://backend:8080/internal/detections
    # то же для frontend и detection
    ```
 
-2. На Raspberry Pi создайте `.env` с параметрами продакшена (секреты, RTSP URL).
+2. На Raspberry Pi создайте `.env` при необходимости (секреты, RTSP URL).
 
 3. Запустите:
    ```bash
-   docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
-   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+   docker compose -f docker-compose.yml -f docker-compose.pi.yml up -d --build
    ```
 
-`docker-compose.prod.yml` добавляет `shm_size`, tmpfs и ограничения ресурсов для `detection`, а также проброс видеоустройства. По умолчанию пробрасывается `/dev/video0`. Чтобы выбрать конкретную камеру:
+`docker-compose.pi.yml` включает сборку фронта и настройки `detection` (shm/tmpfs/лимиты) и проброс видеоустройства. По умолчанию пробрасывается `/dev/video0`. Чтобы выбрать конкретную камеру:
 
 - В `.env` на Raspberry Pi задайте:
   ```dotenv
@@ -145,7 +144,7 @@ BACKEND_NOTIFY_URL=http://backend:8080/internal/detections
 
 ## 🧑‍💻 Разработка с hot-reload
 
-В репозитории есть `docker-compose.override.yml` (dev-override). Он автоматически подхватывается `docker compose` и включает горячую перезагрузку кода.
+Для разработки используйте `docker-compose.dev.yml` (Vite HMR) поверх базового файла:
 
 - Backend (Node 20): запускается как `node --watch src/server.js`, каталог `services/backend/src` примонтирован внутрь контейнера. Любые правки `.js` применяются сразу.
 - Detection (Python/Flask): переменные `DEBUG=1` и `WATCHDOG_FORCE_POLLING=1` включены, файл `services/detection/detection_server.py` примонтирован. Правки применяются автоматически.
@@ -154,7 +153,7 @@ BACKEND_NOTIFY_URL=http://backend:8080/internal/detections
 Опционально: полноценный Vite HMR
 
 ```bash
-docker compose --profile dev up -d   # поднимет frontend-dev на http://localhost:5173
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d   # frontend-dev на http://localhost:5173
 ```
 
 Фронтенд особенности
