@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { config } from '../config.js'
 import JPEG from 'jpeg-js'
 import sharp from 'sharp'
-import GIFEncoder from 'gifencoder'
+import GIFEncoder from 'gif-encoder-2'
 import { ensureColorsForLabels } from '../config/trackerConfig.js'
 
 const baseDir = config.detectionsDataDir
