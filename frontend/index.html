@@ -16,7 +16,7 @@
       .tab-panel{position:absolute;inset:0;display:none;overflow:auto}
       .tab-panel.active{display:block}
     </style>
-    <!--
+    <style>
       :root {
         color-scheme: dark;
       }
@@ -188,10 +188,12 @@
         display: flex;
         gap: 8px;
         margin-bottom: 12px;
+        flex-wrap: wrap;
       }
 
       .tab-button {
-        flex: 1 1 0;
+        flex: 1 1 180px;
+        min-width: 120px;
         background: rgba(23, 33, 54, 0.8);
         border: 1px solid rgba(114, 139, 191, 0.35);
         color: #e5edff;
@@ -348,8 +350,14 @@
         .layout {
           grid-template-columns: 1.6fr 1fr;
         }
+        .tab-button {
+          flex: 1 1 140px;
+          min-width: 100px;
+          padding: 6px 8px;
+          font-size: 0.95rem;
+        }
       }
-    -->
+    </style>
   </head>
   <body>
     <main>
@@ -455,7 +463,7 @@
     </main>
 
     <script src="./app.js"></script>
-    <!--
+    <script>
       const videoEl = document.getElementById("webcam");
       const overlayEl = document.getElementById("overlay");
       const overlayCtx = overlayEl.getContext("2d");
@@ -1132,7 +1140,7 @@
 
       loadModels();
       startWebcam();
-    -->
+    </script>
   </body>
   </html>
 

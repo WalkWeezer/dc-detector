@@ -1,21 +1,13 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 
-# Копируем манифесты (не ставим зависимости, чтобы не тянуть тяжёлые нативные модули на arm)
+# Устанавливаем только то, что нужно для сборки, затем собираем Vite
 COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci --prefer-offline --no-audit --no-fund
 
-# Исходники фронтенда
+# Копируем исходники и собираем
 COPY frontend ./
-
-# Пытаемся собрать Vite/сборку; если dist не появился, формируем минимальный dist из статических файлов
-# Зависимости не устанавливаем намеренно — если их нет, сборка упадёт и сработает fallback ниже
-RUN (npm run build 2>/dev/null || true) \
-  && if [ ! -d dist ]; then \
-       mkdir -p dist; \
-       [ -f index.html ] && cp -f index.html dist/index.html || true; \
-       [ -f app.js ] && cp -f app.js dist/app.js || true; \
-       [ -f styles.css ] && cp -f styles.css dist/styles.css || true; \
-     fi
+RUN npm run build
 
 FROM nginx:alpine
 COPY --from=build /app/dist/ /usr/share/nginx/html/

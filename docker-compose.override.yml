@@ -30,9 +30,23 @@ services:
       - backend
     profiles: ["dev"]
 
-  # Simple static live-reload via nginx serving mounted files
-  frontend:
+  # Build latest frontend at 'docker compose up' time and serve via nginx
+  frontend-build:
+    image: node:20-alpine
+    working_dir: /app
     volumes:
-      - ./frontend:/usr/share/nginx/html:ro
+      - ./frontend:/app
+      - frontend_dist:/dist
+    command: sh -c "npm ci --prefer-offline --no-audit --no-fund && npm run build && rm -rf /dist/* && cp -r dist/* /dist/"
+
+  frontend:
+    depends_on:
+      frontend-build:
+        condition: service_completed_successfully
+    volumes:
+      - frontend_dist:/usr/share/nginx/html:ro
+
+volumes:
+  frontend_dist: {}
 
 

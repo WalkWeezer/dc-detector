@@ -10,9 +10,9 @@ RUN apt-get update && apt-get install -y \
 
 # Копируем только package.json, чтобы не тянуть старый lock с нативными зависимостями (например, canvas)
 COPY services/backend/package.json ./
-# Устанавливаем без dev и optional зависимостей (избегаем сборки нативных модулей на Pi)
+# Разрешаем sharp подтянуть платформенный бинарник (@img/sharp-*)
 ENV SHARP_IGNORE_GLOBAL_LIBVIPS=1
-RUN npm install --omit=dev --omit=optional --no-audit --no-fund && npm cache clean --force
+RUN npm install --omit=dev --include=optional --no-audit --no-fund && npm cache clean --force
 
 COPY services/backend ./
 COPY infra/db/migrations ./infra/db/migrations
