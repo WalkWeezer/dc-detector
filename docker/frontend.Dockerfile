@@ -3,7 +3,11 @@ WORKDIR /app
 
 # Устанавливаем только то, что нужно для сборки, затем собираем Vite
 COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm ci --prefer-offline --no-audit --no-fund
+RUN if [ -f package-lock.json ]; then \
+      npm ci --prefer-offline --no-audit --no-fund; \
+    else \
+      npm install --no-audit --no-fund; \
+    fi
 
 # Копируем исходники и собираем
 COPY frontend ./

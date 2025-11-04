@@ -37,7 +37,16 @@ services:
     volumes:
       - ./frontend:/app
       - frontend_dist:/dist
-    command: sh -c "npm ci --prefer-offline --no-audit --no-fund && npm run build && rm -rf /dist/* && cp -r dist/* /dist/"
+    command: >-
+      sh -c "\
+      if [ -f package-lock.json ]; then \
+        npm ci --prefer-offline --no-audit --no-fund; \
+      else \
+        npm install --no-audit --no-fund; \
+      fi \
+      && npm run build \
+      && rm -rf /dist/* \
+      && cp -r dist/* /dist/"
 
   frontend:
     depends_on:
