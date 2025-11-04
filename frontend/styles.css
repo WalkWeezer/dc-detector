@@ -33,6 +33,33 @@ h1 {
   font-size: clamp(1.6rem, 2.2vw, 2.3rem);
 }
 
+.screen-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 16px;
+}
+.screen-button {
+  background: rgba(23, 33, 54, 0.8);
+  border: 1px solid rgba(114, 139, 191, 0.35);
+  color: #e5edff;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.screen-button.active {
+  background: rgba(33, 45, 72, 0.9);
+  border-color: rgba(114, 139, 191, 0.6);
+}
+.screen.hidden { display: none; }
+
+.saved-screen-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
 p.subtitle {
   margin: 0 0 24px;
   color: #93a4d2;

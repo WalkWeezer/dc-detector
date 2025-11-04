@@ -10,7 +10,15 @@
     <main>
       <h1>DC-Detector — поток с веб-камеры</h1>
 
-      <div class="layout">
+      <!-- Экранный переключатель: Поток | Сохранённые -->
+      <div class="screen-tabs">
+        <button class="screen-button active" data-screen="stream">Поток</button>
+        <button class="screen-button" data-screen="saved">Сохранённые</button>
+      </div>
+
+      <!-- Экран: поток (камеры + боковая панель) -->
+      <div id="screen-stream" class="screen">
+        <div class="layout">
         <div class="preview">
           <video id="webcam" autoplay playsinline muted></video>
           <canvas id="overlay"></canvas>
@@ -118,7 +126,19 @@
             </section>
           </div>
         </aside>
+        </div>
       </div>
+
+      <!-- Экран: сохранённые (полноэкранный список) -->
+      <section id="screen-saved" class="screen hidden">
+        <div class="saved-screen-toolbar">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <input type="date" id="saved-screen-date" />
+            <button id="saved-screen-refresh">Обновить</button>
+          </div>
+        </div>
+        <div id="saved-screen-list" class="saved-grid"></div>
+      </section>
     </main>
 
     <script type="module" src="./app.js"></script>

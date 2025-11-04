@@ -936,6 +936,34 @@
   });
   selectTab('status');
 
+  // ------- Экранный переключатель (Поток/Сохранённые) -------
+  function selectScreen(name) {
+    const stream = document.getElementById('screen-stream');
+    const saved = document.getElementById('screen-saved');
+    const b1 = document.querySelector('.screen-button[data-screen="stream"]');
+    const b2 = document.querySelector('.screen-button[data-screen="saved"]');
+    if (!stream || !saved || !b1 || !b2) return;
+
+    const showStream = name !== 'saved';
+    stream.classList.toggle('hidden', !showStream);
+    saved.classList.toggle('hidden', showStream);
+    b1.classList.toggle('active', showStream);
+    b2.classList.toggle('active', !showStream);
+
+    if (!showStream) {
+      // Подгрузить список сохранённых для полноэкранного режима
+      const dateInput = document.getElementById('saved-screen-date');
+      const value = dateInput && dateInput.value ? dateInput.value : undefined;
+      loadSavedDetections(value, 'saved-screen-list');
+    }
+  }
+
+  document.querySelectorAll('.screen-button').forEach(btn => {
+    btn.addEventListener('click', () => selectScreen(btn.dataset.screen));
+  });
+  // По умолчанию открыт "Поток"
+  selectScreen('stream');
+
   loadTrackerConfig().then(() => {
     const saveBtn = document.getElementById("save-config-btn");
     if (saveBtn) {
@@ -947,7 +975,7 @@
   startWebcam();
 
   // -------- Saved list logic ---------
-  async function loadSavedDetections(dateValue) {
+  async function loadSavedDetections(dateValue, targetId = 'saved-list-container') {
     try {
       const params = new URLSearchParams();
       if (dateValue) params.set('date', dateValue);
@@ -957,15 +985,15 @@
         throw new Error(readErrorMessage(payload, 'Не удалось загрузить сохранённые'));
       }
       const items = Array.isArray(payload.items) ? payload.items : [];
-      renderSavedList(items);
+      renderSavedList(items, targetId);
     } catch (err) {
       console.error('Ошибка загрузки сохранённых', err);
-      renderSavedList([]);
+      renderSavedList([], targetId);
     }
   }
 
-  function renderSavedList(items) {
-    const container = document.getElementById('saved-list-container');
+  function renderSavedList(items, targetId = 'saved-list-container') {
+    const container = document.getElementById(targetId);
     if (!container) return;
     container.innerHTML = '';
     if (!items.length) {
@@ -999,6 +1027,15 @@
       const dateInput = document.getElementById('saved-date');
       const value = dateInput && dateInput.value ? dateInput.value : undefined;
       loadSavedDetections(value);
+    });
+  }
+
+  const refreshSavedScreenBtn = document.getElementById('saved-screen-refresh');
+  if (refreshSavedScreenBtn) {
+    refreshSavedScreenBtn.addEventListener('click', () => {
+      const dateInput = document.getElementById('saved-screen-date');
+      const value = dateInput && dateInput.value ? dateInput.value : undefined;
+      loadSavedDetections(value, 'saved-screen-list');
     });
   }
 })();
