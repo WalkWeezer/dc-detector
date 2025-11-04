@@ -93,6 +93,18 @@
                   <input type="number" id="config-min-hits" min="1" max="100" step="1" title="Минимум попаданий (кадров) для подтверждения трека" />
                 </label>
               </div>
+              <div class="config-group">
+                <label style="gap:12px">
+                  <span>Автосохранение:</span>
+                  <input type="checkbox" id="config-autosave-enabled" />
+                </label>
+              </div>
+              <div class="config-group">
+                <label>
+                  <span>Min confidence (автосохранение):</span>
+                  <input type="number" id="config-autosave-threshold" min="0" max="1" step="0.01" title="Минимальная уверенность для автосохранения (0..1)" />
+                </label>
+              </div>
               <button id="save-config-btn">Сохранить конфигурацию</button>
             </section>
 

@@ -318,6 +318,11 @@ select:disabled {
   font-size: 0.95rem;
 }
 
+.config-group input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+}
+
 .config-group input[type="number"] {
   width: 120px;
   background: rgba(23, 33, 54, 0.9);

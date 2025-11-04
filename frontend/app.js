@@ -46,6 +46,13 @@
   const frameBuffer = [];
   const frameBufferMax = 15; // ~2-3 секунды при 5-7 FPS
 
+  // ---- Автосохранение ----
+  const autosaveEnabledKey = 'autosave_enabled';
+  const autosaveThresholdKey = 'autosave_min_conf';
+  let autoSaveEnabled = localStorage.getItem(autosaveEnabledKey) !== '0';
+  let autoSaveMinConfidence = Number(localStorage.getItem(autosaveThresholdKey) ?? '0.8') || 0.8;
+  const autoSavedTrackIds = new Set(); // чтобы не сохранять один id дважды
+
   function updateStatus(text, state = "idle") {
     statusIndicator.textContent = text;
     statusIndicator.classList.remove("detected", "error");
@@ -183,11 +190,15 @@
       const iouInput = document.getElementById("config-iou");
       const maxAgeInput = document.getElementById("config-max-age");
       const minHitsInput = document.getElementById("config-min-hits");
+      const autosaveEnabledInput = document.getElementById('config-autosave-enabled');
+      const autosaveThresholdInput = document.getElementById('config-autosave-threshold');
 
       if (fpsInput) fpsInput.value = config.capture_fps || 2.5;
       if (iouInput) iouInput.value = config.iou_threshold || 0.3;
       if (maxAgeInput) maxAgeInput.value = config.max_age || 5;
       if (minHitsInput) minHitsInput.value = config.min_hits || 1;
+      if (autosaveEnabledInput) autosaveEnabledInput.checked = !!autoSaveEnabled;
+      if (autosaveThresholdInput) autosaveThresholdInput.value = autoSaveMinConfidence.toFixed(2);
 
       return config;
     } catch (error) {
@@ -202,6 +213,8 @@
     const iouInput = document.getElementById("config-iou");
     const maxAgeInput = document.getElementById("config-max-age");
     const minHitsInput = document.getElementById("config-min-hits");
+    const autosaveEnabledInput = document.getElementById('config-autosave-enabled');
+    const autosaveThresholdInput = document.getElementById('config-autosave-threshold');
 
     const updates = {
       capture_fps: fpsInput ? Number(fpsInput.value) : trackerConfig.capture_fps,
@@ -211,6 +224,18 @@
     };
 
     try {
+      // Сохраняем локальные настройки автосохранения в localStorage
+      if (autosaveEnabledInput) {
+        autoSaveEnabled = !!autosaveEnabledInput.checked;
+        localStorage.setItem(autosaveEnabledKey, autoSaveEnabled ? '1' : '0');
+      }
+      if (autosaveThresholdInput) {
+        const v = Number(autosaveThresholdInput.value);
+        if (Number.isFinite(v) && v >= 0 && v <= 1) {
+          autoSaveMinConfidence = v;
+          localStorage.setItem(autosaveThresholdKey, String(v));
+        }
+      }
       const response = await fetch(`${backendOrigin}/api/config/tracker`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -640,6 +665,19 @@
             ? bestDetection.trackId
             : (bestDetection.id ?? "?");
           lastDetectionLabelEl.textContent = `${labelName} #${trackId}`;
+
+          // ---- Автосохранение по правилу: >= threshold и не более 1 раза на trackId
+          const conf = Number(bestDetection?.confidence ?? 0) || 0;
+          if (autoSaveEnabled && conf >= autoSaveMinConfidence && Number.isFinite(trackId) && !autoSavedTrackIds.has(trackId)) {
+            try {
+              await saveDetection(trackId);
+              autoSavedTrackIds.add(trackId);
+              // Небольшой индикатор в статусе
+              updateStatus(`Автосохранено #${trackId}`, 'detected');
+            } catch (e) {
+              console.warn('Автосохранение не удалось', e);
+            }
+          }
         } else {
           lastDetectionLabelEl.textContent = "—";
         }
