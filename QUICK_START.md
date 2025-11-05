@@ -67,10 +67,37 @@ sudo ./scripts/install-systemd.sh
 
 ### Видеопоток
 
-- Фронтенд автоматически определяет наличие серверной камеры и использует видеопоток с Pi Camera.
+- Главная страница `/` — локальная камера клиента (удобно для разработки)
+- Страница `/pi.html` — поток с камеры Raspberry Pi (серверный MJPEG)
 - Доступ по локальной сети: `http://<IP-raspberry-pi>/` или `https://<IP-raspberry-pi>/`
 - Фронтенд обслуживается nginx на 80/443 (самоподписанный сертификат генерируется в образе).
 - Для доступа к камере на IP используйте HTTPS: https://<IP>/ и примите сертификат. На `localhost` HTTPS не обязателен.
+
+#### Оптимизация FPS на Raspberry Pi
+
+1. Настройте камеру на хосте (V4L2):
+   ```bash
+   sudo modprobe bcm2835-v4l2
+   v4l2-ctl -d /dev/video0 --set-fmt-video=width=640,height=480,pixelformat=MJPG
+   v4l2-ctl -d /dev/video0 --set-parm=15
+   ```
+
+2. Рекомендуемые переменные в `.env`:
+   ```dotenv
+   VIDEO_DEVICE=/dev/video0
+   LOCAL_CAMERA_ENABLED=1
+   CAMERA_BACKEND=V4L2
+   CAMERA_INDEX=0
+   CAMERA_SCAN_LIMIT=1
+   CAPTURE_RETRY_DELAY=0.5
+   STREAM_MAX_FPS=20   # FPS RAW MJPEG потока
+   INFER_FPS=5         # FPS инференса YOLO
+   INFER_IMGSZ=416     # размер входа модели (320/384/416)
+   ```
+
+3. API потоков для интеграции/отладки:
+   - `GET /api/detections/stream` — MJPEG с серверной разметкой
+   - `GET /api/detections/stream-raw` — «чистый» MJPEG без разметки
 
 ### Проверка после деплоя
 
