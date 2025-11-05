@@ -1,0 +1,22 @@
+{
+  "id": "1762281973253-hnvyc6",
+  "date": "2025-11-04",
+  "savedAt": 1762281974.808,
+  "detection": {
+    "trackId": 203,
+    "bbox": [
+      245.1434326171875,
+      537.3775634765625,
+      427.58837890625,
+      720
+    ],
+    "label": "fire",
+    "classId": 0,
+    "confidence": 0.6927136182785034,
+    "cameraIndex": null,
+    "model": "bestfire.pt",
+    "capturedAt": 1762281973
+  },
+  "gifPath": "/files/detections/saved/2025-11-04/1762281973253-hnvyc6.gif",
+  "jsonPath": "/files/detections/saved/2025-11-04/1762281973253-hnvyc6.json"
+}

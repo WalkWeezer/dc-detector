@@ -1,0 +1,11 @@
+{
+  "iou_threshold": 0.5,
+  "max_age": 35,
+  "min_hits": 5,
+  "capture_fps": 24,
+  "colors": {
+    "fire": "#ff0000",
+    "smoke": "#808080",
+    "object": "#40ffbc"
+  }
+}

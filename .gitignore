@@ -44,7 +44,6 @@ node_modules/
 frontend/dist/
 
 # Local data directory (runtime artifacts: gifs, saved detections, tracker dumps)
-data/
 
 # Cursor/Editor
 .env
