@@ -141,6 +141,23 @@
       </section>
     </main>
 
+    <!-- Modal for GIF preview -->
+    <div id="gif-modal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop" id="gif-modal-backdrop"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="gif-modal-title">
+        <button class="modal-close" id="gif-modal-close" aria-label="Закрыть">×</button>
+        <div class="modal-body">
+          <div class="modal-media">
+            <img id="gif-modal-image" alt="GIF" />
+          </div>
+          <div class="modal-meta" id="gif-modal-meta">
+            <h3 id="gif-modal-title">Детали сохранения</h3>
+            <dl id="gif-modal-dl"></dl>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script type="module" src="./app.js"></script>
   </body>
   </html>

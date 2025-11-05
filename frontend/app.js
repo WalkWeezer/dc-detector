@@ -1009,14 +1009,29 @@
     items.forEach(item => {
       const card = document.createElement('div');
       card.className = 'saved-card';
+      const thumb = document.createElement('div');
+      thumb.className = 'saved-thumb';
       const img = document.createElement('img');
-      img.src = item.gifPath || '';
+      img.src = item.gifPath ? `${backendOrigin}${item.gifPath}` : '';
       img.alt = item.id;
       img.loading = 'lazy';
+      img.onerror = function() {
+        console.error('Ошибка загрузки GIF:', this.src);
+      };
+      thumb.appendChild(img);
       const caption = document.createElement('div');
       caption.className = 'saved-caption';
       caption.textContent = item.id;
-      card.append(img, caption);
+      card.append(thumb, caption);
+
+      card.addEventListener('click', () => openGifModal(item));
+      card.tabIndex = 0;
+      card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openGifModal(item);
+        }
+      });
       container.appendChild(card);
     });
   }
@@ -1037,6 +1052,83 @@
       const value = dateInput && dateInput.value ? dateInput.value : undefined;
       loadSavedDetections(value, 'saved-screen-list');
     });
+  }
+
+  // -------- Modal for GIF preview ---------
+  function formatTs(ts) {
+    if (!Number.isFinite(ts)) return '—';
+    try {
+      const d = new Date(ts * 1000);
+      return `${d.toLocaleDateString()} ${d.toLocaleTimeString()}`;
+    } catch {
+      return String(ts);
+    }
+  }
+
+  function setMetaList(container, payload) {
+    container.innerHTML = '';
+    const add = (dt, dd) => {
+      const dte = document.createElement('dt'); dte.textContent = dt;
+      const dde = document.createElement('dd'); dde.textContent = dd;
+      container.append(dte, dde);
+    };
+    if (!payload || typeof payload !== 'object') return;
+    add('ID', payload.id || '—');
+    add('Дата', payload.date || '—');
+    add('Сохранено', formatTs(payload.savedAt));
+    // detection fields
+    const det = payload.detection || {};
+    add('Метка', det.label ?? 'object');
+    add('TrackId', Number.isFinite(det.trackId) ? String(det.trackId) : String(det.id ?? '—'));
+    add('Класс', det.classId == null ? '—' : String(det.classId));
+    add('Уверенность', det.confidence == null ? '—' : String(det.confidence));
+    add('BBox', Array.isArray(det.bbox) ? det.bbox.map((v)=>Math.round(Number(v)||0)).join(', ') : '—');
+    add('Модель', det.model ?? payload.detection?.model ?? '—');
+    add('Камера', det.cameraIndex == null ? '—' : String(det.cameraIndex));
+    if (payload.gifPath) add('GIF', payload.gifPath);
+    if (payload.jsonPath) add('JSON', payload.jsonPath);
+  }
+
+  function openGifModal(item) {
+    const modal = document.getElementById('gif-modal');
+    const img = document.getElementById('gif-modal-image');
+    const list = document.getElementById('gif-modal-dl');
+    const gifUrl = item.gifPath ? `${backendOrigin}${item.gifPath}` : '';
+    const jsonUrl = item.jsonPath ? `${backendOrigin}${item.jsonPath}` : '';
+
+    img.src = gifUrl;
+    img.alt = item.id;
+
+    // Load metadata JSON
+    if (jsonUrl) {
+      fetch(jsonUrl)
+        .then(r => r.json())
+        .then(data => setMetaList(list, data))
+        .catch(() => {
+          // Fallback to basic info if JSON not available
+          setMetaList(list, { id: item.id, date: item.date, savedAt: null, detection: {}, gifPath: item.gifPath, jsonPath: item.jsonPath });
+        });
+    } else {
+      setMetaList(list, { id: item.id, date: item.date, savedAt: null, detection: {}, gifPath: item.gifPath, jsonPath: item.jsonPath });
+    }
+
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+
+    const close = () => closeGifModal();
+    document.getElementById('gif-modal-close').onclick = close;
+    document.getElementById('gif-modal-backdrop').onclick = close;
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey, { once: true });
+  }
+
+  function closeGifModal() {
+    const modal = document.getElementById('gif-modal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.setAttribute('aria-hidden', 'true');
+    const img = document.getElementById('gif-modal-image');
+    if (img) img.src = '';
   }
 })();
 
