@@ -27,6 +27,10 @@ DEFAULT_CAMERA_INDEX = int(os.getenv('CAMERA_INDEX', '0'))
 CAMERA_SCAN_LIMIT = int(os.getenv('CAMERA_SCAN_LIMIT', '5'))
 CAPTURE_RETRY_DELAY = float(os.getenv('CAPTURE_RETRY_DELAY', '1.0'))
 LOCAL_CAMERA_ENABLED = str(os.getenv('LOCAL_CAMERA_ENABLED', '1')).lower() in {'1', 'true', 'yes', 'on'}
+# Performance tuning
+STREAM_MAX_FPS = float(os.getenv('STREAM_MAX_FPS', '20'))  # частота обновления RAW потока (fps)
+INFER_FPS = float(os.getenv('INFER_FPS', '5'))            # частота инференса (fps)
+INFER_IMGSZ = int(os.getenv('INFER_IMGSZ', '416'))        # размер imgsz для YOLO (кратно 32 обычно)
 # Backend для OpenCV: V4L2 лучше работает с Pi Camera, но можно использовать AUTO для автоматического выбора
 CAMERA_BACKEND = os.getenv('CAMERA_BACKEND', 'AUTO').upper()  # AUTO, V4L2, GSTREAMER, etc.
 
@@ -59,6 +63,7 @@ detection_results = {
     'detections': [],
     'trackIds': [],
     'frame_with_detections': None,
+    'frame_raw': None,
     'stable_detections': []
 }
 
@@ -78,7 +83,17 @@ class DetectionService:
         self.base_dir = Path(__file__).resolve().parent
 
         self.running = False
-        self.thread: Optional[threading.Thread] = None
+        self.thread: Optional[threading.Thread] = None  # legacy
+
+        # Разделение захвата и инференса
+        self.capture_running = False
+        self.capture_thread: Optional[threading.Thread] = None
+        self.infer_running = False
+        self.infer_thread: Optional[threading.Thread] = None
+        self.latest_frame_lock = threading.Lock()
+        self.latest_frame: Optional[np.ndarray] = None
+        self._last_raw_push_ts: float = 0.0
+        self._last_infer_ts: float = 0.0
 
         self.camera_scan_limit = CAMERA_SCAN_LIMIT
         self.capture_retry_delay = CAPTURE_RETRY_DELAY
@@ -222,16 +237,29 @@ class DetectionService:
             logger.debug('Local camera disabled; start() вызван, но захват не инициирован')
             return
 
-        if self.running:
+        if self.capture_running and self.infer_running:
             return
-        self.running = True
-        self.thread = threading.Thread(target=self._detection_loop, daemon=True)
-        self.thread.start()
+
+        # Стартуем поток захвата
+        if not self.capture_running:
+            self.capture_running = True
+            self.capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
+            self.capture_thread.start()
+
+        # Стартуем поток инференса
+        if not self.infer_running:
+            self.infer_running = True
+            self.infer_thread = threading.Thread(target=self._inference_loop, daemon=True)
+            self.infer_thread.start()
 
     def stop(self):
         self.running = False
-        if self.thread:
-            self.thread.join(timeout=2)
+        self.capture_running = False
+        self.infer_running = False
+        if self.capture_thread:
+            self.capture_thread.join(timeout=2)
+        if self.infer_thread:
+            self.infer_thread.join(timeout=2)
 
     def scan_cameras(self, *, force: bool = False) -> List[int]:
         if not LOCAL_CAMERA_ENABLED:
@@ -290,10 +318,11 @@ class DetectionService:
             detection_results['available_cameras'] = list(self._available_cameras)
         return index
 
-    def _detection_loop(self):
+    def _capture_loop(self):
         current_index: Optional[int] = None
         cap: Optional[cv2.VideoCapture] = None
-        while self.running:
+        min_interval = 1.0 / max(1.0, STREAM_MAX_FPS)
+        while self.capture_running:
             try:
                 desired_index = self.get_camera_index()
                 if desired_index != current_index or cap is None or not cap.isOpened():
@@ -308,15 +337,44 @@ class DetectionService:
 
                 ret, frame = cap.read()
                 if not ret or frame is None:
-                    time.sleep(0.02)
+                    time.sleep(0.01)
                     continue
-                self.analyze_frame(frame)
+
+                now = time.time()
+                with self.latest_frame_lock:
+                    self.latest_frame = frame.copy()
+                if now - self._last_raw_push_ts >= min_interval:
+                    raw_jpeg = encode_frame_to_jpeg(frame)
+                    if raw_jpeg is not None:
+                        detection_results['frame_raw'] = raw_jpeg
+                        self._last_raw_push_ts = now
             except Exception as exc:
-                logger.error('Ошибка в цикле детекции: %s', exc)
-                time.sleep(1.0)
+                logger.error('Ошибка в цикле захвата: %s', exc)
+                time.sleep(0.2)
         if cap is not None:
             cap.release()
-        self.running = False
+
+    def _inference_loop(self):
+        min_interval = 1.0 / max(0.1, INFER_FPS)
+        while self.infer_running:
+            try:
+                now = time.time()
+                if (now - self._last_infer_ts) < min_interval:
+                    time.sleep(0.005)
+                    continue
+
+                with self.latest_frame_lock:
+                    frame = None if self.latest_frame is None else self.latest_frame.copy()
+                if frame is None:
+                    time.sleep(0.01)
+                    continue
+
+                # При необходимости изменить размер для инференса, но сохраняем исходный кадр для отображения
+                self._last_infer_ts = now
+                self.analyze_frame(frame)
+            except Exception as exc:
+                logger.error('Ошибка в цикле инференса: %s', exc)
+                time.sleep(0.2)
 
     def _open_capture(self, index: int) -> Optional[cv2.VideoCapture]:
         if index < 0:
@@ -453,6 +511,7 @@ class DetectionService:
         detections, annotated, stable_tracks = self._infer(frame, timestamp)
         confidence = max((d['confidence'] for d in detections), default=0.0)
         jpeg_bytes = encode_frame_to_jpeg(annotated)
+        raw_jpeg = encode_frame_to_jpeg(frame)
 
         if update_state:
             detection_results.update({
@@ -465,6 +524,7 @@ class DetectionService:
                 'detections': detections,
                 'trackIds': [d['trackId'] for d in detections],
                 'frame_with_detections': jpeg_bytes,
+                'frame_raw': raw_jpeg,
                 'stable_detections': stable_tracks
             })
 
@@ -533,6 +593,22 @@ def _mjpeg_generator():
             time.sleep(0.2)
 
 
+def _mjpeg_generator_raw():
+    boundary = b'--frame'
+    while True:
+        frame = detection_results.get('frame_raw')
+        if frame is not None:
+            yield (
+                boundary + b"\r\n"
+                + b'Content-Type: image/jpeg\r\n'
+                + b'Content-Length: ' + str(len(frame)).encode() + b"\r\n\r\n"
+                + frame + b"\r\n"
+            )
+            time.sleep(0.05)
+        else:
+            time.sleep(0.2)
+
+
 @app.get('/')
 def index():
     state = detection_results.copy()
@@ -551,6 +627,15 @@ def detection_frame():
 @app.get('/video_feed')
 def video_feed():
     response = Response(_mjpeg_generator(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Connection'] = 'keep-alive'
+    return response
+
+
+@app.get('/video_feed_raw')
+def video_feed_raw():
+    response = Response(_mjpeg_generator_raw(), mimetype='multipart/x-mixed-replace; boundary=frame')
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     response.headers['Pragma'] = 'no-cache'
     response.headers['Connection'] = 'keep-alive'
