@@ -197,7 +197,42 @@ export async function upsertDetections(detections = [], meta = {}) {
 // -------- Saved detections (JSON + GIF) ---------
 
 export async function listSavedDetections(dateKeyInput) {
-  const dateKey = dateKeyInput || new Date().toISOString().slice(0, 10)
+  // Если дата не указана — вернуть все сохраненные за все дни
+  if (!dateKeyInput) {
+    try {
+      const dirEntries = await fs.readdir(savedBaseDir, { withFileTypes: true })
+      const items = []
+      for (const ent of dirEntries) {
+        if (!ent.isDirectory()) continue
+        const dateKey = ent.name
+        try {
+          const files = await fs.readdir(path.join(savedBaseDir, dateKey), { withFileTypes: true })
+          for (const f of files) {
+            if (f.isFile() && f.name.endsWith('.json')) {
+              const id = f.name.replace(/\.json$/, '')
+              items.push({ id, date: dateKey, jsonPath: `/files/detections/saved/${dateKey}/${id}.json`, gifPath: `/files/detections/saved/${dateKey}/${id}.gif` })
+            }
+          }
+        } catch {
+          // ignore broken subdir
+        }
+      }
+      // Отсортируем по дате (новые сверху) и id внутри даты
+      items.sort((a, b) => {
+        if (a.date !== b.date) return b.date.localeCompare(a.date)
+        return b.id.localeCompare(a.id)
+      })
+      return { date: null, items }
+    } catch (err) {
+      if (err.code === 'ENOENT') {
+        return { date: null, items: [] }
+      }
+      throw err
+    }
+  }
+
+  // Иначе вернуть только за конкретный день
+  const dateKey = dateKeyInput
   const dir = path.join(savedBaseDir, dateKey)
   try {
     const entries = await fs.readdir(dir, { withFileTypes: true })

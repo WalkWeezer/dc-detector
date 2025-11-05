@@ -37,6 +37,7 @@ CAMERA_BACKEND = os.getenv('CAMERA_BACKEND', 'AUTO').upper()  # AUTO, V4L2, GSTR
 MODELS_DIR = Path(os.getenv('MODELS_DIR', 'models'))
 MODEL_PATH = os.getenv('MODEL_PATH', 'models/yolov8n.pt')
 CONFIDENCE_THRESHOLD = float(os.getenv('CONFIDENCE_THRESHOLD', '0.5'))
+JPEG_QUALITY = int(os.getenv('JPEG_QUALITY', '80'))
 
 # Tracker parameters from environment or defaults
 TRACKER_IOU_THRESHOLD = float(os.getenv('TRACKER_IOU_THRESHOLD', '0.3'))
@@ -70,7 +71,7 @@ detection_results = {
 
 def encode_frame_to_jpeg(frame: np.ndarray) -> Optional[bytes]:
     try:
-        success, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        success, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, max(30, min(95, JPEG_QUALITY))])
         if success:
             return buffer.tobytes()
     except Exception as exc:  # pragma: no cover
@@ -604,7 +605,7 @@ def _mjpeg_generator_raw():
                 + b'Content-Length: ' + str(len(frame)).encode() + b"\r\n\r\n"
                 + frame + b"\r\n"
             )
-            time.sleep(0.05)
+            time.sleep(0.01)
         else:
             time.sleep(0.2)
 

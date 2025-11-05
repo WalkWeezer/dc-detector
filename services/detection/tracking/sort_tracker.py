@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import secrets
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -81,7 +82,21 @@ class SortTracker:
         self.max_age = max_age
         self.min_hits = min_hits
         self.tracks: List[Track] = []
-        self._next_id = 1
+        self._next_id = 1  # legacy counter, kept for fallback
+
+    def _generate_track_id(self) -> int:
+        """Generate a random positive track id that doesn't collide with active tracks.
+
+        Using cryptographic RNG to avoid collisions across restarts; keep within 32-bit range.
+        """
+        existing = {t.track_id for t in self.tracks}
+        for _ in range(10):
+            value = secrets.randbelow(2_147_483_647) + 1  # 1..2^31-1
+            if value not in existing:
+                return value
+        # Fallback to monotonic counter if collisions (highly unlikely)
+        self._next_id += 1
+        return self._next_id
 
     def _match_tracks(self, detections: List[dict]) -> tuple[list[tuple[int, int]], set[int], set[int]]:
         unmatched_tracks = set(range(len(self.tracks)))
@@ -168,7 +183,7 @@ class SortTracker:
         for det_index in unmatched_detections:
             det = normalized[det_index]
             track = Track(
-                track_id=self._next_id,
+                track_id=self._generate_track_id(),
                 bbox=det['bbox'],
                 label=det.get('label'),
                 class_id=det.get('class_id'),
@@ -179,7 +194,6 @@ class SortTracker:
             track.history.append(det['bbox'])
             self.tracks.append(track)
             matches.append((len(self.tracks) - 1, det_index))
-            self._next_id += 1
 
         # Remove stale tracks
         self.tracks = [track for track in self.tracks if track.misses <= self.max_age]

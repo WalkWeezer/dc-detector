@@ -69,7 +69,7 @@
       updateStatus('Нет связи', 'error');
       errorMessageEl.textContent = e instanceof Error ? e.message : 'Network error';
     } finally {
-      setTimeout(pollStatus, 1000);
+      setTimeout(pollStatus, 10);
     }
   }
 
@@ -84,7 +84,8 @@
       errorMessageEl.textContent = 'Не удалось подключиться к /api/detections/stream';
       setTimeout(startStream, 2000);
     };
-    img.src = `${backendOrigin}/api/detections/stream?t=${Date.now()}`;
+    // Используем RAW поток без серверной разметки, рисуем боксы только на фронте
+    img.src = `${backendOrigin}/api/detections/stream-raw?t=${Date.now()}`;
   }
 
   window.addEventListener('resize', resizeCanvasToImage);
