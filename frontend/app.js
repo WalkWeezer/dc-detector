@@ -1,5 +1,6 @@
 (function () {
   const videoEl = document.getElementById("webcam");
+  const serverStreamEl = document.getElementById("server-stream");
   const overlayEl = document.getElementById("overlay");
   const overlayCtx = overlayEl.getContext("2d");
   const statusIndicator = document.getElementById("status-indicator");
@@ -18,6 +19,9 @@
   const backendOrigin = window.location.hostname === "localhost"
     ? "http://localhost:8080"
     : window.location.origin;
+  
+  // Режим работы: 'local' (локальная камера для разработки) или 'server' (серверный стрим для Raspberry Pi)
+  let streamMode = 'local'; // По умолчанию локальная камера для разработки
 
   let uploadTimer = null;
   let isUploading = false;
@@ -64,13 +68,24 @@
   }
 
   function resizeCanvases() {
-    // Используем реальные размеры видео, если они доступны
-    let width = videoEl.videoWidth;
-    let height = videoEl.videoHeight;
+    // Используем реальные размеры видео или изображения, если они доступны
+    let width, height;
+    
+    if (streamMode === 'server' && serverStreamEl) {
+      // Для серверного стрима используем размеры изображения
+      width = serverStreamEl.naturalWidth || serverStreamEl.width;
+      height = serverStreamEl.naturalHeight || serverStreamEl.height;
+    } else {
+      // Для локальной камеры используем размеры видео
+      width = videoEl.videoWidth;
+      height = videoEl.videoHeight;
+    }
     
     // Если размеры еще не загружены, используем размеры элемента
     if (!width || !height || width === 0 || height === 0) {
-      const rect = videoEl.getBoundingClientRect();
+      const rect = (streamMode === 'server' && serverStreamEl) 
+        ? serverStreamEl.getBoundingClientRect() 
+        : videoEl.getBoundingClientRect();
       width = rect.width || 640;
       height = rect.height || 480;
     }
@@ -91,8 +106,76 @@
   }
 
   function scheduleNextUpload(delay = uploadIntervalMs) {
+    // В режиме сервера не нужно отправлять кадры локально
+    if (streamMode === 'server') {
+      return;
+    }
     clearTimeout(uploadTimer);
     uploadTimer = window.setTimeout(captureAndUploadFrame, delay);
+  }
+  
+  // Определение режима работы: проверка доступности серверного стрима
+  async function detectStreamMode() {
+    try {
+      // Проверяем доступность серверного стрима
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 2000);
+      
+      const response = await fetch(`${backendOrigin}/api/detections/status`, {
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+      
+      if (response.ok) {
+        const status = await response.json();
+        // Поддерживаем оба варианта кейсов: snake_case и camelCase
+        const cameraEnabled = (status && (status.local_camera_enabled ?? status.localCameraEnabled));
+        const activeCam = (status && (status.active_camera ?? status.activeCamera));
+        if (cameraEnabled && activeCam !== null && activeCam !== undefined) {
+          return 'server';
+        }
+      }
+    } catch (error) {
+      console.log('Серверный стрим недоступен, используем локальную камеру', error);
+    }
+    // По умолчанию используем локальную камеру для разработки
+    return 'local';
+  }
+  
+  // Запуск серверного стрима
+  function startServerStream() {
+    if (!serverStreamEl) {
+      console.error('Элемент server-stream не найден');
+      return;
+    }
+    
+    // Скрываем video элемент, показываем img
+    videoEl.style.display = 'none';
+    serverStreamEl.style.display = 'block';
+    
+    // Устанавливаем источник MJPEG потока
+    const streamUrl = `${backendOrigin}/api/detections/stream?t=${Date.now()}`;
+    serverStreamEl.src = streamUrl;
+    
+    // Обработчик загрузки изображения для обновления размеров canvas
+    serverStreamEl.onload = () => {
+      resizeCanvases();
+      updateStatus("Серверный стрим подключен");
+    };
+    
+    // Обработчик ошибок
+    serverStreamEl.onerror = () => {
+      updateStatus("Ошибка серверного стрима", "error");
+      errorMessageEl.textContent = "Не удалось подключиться к серверному видеопотоку";
+      // Попробуем переподключиться через 2 секунды
+      setTimeout(() => {
+        if (streamMode === 'server') {
+          startServerStream();
+        }
+      }, 2000);
+    };
+    
+    updateStatus("Подключение к серверному стриму...");
   }
 
   function clearOverlay() {
@@ -595,6 +678,11 @@
   }
 
   async function captureAndUploadFrame() {
+    // В режиме сервера не нужно захватывать и отправлять кадры локально
+    if (streamMode === 'server') {
+      return;
+    }
+    
     if (isUploading || isSwitchingModel) {
       scheduleNextUpload(100);
       return;
@@ -708,11 +796,24 @@
   }
 
   async function startWebcam() {
+    // Если режим сервера, запускаем серверный стрим
+    if (streamMode === 'server') {
+      startServerStream();
+      return;
+    }
+    
+    // Режим локальной камеры (для разработки)
     if (!navigator.mediaDevices?.getUserMedia) {
       updateStatus("Браузер не поддерживает getUserMedia", "error");
       errorMessageEl.textContent = "Используйте современный браузер (Chrome/Edge/Firefox).";
       return;
     }
+    
+    // Показываем video элемент, скрываем img
+    if (serverStreamEl) {
+      serverStreamEl.style.display = 'none';
+    }
+    videoEl.style.display = 'block';
 
     const tryConstraints = async (constraints) => {
       try {
@@ -972,7 +1073,13 @@
   });
   statusUpdateInterval = setInterval(updateDetectionsStatus, 1000);
   loadModels();
-  startWebcam();
+  
+  // Определяем режим работы и запускаем соответствующий стрим
+  (async () => {
+    streamMode = await detectStreamMode();
+    console.log('Режим работы:', streamMode);
+    startWebcam();
+  })();
 
   // -------- Saved list logic ---------
   async function loadSavedDetections(dateValue, targetId = 'saved-list-container') {

@@ -7,7 +7,11 @@
 ## 1. Подготовка окружения
 
 1. Установите Docker Desktop (Windows/macOS) или Docker Engine + Compose v2 (Linux).
-2. (Опционально) скопируйте `env.example` в `.env` и измените при необходимости.
+2. Запустите скрипт инициализации для автоматического создания `.env` и необходимых директорий:
+   ```bash
+   ./scripts/init.sh
+   ```
+   Или вручную скопируйте `env.example` в `.env` и измените при необходимости.
 3. Поместите модель YOLO в `services/detection/models/bestfire.pt`.
 
 ## 2. Windows dev (горячая перезагрузка фронтенда)
@@ -29,13 +33,54 @@ docker compose down
 
 ## 3. Raspberry Pi (рабочий режим)
 
-Команда запуска:
+### Первый запуск
+
+1. Запустите скрипт инициализации:
+   ```bash
+   ./scripts/init.sh
+   ```
+
+2. (Опционально) Настройте `.env` для Pi Camera:
+   ```dotenv
+   CAMERA_BACKEND=V4L2  # лучше для Pi Camera
+   VIDEO_DEVICE=/dev/video0
+   ```
+
+3. Запустите проект:
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.pi.yml up -d --build
+   ```
+
+### Автозапуск при загрузке системы
+
+Для автоматического запуска при загрузке Raspberry Pi:
+
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.pi.yml up -d --build
+sudo ./scripts/install-systemd.sh
 ```
 
+Управление:
+- `sudo systemctl start dc-detector` - запуск
+- `sudo systemctl stop dc-detector` - остановка
+- `sudo systemctl status dc-detector` - статус
+- `sudo journalctl -u dc-detector -f` - логи
+
+### Видеопоток
+
+- Фронтенд автоматически определяет наличие серверной камеры и использует видеопоток с Pi Camera.
+- Доступ по локальной сети: `http://<IP-raspberry-pi>/` или `https://<IP-raspberry-pi>/`
 - Фронтенд обслуживается nginx на 80/443 (самоподписанный сертификат генерируется в образе).
 - Для доступа к камере на IP используйте HTTPS: https://<IP>/ и примите сертификат. На `localhost` HTTPS не обязателен.
+
+### Проверка после деплоя
+
+Запустите автотесты для проверки работоспособности:
+
+```bash
+./scripts/test-deployment.sh
+```
+
+Скрипт проверит все эндпоинты, доступность сервисов и работоспособность Pi Camera.
 
 Остановка:
 ```bash

@@ -1,4 +1,27 @@
 services:
+  init:
+    image: alpine:latest
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    command: >-
+      sh -c "
+      echo '🚀 Инициализация проекта...' &&
+      if [ ! -f .env ]; then \
+        if [ -f env.example ]; then \
+          cp env.example .env && \
+          echo '✅ .env файл создан из env.example'; \
+        else \
+          touch .env && \
+          echo '⚠️  Создан пустой .env файл'; \
+        fi; \
+      else \
+        echo 'ℹ️  .env файл уже существует'; \
+      fi && \
+      mkdir -p data/detections/saved && \
+      mkdir -p services/detection/models && \
+      echo '✅ Директории созданы' && \
+      echo '✨ Инициализация завершена'"
   backend:
     env_file: .env
     build:
@@ -8,6 +31,8 @@ services:
       - PORT=8080
       - DETECTION_URL=http://detection:8001
     depends_on:
+      init:
+        condition: service_completed_successfully
       detection:
         condition: service_started
     ports:
@@ -17,6 +42,9 @@ services:
     networks: [app]
 
   detection:
+    depends_on:
+      init:
+        condition: service_completed_successfully
     env_file: .env
     build:
       context: .
@@ -34,11 +62,14 @@ services:
     networks: [app]
 
   frontend:
+    depends_on:
+      backend:
+        condition: service_started
+      init:
+        condition: service_completed_successfully
     build:
       context: .
       dockerfile: docker/frontend.Dockerfile
-    depends_on:
-      - backend
     ports:
       - "80:80"
       - "443:443"

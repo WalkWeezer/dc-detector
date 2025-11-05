@@ -85,6 +85,7 @@ p.subtitle {
 }
 
 video,
+#server-stream,
 canvas {
   position: absolute;
   inset: 0;
@@ -93,7 +94,8 @@ canvas {
   object-fit: cover;
 }
 
-video {
+video,
+#server-stream {
   filter: saturate(1.05) contrast(1.05);
 }
 

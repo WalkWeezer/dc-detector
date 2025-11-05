@@ -15,11 +15,14 @@ ENV SHARP_IGNORE_GLOBAL_LIBVIPS=1
 RUN npm install --omit=dev --include=optional --no-audit --no-fund && npm cache clean --force
 
 COPY services/backend ./
+COPY docker/backend-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/backend-entrypoint.sh
 
 ENV NODE_ENV=production
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 CMD node -e "fetch('http://localhost:8080/health',{keepalive:true}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 USER node
+ENTRYPOINT ["backend-entrypoint.sh"]
 CMD ["node", "src/server.js"]
 
 

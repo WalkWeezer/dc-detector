@@ -27,6 +27,8 @@ DEFAULT_CAMERA_INDEX = int(os.getenv('CAMERA_INDEX', '0'))
 CAMERA_SCAN_LIMIT = int(os.getenv('CAMERA_SCAN_LIMIT', '5'))
 CAPTURE_RETRY_DELAY = float(os.getenv('CAPTURE_RETRY_DELAY', '1.0'))
 LOCAL_CAMERA_ENABLED = str(os.getenv('LOCAL_CAMERA_ENABLED', '1')).lower() in {'1', 'true', 'yes', 'on'}
+# Backend для OpenCV: V4L2 лучше работает с Pi Camera, но можно использовать AUTO для автоматического выбора
+CAMERA_BACKEND = os.getenv('CAMERA_BACKEND', 'AUTO').upper()  # AUTO, V4L2, GSTREAMER, etc.
 
 MODELS_DIR = Path(os.getenv('MODELS_DIR', 'models'))
 MODEL_PATH = os.getenv('MODEL_PATH', 'models/yolov8n.pt')
@@ -321,15 +323,71 @@ class DetectionService:
             logger.error('Индекс камеры должен быть неотрицательным, получено %s', index)
             return None
 
-        logger.info('🎥 Подключение к локальной камере %s', index)
-        cap = cv2.VideoCapture(index)
+        logger.info('🎥 Подключение к локальной камере %s (backend: %s)', index, CAMERA_BACKEND)
+        
+        # Определяем backend для OpenCV
+        backend = None
+        if CAMERA_BACKEND == 'V4L2':
+            backend = cv2.CAP_V4L2
+        elif CAMERA_BACKEND == 'GSTREAMER':
+            backend = cv2.CAP_GSTREAMER
+        elif CAMERA_BACKEND == 'AUTO':
+            backend = None  # OpenCV выберет автоматически
+        else:
+            # Попытка использовать числовой код backend
+            try:
+                backend = int(CAMERA_BACKEND) if CAMERA_BACKEND.isdigit() else None
+            except (ValueError, AttributeError):
+                backend = None
+        
+        # Попытка открыть камеру с указанным backend
+        if backend is not None:
+            cap = cv2.VideoCapture(index, backend)
+        else:
+            cap = cv2.VideoCapture(index)
+        
         if not cap or not cap.isOpened():
             if cap is not None:
                 cap.release()
-            logger.error('Не удалось открыть локальную камеру: %s', index)
+            logger.error('Не удалось открыть локальную камеру: %s (backend: %s)', index, CAMERA_BACKEND)
+            
+            # Если использовался не AUTO backend, попробуем AUTO
+            if CAMERA_BACKEND != 'AUTO':
+                logger.info('Попытка открыть камеру с AUTO backend')
+                cap = cv2.VideoCapture(index)
+                if cap and cap.isOpened():
+                    logger.info('✅ Камера открыта с AUTO backend')
+                else:
+                    if cap is not None:
+                        cap.release()
+                    self.scan_cameras(force=True)
+                    return None
+            else:
+                self.scan_cameras(force=True)
+                return None
+        
+        # Настройка параметров камеры для лучшей производительности
+        try:
+            # Устанавливаем разрешение (если поддерживается)
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+            # Буферизация: 1 кадр (для минимальной задержки)
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        except Exception as e:
+            logger.debug('Не удалось установить некоторые параметры камеры: %s', e)
+        
+        # Проверяем, что камера действительно работает
+        ret, frame = cap.read()
+        if not ret or frame is None:
+            logger.warning('Камера открыта, но не может получать кадры')
+            cap.release()
             self.scan_cameras(force=True)
             return None
-
+        
+        logger.info('✅ Камера успешно подключена (разрешение: %dx%d)', 
+                   int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0),
+                   int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0))
+        
         detection_results['active_camera'] = index
         return cap
 
