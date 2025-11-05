@@ -69,7 +69,7 @@
       updateStatus('Нет связи', 'error');
       errorMessageEl.textContent = e instanceof Error ? e.message : 'Network error';
     } finally {
-      setTimeout(pollStatus, 10);
+      setTimeout(pollStatus, 100);
     }
   }
 
