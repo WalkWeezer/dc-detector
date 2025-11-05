@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DC-Detector — Поток Raspberry Pi</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <style>
+      body { align-items: stretch; }
+      main { height: 100vh; }
+      .layout { grid-template-columns: 1fr; }
+      .preview { aspect-ratio: auto; height: calc(100vh - 120px); }
+      .info-row { display: flex; justify-content: space-between; gap: 12px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>DC-Detector — поток с камеры Raspberry Pi</h1>
+      <p class="subtitle">Страница показывает видеопоток с детекцией, генерируемый на Raspberry Pi.</p>
+
+      <div class="layout">
+        <div class="preview">
+          <img id="server-stream" alt="Raspberry Pi stream" />
+          <canvas id="overlay"></canvas>
+        </div>
+      </div>
+
+      <section class="info" style="margin-top:12px">
+        <div class="info-row"><span>Состояние</span><span id="status-indicator">Подключение…</span></div>
+        <div class="info-row"><span>Активная модель</span><span id="active-model">—</span></div>
+        <div class="info-row"><span>Детекций</span><span id="detection-count">—</span></div>
+        <div class="info-row"><span>Макс. уверенность</span><span id="detection-confidence">—</span></div>
+        <p id="error-message" style="color:#ff8080"></p>
+      </section>
+
+    </main>
+
+    <script type="module" src="./pi.js"></script>
+  </body>
+  </html>
+
+

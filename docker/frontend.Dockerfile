@@ -16,7 +16,9 @@ RUN npm run build
 RUN mkdir -p dist \
   && [ -f app.js ] && [ ! -f dist/app.js ] && cp -f app.js dist/app.js || true \
   && [ -f styles.css ] && [ ! -f dist/styles.css ] && cp -f styles.css dist/styles.css || true \
-  && [ -f index.html ] && [ ! -f dist/index.html ] && cp -f index.html dist/index.html || true
+  && [ -f index.html ] && [ ! -f dist/index.html ] && cp -f index.html dist/index.html || true \
+  && [ -f pi.html ] && [ ! -f dist/pi.html ] && cp -f pi.html dist/pi.html || true \
+  && [ -f pi.js ] && [ ! -f dist/pi.js ] && cp -f pi.js dist/pi.js || true
 
 FROM nginx:alpine
 COPY --from=build /app/dist/ /usr/share/nginx/html/

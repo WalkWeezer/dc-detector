@@ -1074,12 +1074,9 @@
   statusUpdateInterval = setInterval(updateDetectionsStatus, 1000);
   loadModels();
   
-  // Определяем режим работы и запускаем соответствующий стрим
-  (async () => {
-    streamMode = await detectStreamMode();
-    console.log('Режим работы:', streamMode);
-    startWebcam();
-  })();
+  // На основной странице используем локальную камеру (режим разработки)
+  streamMode = 'local';
+  startWebcam();
 
   // -------- Saved list logic ---------
   async function loadSavedDetections(dateValue, targetId = 'saved-list-container') {
