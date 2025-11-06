@@ -153,6 +153,69 @@ detectionsRouter.get('/stream-raw', async (req, res) => {
   }
 })
 
+// Новый поток для кадров с фронтенда - максимальная скорость
+detectionsRouter.get('/stream-frontend', async (req, res) => {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 5000)
+  try {
+    const response = await fetch(`${config.detectionServiceUrl}/video_feed_frontend`, {
+      signal: controller.signal
+    })
+
+    if (!response.ok || !response.body) {
+      clearTimeout(timeout)
+      return res.status(502).json({ error: 'Detection service frontend stream unavailable' })
+    }
+
+    clearTimeout(timeout)
+
+    res.setHeader('Content-Type', response.headers.get('content-type') ?? 'multipart/x-mixed-replace; boundary=frame')
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+    res.setHeader('Pragma', 'no-cache')
+    res.setHeader('Connection', 'keep-alive')
+
+    const stream = Readable.fromWeb(response.body)
+
+    const cleanup = () => {
+      stream.destroy()
+    }
+
+    req.on('close', cleanup)
+    stream.on('error', () => {
+      res.destroy()
+    })
+
+    stream.pipe(res)
+  } catch (err) {
+    res.status(502).json({ error: 'Detection service unreachable', details: err.message })
+  } finally {
+    clearTimeout(timeout)
+  }
+})
+
+// Новый endpoint для отправки кадров с фронтенда - асинхронная обработка
+detectionsRouter.post('/stream-frame', async (req, res) => {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 5000)
+  try {
+    const response = await fetch(`${config.detectionServiceUrl}/stream_frame`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body ?? {}),
+      signal: controller.signal
+    })
+    const result = await response.json()
+    if (!response.ok) {
+      return res.status(response.status).json(result)
+    }
+    res.json(result)
+  } catch (err) {
+    res.status(502).json({ error: 'Detection service unreachable', details: err.message })
+  } finally {
+    clearTimeout(timeout)
+  }
+})
+
 detectionsRouter.post('/run', async (req, res) => {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 5000)

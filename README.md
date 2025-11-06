@@ -66,7 +66,7 @@ CAMERA_SCAN_LIMIT=5
 CAMERA_BACKEND=AUTO
 # CAMERA_BACKEND=AUTO (по умолчанию) или V4L2 (лучше для Pi Camera)
 CAPTURE_RETRY_DELAY=1.0
-MODEL_PATH=models/yolov8n.pt
+MODEL_PATH=models/bestfire.pt
 BACKEND_NOTIFY_URL=http://backend:8080/internal/detections
 ```
 

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DC-Detector — Dev Tools</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main>
+      <h1>DC-Detector — Dev Tools (поток с веб-камеры)</h1>
+
+      <!-- Экранный переключатель: Поток | Сохранённые -->
+      <div class="screen-tabs">
+        <button class="screen-button active" data-screen="stream">Поток</button>
+        <button class="screen-button" data-screen="saved">Сохранённые</button>
+      </div>
+
+      <!-- Экран: поток (камеры + боковая панель) -->
+      <div id="screen-stream" class="screen">
+        <div class="layout">
+        <div class="preview">
+          <video id="webcam" autoplay playsinline muted></video>
+          <img id="server-stream" style="display: none;" alt="Server stream" />
+          <canvas id="overlay"></canvas>
+        </div>
+
+        <aside class="sidebar">
+          <div class="tabs">
+            <button class="tab-button active" data-tab="status">Состояние</button>
+            <button class="tab-button" data-tab="list">Список</button>
+            <button class="tab-button" data-tab="config">Конфигурация</button>
+          </div>
+          <div class="tab-panels">
+            <section class="info-panel tab-panel active" id="tab-status" aria-live="polite">
+              <div class="info-row control">
+                <label for="model-select">Модель</label>
+                <select id="model-select" disabled>
+                  <option value="">Загрузка…</option>
+                </select>
+              </div>
+              <div class="info-row">
+                <span>Состояние</span>
+                <span id="status-indicator">Подключение камеры…</span>
+              </div>
+              <div class="info-row">
+                <span>Кол-во детекций</span>
+                <span class="value" id="detection-count">—</span>
+              </div>
+              <div class="info-row">
+                <span>Последний объект</span>
+                <span class="value" id="last-detection-label">—</span>
+              </div>
+              <div class="info-row">
+                <span>Макс. уверенность</span>
+                <span class="value" id="detection-confidence">—</span>
+              </div>
+              <div class="info-row">
+                <span>Активная модель</span>
+                <span class="value" id="active-model">—</span>
+              </div>
+              <div class="info-row">
+                <span>Последний отклик</span>
+                <span class="value" id="last-update">—</span>
+              </div>
+              <div class="info-row">
+                <span>Интервал</span>
+                <span class="value" id="capture-interval">—</span>
+              </div>
+              <p id="error-message"></p>
+            </section>
+
+            <section class="detections-list tab-panel" id="tab-list">
+              <h2>Активные детекции</h2>
+              <div id="detections-list-container"></div>
+            </section>
+
+            <section class="config-panel tab-panel" id="tab-config">
+              <h2>Конфигурация</h2>
+              <div class="config-group">
+                <label>
+                  <span>FPS отправки кадров:</span>
+                  <input type="number" id="config-fps" min="0.1" max="60" step="0.1" title="FPS отправки кадров в бэкенд: выше — меньше задержка, выше нагрузка" />
+                </label>
+              </div>
+              <div class="config-group">
+                <label>
+                  <span>IOU Threshold:</span>
+                  <input type="number" id="config-iou" min="0" max="1" step="0.01" title="IoU‑порог сопоставления bbox между кадрами (0..1). Выше — строже сопоставление" />
+                </label>
+              </div>
+              <div class="config-group">
+                <label>
+                  <span>Max Age:</span>
+                  <input type="number" id="config-max-age" min="1" max="100" step="1" title="Максимум пропусков (кадров) до удаления трека" />
+                </label>
+              </div>
+              <div class="config-group">
+                <label>
+                  <span>Min Hits:</span>
+                  <input type="number" id="config-min-hits" min="1" max="100" step="1" title="Минимум попаданий (кадров) для подтверждения трека" />
+                </label>
+              </div>
+              <div class="config-group">
+                <label style="gap:12px">
+                  <span>Автосохранение:</span>
+                  <input type="checkbox" id="config-autosave-enabled" />
+                </label>
+              </div>
+              <div class="config-group">
+                <label>
+                  <span>Min confidence (автосохранение):</span>
+                  <input type="number" id="config-autosave-threshold" min="0" max="1" step="0.01" title="Минимальная уверенность для автосохранения (0..1)" />
+                </label>
+              </div>
+              <button id="save-config-btn">Сохранить конфигурацию</button>
+            </section>
+          </div>
+        </aside>
+        </div>
+      </div>
+
+      <!-- Экран: сохранённые (полноэкранный список) -->
+      <section id="screen-saved" class="screen hidden">
+        <div class="saved-screen-toolbar">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <input type="date" id="saved-screen-date" />
+            <button id="saved-screen-refresh">Обновить</button>
+          </div>
+        </div>
+        <div id="saved-screen-list" class="saved-grid"></div>
+      </section>
+    </main>
+
+    <!-- Modal for GIF preview -->
+    <div id="gif-modal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop" id="gif-modal-backdrop"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="gif-modal-title">
+        <button class="modal-close" id="gif-modal-close" aria-label="Закрыть">×</button>
+        <div class="modal-body">
+          <div class="modal-media">
+            <img id="gif-modal-image" alt="GIF" />
+          </div>
+          <div class="modal-meta" id="gif-modal-meta">
+            <h3 id="gif-modal-title">Детали сохранения</h3>
+            <dl id="gif-modal-dl"></dl>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+  </html>
+
+

@@ -16,7 +16,7 @@ services:
       - CAMERA_SCAN_LIMIT=${CAMERA_SCAN_LIMIT:-5}
       - LOCAL_CAMERA_ENABLED=${LOCAL_CAMERA_ENABLED:-1}
       - CAMERA_BACKEND=${CAMERA_BACKEND:-AUTO}
-      - MODEL_PATH=${MODEL_PATH:-models/yolov8n.pt}
+      - MODEL_PATH=${MODEL_PATH:-models/bestfire.pt}
 
   frontend-build:
     image: node:20-alpine

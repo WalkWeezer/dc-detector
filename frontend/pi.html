@@ -16,7 +16,6 @@
   <body>
     <main>
       <h1>DC-Detector — поток с камеры Raspberry Pi</h1>
-      <p class="subtitle">Страница показывает видеопоток с детекцией, генерируемый на Raspberry Pi.</p>
 
       <div class="layout">
         <div class="preview">
@@ -33,7 +32,36 @@
         <p id="error-message" style="color:#ff8080"></p>
       </section>
 
+      <!-- Список сохраненных детекций -->
+      <section class="saved-section" style="margin-top:24px">
+        <div class="saved-screen-toolbar">
+          <h2 style="margin:0;font-size:18px">Сохранённые детекции</h2>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <input type="date" id="saved-screen-date" />
+            <button id="saved-screen-refresh">Обновить</button>
+          </div>
+        </div>
+        <div id="saved-screen-list" class="saved-grid"></div>
+      </section>
+
     </main>
+
+    <!-- Modal for GIF preview -->
+    <div id="gif-modal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop" id="gif-modal-backdrop"></div>
+      <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="gif-modal-title">
+        <button class="modal-close" id="gif-modal-close" aria-label="Закрыть">×</button>
+        <div class="modal-body">
+          <div class="modal-media">
+            <img id="gif-modal-image" alt="GIF" />
+          </div>
+          <div class="modal-meta" id="gif-modal-meta">
+            <h3 id="gif-modal-title">Детали сохранения</h3>
+            <dl id="gif-modal-dl"></dl>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <script type="module" src="./pi.js"></script>
   </body>

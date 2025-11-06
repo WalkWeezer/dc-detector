@@ -23,7 +23,7 @@ MODEL_PATH="$PROJECT_ROOT/services/detection/models/bestfire.pt"
 if [ ! -f "$MODEL_PATH" ]; then
     echo "⚠️  Предупреждение: Модель bestfire.pt не найдена в $MODEL_PATH"
     echo "   Убедитесь, что модель YOLO размещена в правильной директории"
-    echo "   Или используйте yolov8n.pt (будет загружена автоматически при первом запуске)"
+    echo "   Или используйте yolov8n.pt как альтернативу (будет загружена автоматически при первом запуске)"
 else
     echo "✅ Модель bestfire.pt найдена"
 fi

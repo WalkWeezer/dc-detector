@@ -20,8 +20,9 @@
     ? "http://localhost:8080"
     : window.location.origin;
   
-  // Режим работы: 'local' (локальная камера для разработки) или 'server' (серверный стрим для Raspberry Pi)
+  // Режим работы: 'local' (локальная камера для разработки), 'server' (серверный стрим для Raspberry Pi), или 'frontend-stream' (асинхронный поток с фронтенда)
   let streamMode = 'local'; // По умолчанию локальная камера для разработки
+  let useAsyncStream = false; // Использовать асинхронный поток (максимальный FPS)
 
   let uploadTimer = null;
   let isUploading = false;
@@ -71,8 +72,8 @@
     // Используем реальные размеры видео или изображения, если они доступны
     let width, height;
     
-    if (streamMode === 'server' && serverStreamEl) {
-      // Для серверного стрима используем размеры изображения
+    if ((streamMode === 'server' || useAsyncStream) && serverStreamEl) {
+      // Для серверного стрима или асинхронного потока используем размеры изображения
       width = serverStreamEl.naturalWidth || serverStreamEl.width;
       height = serverStreamEl.naturalHeight || serverStreamEl.height;
     } else {
@@ -83,7 +84,7 @@
     
     // Если размеры еще не загружены, используем размеры элемента
     if (!width || !height || width === 0 || height === 0) {
-      const rect = (streamMode === 'server' && serverStreamEl) 
+      const rect = ((streamMode === 'server' || useAsyncStream) && serverStreamEl) 
         ? serverStreamEl.getBoundingClientRect() 
         : videoEl.getBoundingClientRect();
       width = rect.width || 640;
@@ -140,6 +141,42 @@
     }
     // По умолчанию используем локальную камеру для разработки
     return 'local';
+  }
+
+  // Запуск асинхронного потока с фронтенда
+  function startFrontendStream() {
+    if (!serverStreamEl) {
+      console.error('Элемент server-stream не найден');
+      return;
+    }
+    
+    // Скрываем video элемент, показываем img
+    videoEl.style.display = 'none';
+    serverStreamEl.style.display = 'block';
+    
+    // Устанавливаем источник MJPEG потока с фронтенда (быстрый поток)
+    const streamUrl = `${backendOrigin}/api/detections/stream-frontend?t=${Date.now()}`;
+    serverStreamEl.src = streamUrl;
+    
+    // Обработчик загрузки изображения для обновления размеров canvas
+    serverStreamEl.onload = () => {
+      resizeCanvases();
+      updateStatus("Асинхронный поток подключен");
+    };
+    
+    // Обработчик ошибок
+    serverStreamEl.onerror = () => {
+      updateStatus("Ошибка асинхронного потока", "error");
+      errorMessageEl.textContent = "Не удалось подключиться к потоку";
+      // Попробуем переподключиться через 2 секунды
+      setTimeout(() => {
+        if (useAsyncStream) {
+          startFrontendStream();
+        }
+      }, 2000);
+    };
+    
+    updateStatus("Подключение к асинхронному потоку...");
   }
   
   // Запуск серверного стрима
@@ -683,6 +720,12 @@
       return;
     }
     
+    // В режиме асинхронного потока используем быстрый метод
+    if (useAsyncStream) {
+      await captureAndStreamFrameAsync();
+      return;
+    }
+    
     if (isUploading || isSwitchingModel) {
       scheduleNextUpload(100);
       return;
@@ -795,10 +838,66 @@
     }
   }
 
+  // Асинхронная отправка кадра - максимальная скорость без ожидания результата
+  async function captureAndStreamFrameAsync() {
+    if (isUploading || isSwitchingModel) {
+      scheduleNextUpload(10); // Очень маленькая задержка для максимального FPS
+      return;
+    }
+
+    if (videoEl.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      scheduleNextUpload(50);
+      return;
+    }
+
+    if (!videoEl.videoWidth || !videoEl.videoHeight || videoEl.videoWidth === 0 || videoEl.videoHeight === 0) {
+      scheduleNextUpload(100);
+      return;
+    }
+
+    isUploading = true;
+
+    try {
+      captureCtx.drawImage(videoEl, 0, 0, captureCanvas.width, captureCanvas.height);
+      const dataUrl = captureCanvas.toDataURL("image/jpeg", 0.92); // Выше качество для лучшего отображения
+      // Буферизация последних кадров для сохранения гифок
+      frameBuffer.push(dataUrl);
+      if (frameBuffer.length > frameBufferMax) {
+        frameBuffer.splice(0, frameBuffer.length - frameBufferMax);
+      }
+      const base64Data = dataUrl.split(",")[1];
+
+      // Асинхронная отправка - не ждем результата, сразу отправляем следующий кадр
+      fetch(`${backendOrigin}/api/detections/stream-frame`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: base64Data })
+      }).catch(err => {
+        console.error("Ошибка при отправке кадра (асинхронный режим)", err);
+      });
+
+      // Детекции обновляются через status-пул, здесь не ждем
+    } catch (error) {
+      console.error("Ошибка при захвате кадра", error);
+    } finally {
+      isUploading = false;
+      // Минимальная задержка для максимального FPS
+      scheduleNextUpload(Math.max(16, uploadIntervalMs * 0.5)); // 60 FPS максимум
+    }
+  }
+
   async function startWebcam() {
     // Если режим сервера, запускаем серверный стрим
     if (streamMode === 'server') {
       startServerStream();
+      return;
+    }
+    
+    // Если включен асинхронный поток, используем его
+    if (useAsyncStream) {
+      startFrontendStream();
+      // Запускаем локальную камеру для захвата кадров
+      await startLocalCameraForStream();
       return;
     }
     
@@ -1003,6 +1102,76 @@
     }
   }
 
+  // Запуск локальной камеры для захвата кадров в асинхронном режиме
+  async function startLocalCameraForStream() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      updateStatus("Браузер не поддерживает getUserMedia", "error");
+      errorMessageEl.textContent = "Используйте современный браузер (Chrome/Edge/Firefox).";
+      return;
+    }
+
+    const tryConstraints = async (constraints) => {
+      try {
+        return await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (e) {
+        return null;
+      }
+    };
+
+    const attempts = [
+      { video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: { ideal: "environment" } }, audio: false },
+      { video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: { ideal: "user" } }, audio: false },
+      { video: true, audio: false }
+    ];
+
+    let stream = null;
+    for (const c of attempts) {
+      stream = await tryConstraints(c);
+      if (stream) break;
+    }
+
+    if (!stream) {
+      updateStatus("Нет доступа к камере", "error");
+      errorMessageEl.textContent = "Камера недоступна или отклонено разрешение.";
+      return;
+    }
+
+    try {
+      if (videoEl.srcObject) {
+        const oldStream = videoEl.srcObject;
+        oldStream.getTracks().forEach(track => track.stop());
+      }
+
+      videoEl.srcObject = stream;
+      videoEl.style.display = 'none'; // Скрываем, т.к. показываем server-stream
+
+      const metadataLoaded = new Promise((resolve) => {
+        if (videoEl.readyState >= HTMLMediaElement.HAVE_METADATA) {
+          resolve();
+          return;
+        }
+        const handler = () => {
+          videoEl.removeEventListener("loadedmetadata", handler);
+          resolve();
+        };
+        videoEl.addEventListener("loadedmetadata", handler);
+      });
+
+      await metadataLoaded;
+      resizeCanvases();
+      
+      // Запускаем отправку кадров с высокой частотой
+      scheduleNextUpload(16); // ~60 FPS
+      updateStatus("Асинхронный поток активен");
+    } catch (error) {
+      console.error("Ошибка инициализации видео", error);
+      updateStatus("Ошибка видео", "error");
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    }
+  }
+
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       clearTimeout(uploadTimer);
@@ -1073,6 +1242,11 @@
   });
   statusUpdateInterval = setInterval(updateDetectionsStatus, 1000);
   loadModels();
+  
+  // Проверяем, нужно ли использовать асинхронный поток
+  // Можно включить через параметр URL: ?async=true
+  const urlParams = new URLSearchParams(window.location.search);
+  useAsyncStream = urlParams.get('async') === 'true' || urlParams.get('async') === '1';
   
   // На основной странице используем локальную камеру (режим разработки)
   streamMode = 'local';

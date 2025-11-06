@@ -5,6 +5,7 @@ import base64
 import glob
 import logging
 import os
+import queue
 import threading
 import time
 from pathlib import Path
@@ -28,14 +29,14 @@ CAMERA_SCAN_LIMIT = int(os.getenv('CAMERA_SCAN_LIMIT', '5'))
 CAPTURE_RETRY_DELAY = float(os.getenv('CAPTURE_RETRY_DELAY', '1.0'))
 LOCAL_CAMERA_ENABLED = str(os.getenv('LOCAL_CAMERA_ENABLED', '1')).lower() in {'1', 'true', 'yes', 'on'}
 # Performance tuning
-STREAM_MAX_FPS = float(os.getenv('STREAM_MAX_FPS', '20'))  # частота обновления RAW потока (fps)
-INFER_FPS = float(os.getenv('INFER_FPS', '5'))            # частота инференса (fps)
+STREAM_MAX_FPS = float(os.getenv('STREAM_MAX_FPS', '60'))  # частота обновления RAW потока (fps)
+INFER_FPS = float(os.getenv('INFER_FPS', '50'))            # частота инференса (fps)
 INFER_IMGSZ = int(os.getenv('INFER_IMGSZ', '416'))        # размер imgsz для YOLO (кратно 32 обычно)
 # Backend для OpenCV: V4L2 лучше работает с Pi Camera, но можно использовать AUTO для автоматического выбора
 CAMERA_BACKEND = os.getenv('CAMERA_BACKEND', 'AUTO').upper()  # AUTO, V4L2, GSTREAMER, etc.
 
 MODELS_DIR = Path(os.getenv('MODELS_DIR', 'models'))
-MODEL_PATH = os.getenv('MODEL_PATH', 'models/yolov8n.pt')
+MODEL_PATH = os.getenv('MODEL_PATH', 'models/bestfire.pt')
 CONFIDENCE_THRESHOLD = float(os.getenv('CONFIDENCE_THRESHOLD', '0.5'))
 JPEG_QUALITY = int(os.getenv('JPEG_QUALITY', '80'))
 
@@ -67,6 +68,13 @@ detection_results = {
     'frame_raw': None,
     'stable_detections': []
 }
+
+# Буферы для потока с фронтенда
+_frontend_frame_lock = threading.Lock()
+_frontend_frame_raw: Optional[bytes] = None
+_frontend_frame_queue: queue.Queue = queue.Queue(maxsize=2)  # Ограничиваем очередь для избежания задержек
+_frontend_infer_running = False
+_frontend_infer_thread: Optional[threading.Thread] = None
 
 
 def encode_frame_to_jpeg(frame: np.ndarray) -> Optional[bytes]:
@@ -610,6 +618,59 @@ def _mjpeg_generator_raw():
             time.sleep(0.2)
 
 
+def _mjpeg_generator_frontend():
+    """Генератор MJPEG потока для кадров с фронтенда - максимальная скорость"""
+    boundary = b'--frame'
+    while True:
+        with _frontend_frame_lock:
+            frame = _frontend_frame_raw
+        if frame is not None:
+            yield (
+                boundary + b"\r\n"
+                + b'Content-Type: image/jpeg\r\n'
+                + b'Content-Length: ' + str(len(frame)).encode() + b"\r\n\r\n"
+                + frame + b"\r\n"
+            )
+            time.sleep(0.001)  # Минимальная задержка для максимального FPS
+        else:
+            time.sleep(0.01)
+
+
+def _frontend_inference_worker():
+    """Асинхронный обработчик кадров с фронтенда - не блокирует поток"""
+    global _frontend_infer_running
+    min_interval = 1.0 / max(0.1, INFER_FPS)
+    _last_infer_ts = 0.0
+    
+    while _frontend_infer_running:
+        try:
+            now = time.time()
+            if (now - _last_infer_ts) < min_interval:
+                time.sleep(0.005)
+                continue
+            
+            # Пытаемся получить кадр из очереди (не блокируемся надолго)
+            try:
+                frame = _frontend_frame_queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            
+            # Очищаем очередь от старых кадров, оставляем только последний
+            while not _frontend_frame_queue.empty():
+                try:
+                    _frontend_frame_queue.get_nowait()
+                except queue.Empty:
+                    break
+            
+            if frame is not None:
+                _last_infer_ts = now
+                # Асинхронная обработка - не блокирует поток
+                detection_service.analyze_frame(frame, update_state=True, notify=True)
+        except Exception as exc:
+            logger.error('Ошибка в обработчике фронтенд кадров: %s', exc)
+            time.sleep(0.1)
+
+
 @app.get('/')
 def index():
     state = detection_results.copy()
@@ -641,6 +702,75 @@ def video_feed_raw():
     response.headers['Pragma'] = 'no-cache'
     response.headers['Connection'] = 'keep-alive'
     return response
+
+
+@app.get('/video_feed_frontend')
+def video_feed_frontend():
+    """MJPEG поток для кадров с фронтенда - максимальная скорость без задержек"""
+    response = Response(_mjpeg_generator_frontend(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Connection'] = 'keep-alive'
+    return response
+
+
+@app.post('/stream_frame')
+def stream_frame():
+    """
+    Принимает кадр с фронтенда, немедленно сохраняет для ретрансляции,
+    и ставит в очередь для асинхронной обработки
+    """
+    global _frontend_frame_raw, _frontend_infer_running, _frontend_infer_thread
+    
+    payload = request.get_json(silent=True) or {}
+    image_b64 = payload.get('image')
+    
+    if not image_b64:
+        return jsonify({'error': 'image is required'}), 400
+    
+    try:
+        # Декодируем кадр
+        frame_bytes = base64.b64decode(image_b64)
+        frame = cv2.imdecode(np.frombuffer(frame_bytes, np.uint8), cv2.IMREAD_COLOR)
+        
+        if frame is None:
+            return jsonify({'error': 'Unable to decode image'}), 400
+        
+        # НЕМЕДЛЕННО сохраняем RAW кадр для ретрансляции (без задержек)
+        raw_jpeg = encode_frame_to_jpeg(frame)
+        if raw_jpeg:
+            with _frontend_frame_lock:
+                _frontend_frame_raw = raw_jpeg
+        
+        # Ставим в очередь для асинхронной обработки (не блокируем ответ)
+        # Очищаем очередь от старых кадров, оставляем только последний
+        while not _frontend_frame_queue.empty():
+            try:
+                _frontend_frame_queue.get_nowait()
+            except queue.Empty:
+                break
+        
+        try:
+            _frontend_frame_queue.put_nowait(frame.copy())
+        except queue.Full:
+            # Если очередь полная, просто пропускаем - это нормально для высокой частоты
+            pass
+        
+        # Запускаем поток обработки если еще не запущен
+        if not _frontend_infer_running:
+            _frontend_infer_running = True
+            _frontend_infer_thread = threading.Thread(target=_frontend_inference_worker, daemon=True)
+            _frontend_infer_thread.start()
+        
+        # Немедленно возвращаем ответ - не ждем инференса
+        return jsonify({
+            'status': 'ok',
+            'queued': True
+        })
+        
+    except Exception as exc:
+        logger.error('Ошибка при приеме кадра с фронтенда: %s', exc)
+        return jsonify({'error': 'Unable to process frame', 'details': str(exc)}), 500
 
 
 @app.get('/models')
