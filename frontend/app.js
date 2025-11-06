@@ -16,9 +16,17 @@
   let uploadIntervalMs = 400;
   const captureCanvas = document.createElement("canvas");
   const captureCtx = captureCanvas.getContext("2d", { willReadFrequently: true });
-  const backendOrigin = window.location.hostname === "localhost"
-    ? "http://localhost:8080"
-    : window.location.origin;
+  // Определяем origin бэкенда: для localhost используем порт 8080, иначе используем тот же хост и порт 8080
+  const backendOrigin = (() => {
+    const hostname = window.location.hostname;
+    const protocol = window.location.protocol;
+    // Если localhost или 127.0.0.1, используем localhost:8080
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return "http://localhost:8080";
+    }
+    // Для доступа по сети (Ethernet) используем тот же хост, но порт 8080
+    return `${protocol}//${hostname}:8080`;
+  })();
   
   // Режим работы: 'local' (локальная камера для разработки), 'server' (серверный стрим для Raspberry Pi), или 'frontend-stream' (асинхронный поток с фронтенда)
   let streamMode = 'local'; // По умолчанию локальная камера для разработки

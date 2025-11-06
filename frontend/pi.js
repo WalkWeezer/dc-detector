@@ -8,9 +8,17 @@
   const detectionConfidenceEl = document.getElementById('detection-confidence');
   const errorMessageEl = document.getElementById('error-message');
 
-  const backendOrigin = window.location.hostname === 'localhost'
-    ? 'http://localhost:8080'
-    : window.location.origin;
+  // Определяем origin бэкенда: для localhost используем порт 8080, иначе используем тот же хост и порт 8080
+  const backendOrigin = (() => {
+    const hostname = window.location.hostname;
+    const protocol = window.location.protocol;
+    // Если localhost или 127.0.0.1, используем localhost:8080
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:8080';
+    }
+    // Для доступа по сети (Ethernet) используем тот же хост, но порт 8080
+    return `${protocol}//${hostname}:8080`;
+  })();
 
   function updateStatus(text, cls) {
     statusIndicator.textContent = text;

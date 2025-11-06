@@ -35,7 +35,7 @@ Thumbs.db
 archive/
 
 # Runtime data
-data/detections/*.json
+data/detections/saved/*.json
 
 # Node/NPM
 node_modules/
