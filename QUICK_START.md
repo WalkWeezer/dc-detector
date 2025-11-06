@@ -67,8 +67,9 @@ sudo ./scripts/install-systemd.sh
 
 ### Видеопоток
 
-- Главная страница `/` — локальная камера клиента (удобно для разработки)
-- Страница `/pi.html` — поток с камеры Raspberry Pi (серверный MJPEG)
+- Главная страница `/` или `/devtool.html` — поток с веб‑камеры клиента (как в Windows)
+- Для режима «поток с фронтенда» на Raspberry Pi установите `LOCAL_CAMERA_ENABLED=0` в `.env`
+- Откройте: `http://<IP-raspberry-pi>/devtool.html?async=true` — асинхронный поток с максимальным FPS
 - Доступ по локальной сети: `http://<IP-raspberry-pi>/` или `https://<IP-raspberry-pi>/`
 - Фронтенд обслуживается nginx на 80/443 (самоподписанный сертификат генерируется в образе).
 - Для доступа к камере на IP используйте HTTPS: https://<IP>/ и примите сертификат. На `localhost` HTTPS не обязателен.
@@ -84,12 +85,16 @@ sudo ./scripts/install-systemd.sh
 
 2. Рекомендуемые переменные в `.env`:
    ```dotenv
-   VIDEO_DEVICE=/dev/video0
-   LOCAL_CAMERA_ENABLED=1
-   CAMERA_BACKEND=V4L2
-   CAMERA_INDEX=0
-   CAMERA_SCAN_LIMIT=1
-   CAPTURE_RETRY_DELAY=0.5
+  # Для потока с фронтенда (камера клиента, как на Windows):
+  LOCAL_CAMERA_ENABLED=0
+
+  # Если хотите использовать Pi Camera напрямую (альтернативный режим):
+  # VIDEO_DEVICE=/dev/video0
+  # LOCAL_CAMERA_ENABLED=1
+  # CAMERA_BACKEND=V4L2
+  # CAMERA_INDEX=0
+  # CAMERA_SCAN_LIMIT=1
+  # CAPTURE_RETRY_DELAY=0.5
    STREAM_MAX_FPS=20   # FPS RAW MJPEG потока
    INFER_FPS=5         # FPS инференса YOLO
    INFER_IMGSZ=416     # размер входа модели (320/384/416)
