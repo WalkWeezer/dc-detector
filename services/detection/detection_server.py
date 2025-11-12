@@ -33,7 +33,7 @@ STREAM_MAX_FPS = float(os.getenv('STREAM_MAX_FPS', '60'))  # частота об
 INFER_FPS = float(os.getenv('INFER_FPS', '50'))            # частота инференса (fps)
 INFER_IMGSZ = int(os.getenv('INFER_IMGSZ', '416'))        # размер imgsz для YOLO (кратно 32 обычно)
 # Backend для OpenCV: V4L2 лучше работает с Pi Camera, но можно использовать AUTO для автоматического выбора
-CAMERA_BACKEND = os.getenv('CAMERA_BACKEND', 'AUTO').upper()  # AUTO, V4L2, GSTREAMER, etc.
+CAMERA_BACKEND = os.getenv('CAMERA_BACKEND', 'V4L2').upper()  # AUTO, V4L2, GSTREAMER, etc.
 
 MODELS_DIR = Path(os.getenv('MODELS_DIR', 'models'))
 MODEL_PATH = os.getenv('MODEL_PATH', 'models/bestfire.pt')
@@ -435,6 +435,15 @@ class DetectionService:
         
         # Настройка параметров камеры для лучшей производительности
         try:
+            # Для V4L2 (PiCamera2) может потребоваться установить формат пикселей
+            if backend == cv2.CAP_V4L2:
+                # Пробуем установить формат YUYV (часто поддерживается PiCamera2)
+                try:
+                    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('Y', 'U', 'Y', 'V'))
+                    logger.debug('Установлен формат YUYV для V4L2')
+                except Exception as e:
+                    logger.debug('Не удалось установить формат YUYV: %s', e)
+            
             # Устанавливаем разрешение (если поддерживается)
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
@@ -444,21 +453,36 @@ class DetectionService:
             logger.debug('Не удалось установить некоторые параметры камеры: %s', e)
         
         # ВАЖНО: Даем время на инициализацию камеры (особенно для PiCamera2)
-        time.sleep(0.5)
+        # PiCamera2 может требовать больше времени для инициализации
+        time.sleep(1.0)
         
         # Проверяем, что камера действительно работает
         # Пробуем несколько раз, так как первое чтение может не сработать
+        # Для PiCamera2 может потребоваться больше попыток
         ret = False
         frame = None
-        for attempt in range(3):
+        max_attempts = 5
+        for attempt in range(max_attempts):
             ret, frame = cap.read()
             if ret and frame is not None:
+                logger.debug('✅ Кадр успешно прочитан с попытки %d/%d', attempt + 1, max_attempts)
                 break
-            if attempt < 2:  # Не ждем после последней попытки
-                time.sleep(0.2)
+            if attempt < max_attempts - 1:  # Не ждем после последней попытки
+                wait_time = 0.3 * (attempt + 1)  # Увеличиваем время ожидания с каждой попыткой
+                logger.debug('Попытка %d/%d: кадр не получен, ожидание %.1f сек...', 
+                           attempt + 1, max_attempts, wait_time)
+                time.sleep(wait_time)
         
         if not ret or frame is None:
-            logger.warning('Камера открыта, но не может получать кадры после %d попыток', 3)
+            logger.warning('Камера открыта, но не может получать кадры после %d попыток', max_attempts)
+            # Пробуем получить информацию о камере для диагностики
+            try:
+                width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+                height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+                fourcc = cap.get(cv2.CAP_PROP_FOURCC)
+                logger.debug('Параметры камеры: %dx%d, FOURCC=%s', width, height, fourcc)
+            except Exception as e:
+                logger.debug('Не удалось получить параметры камеры: %s', e)
             cap.release()
             self.scan_cameras(force=True)
             return None
