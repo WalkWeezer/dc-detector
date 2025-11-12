@@ -16,7 +16,7 @@ from flask import Flask, Response, jsonify, request
 from tracking.sort_tracker import SortTracker
 
 # Импорты модулей
-from camera.capture import open_capture, Picamera2Wrapper
+from camera.capture import open_capture, Picamera2Wrapper, PICAMERA2_AVAILABLE
 from camera.servos import ServoController
 from detection.inference import InferenceEngine
 from models.manager import ModelManager
@@ -414,12 +414,39 @@ detection_service = DetectionService(MODEL_PATH)
 
 @app.get('/video_feed_raw')
 def video_feed_raw():
-    """Сырой MJPEG поток"""
-    def get_frame():
-        return detection_results.get('frame_raw')
+    """Сырой MJPEG поток (использует рабочий скрипт)"""
+    from camera.capture import capture_frame_jpeg, picam2
+    
+    def mjpeg_generator():
+        """Генератор MJPEG потока (как в рабочем скрипте)"""
+        boundary = b'--frame'
+        while True:
+            if picam2 is not None:
+                frame = capture_frame_jpeg()
+                if frame is not None:
+                    yield (
+                        boundary + b"\r\n"
+                        + b'Content-Type: image/jpeg\r\n'
+                        + b'Content-Length: ' + str(len(frame)).encode() + b"\r\n\r\n"
+                        + frame + b"\r\n"
+                    )
+                    time.sleep(0.033)  # ~30 FPS как в рабочем скрипте
+                else:
+                    time.sleep(0.1)
+            else:
+                # Fallback на старый метод
+                frame = detection_results.get('frame_raw')
+                if frame is not None:
+                    yield (
+                        boundary + b"\r\n"
+                        + b'Content-Type: image/jpeg\r\n'
+                        + b'Content-Length: ' + str(len(frame)).encode() + b"\r\n\r\n"
+                        + frame + b"\r\n"
+                    )
+                time.sleep(0.01)
     
     response = Response(
-        mjpeg_generator_raw(get_frame, interval=0.01),
+        mjpeg_generator(),
         mimetype='multipart/x-mixed-replace; boundary=frame'
     )
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
@@ -577,8 +604,14 @@ def health():
 
 def main():
     """Главная функция"""
+    from camera.capture import init_picamera2, stop_picamera2
+    
     debug_enabled = str(os.environ.get('DEBUG', '0')).lower() in ('1', 'true', 'yes')
     try:
+        # Инициализируем Picamera2 (рабочий скрипт)
+        if PICAMERA2_AVAILABLE and LOCAL_CAMERA_ENABLED:
+            init_picamera2()
+        
         if LOCAL_CAMERA_ENABLED:
             if debug_enabled:
                 if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
@@ -590,6 +623,7 @@ def main():
         app.run(host='0.0.0.0', port=8001, debug=debug_enabled, threaded=True)
     finally:
         detection_service.stop()
+        stop_picamera2()
 
 
 if __name__ == '__main__':
