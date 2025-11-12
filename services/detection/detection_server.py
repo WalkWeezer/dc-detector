@@ -48,16 +48,48 @@ class Picamera2Wrapper:
     def open(self) -> bool:
         """Открывает камеру и настраивает конфигурацию"""
         try:
-            # Создаем конфигурацию для видео
-            video_config = self.picam2.create_video_configuration(
-                main={"size": (self.width, self.height)}
-            )
-            self.picam2.configure(video_config)
+            # Для захвата кадров используем preview конфигурацию (быстрее, чем video)
+            # или video конфигурацию, если нужна более высокая точность
+            # Preview конфигурация оптимизирована для частого захвата кадров
+            try:
+                # Пробуем preview конфигурацию (лучше для захвата кадров)
+                preview_config = self.picam2.create_preview_configuration(
+                    main={"size": (self.width, self.height)},
+                    buffer_count=2  # Минимальная буферизация для низкой задержки
+                )
+                self.picam2.configure(preview_config)
+                logger.debug('Используется preview конфигурация для Picamera2')
+            except Exception as e:
+                # Если preview не работает, пробуем video конфигурацию
+                logger.debug('Preview конфигурация не доступна, используем video: %s', e)
+                video_config = self.picam2.create_video_configuration(
+                    main={"size": (self.width, self.height)}
+                )
+                self.picam2.configure(video_config)
+            
             self.picam2.start()
             self._is_opened = True
-            # Даем время на инициализацию
+            # Даем время на инициализацию камеры
             time.sleep(0.5)
-            return True
+            
+            # Проверяем, что камера действительно работает
+            # Пробуем захватить тестовый кадр
+            try:
+                test_frame = self.picam2.capture_array()
+                if test_frame is not None and test_frame.size > 0:
+                    logger.debug('Тестовый кадр успешно захвачен: %s', test_frame.shape)
+                    return True
+                else:
+                    logger.warning('Тестовый кадр пустой')
+                    self.picam2.stop()
+                    self._is_opened = False
+                    return False
+            except Exception as e:
+                logger.warning('Не удалось захватить тестовый кадр: %s', e)
+                self.picam2.stop()
+                self._is_opened = False
+                return False
+                
         except Exception as e:
             logger.error('Ошибка при открытии Picamera2: %s', e)
             self._is_opened = False
@@ -74,10 +106,16 @@ class Picamera2Wrapper:
         
         try:
             # Получаем кадр в формате numpy array
+            # capture_array() возвращает кадр из основного потока (main stream)
             frame = self.picam2.capture_array()
+            
+            if frame is None or frame.size == 0:
+                return False, None
+            
             # Picamera2 возвращает кадр в формате RGB, нужно конвертировать в BGR для OpenCV
             if len(frame.shape) == 3 and frame.shape[2] == 3:
                 frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            
             return True, frame
         except Exception as e:
             logger.debug('Ошибка при чтении кадра из Picamera2: %s', e)
