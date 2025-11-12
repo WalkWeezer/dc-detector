@@ -33,6 +33,36 @@ docker compose down
 
 ## 3. Raspberry Pi (рабочий режим)
 
+### Вариант A: Прямой запуск detection service (рекомендуется для камеры)
+
+Если у вас проблемы с Docker и доступом к камере, можно запустить detection service напрямую:
+
+1. Установите зависимости:
+   ```bash
+   sudo apt update
+   sudo apt install -y python3-picamera2 python3-pip
+   pip3 install flask
+   ```
+
+2. Запустите скрипт:
+   ```bash
+   ./scripts/run-detection-direct.sh
+   ```
+
+   Или вручную:
+   ```bash
+   cd services/detection
+   python3 detection_server.py
+   ```
+
+3. Сервис будет доступен на `http://localhost:8001`
+   - Видеопоток: `http://localhost:8001/video_feed_raw`
+   - Health check: `http://localhost:8001/health`
+
+4. Backend и Frontend можно запустить в Docker, они будут подключаться к detection service на `http://localhost:8001`
+
+### Вариант B: Полный запуск через Docker
+
 ### Первый запуск
 
 1. Запустите скрипт инициализации:
