@@ -21,8 +21,97 @@ from ultralytics import YOLO
 
 from tracking.sort_tracker import SortTracker
 
+# Попытка импортировать picamera2 (доступно только на Raspberry Pi)
+try:
+    from picamera2 import Picamera2
+    PICAMERA2_AVAILABLE = True
+except ImportError:
+    PICAMERA2_AVAILABLE = False
+    Picamera2 = None
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+
+class Picamera2Wrapper:
+    """Обертка для Picamera2, которая работает как cv2.VideoCapture"""
+    
+    def __init__(self, camera_index: int = 0, width: int = 1280, height: int = 720):
+        if not PICAMERA2_AVAILABLE:
+            raise RuntimeError('picamera2 не доступен')
+        
+        self.picam2 = Picamera2(camera_index)
+        self.width = width
+        self.height = height
+        self._is_opened = False
+        
+    def open(self) -> bool:
+        """Открывает камеру и настраивает конфигурацию"""
+        try:
+            # Создаем конфигурацию для видео
+            video_config = self.picam2.create_video_configuration(
+                main={"size": (self.width, self.height)}
+            )
+            self.picam2.configure(video_config)
+            self.picam2.start()
+            self._is_opened = True
+            # Даем время на инициализацию
+            time.sleep(0.5)
+            return True
+        except Exception as e:
+            logger.error('Ошибка при открытии Picamera2: %s', e)
+            self._is_opened = False
+            return False
+    
+    def isOpened(self) -> bool:
+        """Проверяет, открыта ли камера"""
+        return self._is_opened
+    
+    def read(self):
+        """Читает кадр из камеры"""
+        if not self._is_opened:
+            return False, None
+        
+        try:
+            # Получаем кадр в формате numpy array
+            frame = self.picam2.capture_array()
+            # Picamera2 возвращает кадр в формате RGB, нужно конвертировать в BGR для OpenCV
+            if len(frame.shape) == 3 and frame.shape[2] == 3:
+                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            return True, frame
+        except Exception as e:
+            logger.debug('Ошибка при чтении кадра из Picamera2: %s', e)
+            return False, None
+    
+    def release(self):
+        """Освобождает ресурсы камеры"""
+        try:
+            if self._is_opened:
+                self.picam2.stop()
+                self._is_opened = False
+        except Exception as e:
+            logger.debug('Ошибка при освобождении Picamera2: %s', e)
+    
+    def get(self, prop_id):
+        """Получает свойство камеры (для совместимости с cv2.VideoCapture)"""
+        if prop_id == cv2.CAP_PROP_FRAME_WIDTH:
+            return self.width
+        elif prop_id == cv2.CAP_PROP_FRAME_HEIGHT:
+            return self.height
+        elif prop_id == cv2.CAP_PROP_FPS:
+            return 30.0  # Примерное значение
+        elif prop_id == cv2.CAP_PROP_FOURCC:
+            return 0  # Не применимо для Picamera2
+        return 0
+    
+    def set(self, prop_id, value):
+        """Устанавливает свойство камеры (для совместимости с cv2.VideoCapture)"""
+        # Picamera2 не поддерживает динамическое изменение свойств после конфигурации
+        return False
+    
+    def getBackendName(self) -> str:
+        """Возвращает имя backend"""
+        return 'PICAMERA2'
 
 app = Flask(__name__)
 
@@ -331,7 +420,7 @@ class DetectionService:
 
     def _capture_loop(self):
         current_index: Optional[int] = None
-        cap: Optional[cv2.VideoCapture] = None
+        cap = None  # Может быть cv2.VideoCapture или Picamera2Wrapper
         min_interval = 1.0 / max(1.0, STREAM_MAX_FPS)
         while self.capture_running:
             try:
@@ -387,6 +476,26 @@ class DetectionService:
                 logger.error('Ошибка в цикле инференса: %s', exc)
                 time.sleep(0.2)
 
+    def _try_picamera2(self, index: int):
+        """Попытка использовать Picamera2 для захвата кадров"""
+        if not PICAMERA2_AVAILABLE:
+            logger.debug('picamera2 не доступен, пропускаем')
+            return None
+        
+        logger.info('Попытка использовать Picamera2 для захвата кадров')
+        
+        try:
+            wrapper = Picamera2Wrapper(camera_index=index, width=1280, height=720)
+            if wrapper.open():
+                logger.info('✅ Камера открыта через Picamera2')
+                return wrapper
+            else:
+                wrapper.release()
+        except Exception as e:
+            logger.debug('Ошибка при открытии камеры через Picamera2: %s', e)
+        
+        return None
+    
     def _try_rpicam_gstreamer(self, index: int) -> Optional[cv2.VideoCapture]:
         """Попытка использовать rpicam-vid через GStreamer pipeline для PiCamera2"""
         # Проверяем доступность rpicam-vid
@@ -425,14 +534,32 @@ class DetectionService:
         
         return None
     
-    def _open_capture(self, index: int) -> Optional[cv2.VideoCapture]:
+    def _open_capture(self, index: int):
         if index < 0:
             logger.error('Индекс камеры должен быть неотрицательным, получено %s', index)
             return None
 
         logger.info('🎥 Подключение к локальной камере %s (backend: %s)', index, CAMERA_BACKEND)
         
-        # Определяем backend для OpenCV
+        # ПРИОРИТЕТ 1: Пробуем Picamera2 (нативный API для PiCamera2)
+        if PICAMERA2_AVAILABLE:
+            logger.info('Пробуем использовать Picamera2 (нативный API для PiCamera2)')
+            cap = self._try_picamera2(index)
+            if cap and cap.isOpened():
+                # Проверяем, что камера действительно работает
+                time.sleep(0.5)
+                ret, frame = cap.read()
+                if ret and frame is not None and (hasattr(frame, 'size') and frame.size > 0):
+                    logger.info('✅ Камера успешно подключена через Picamera2 (разрешение: %dx%d)', 
+                               frame.shape[1], frame.shape[0])
+                    detection_results['active_camera'] = index
+                    return cap
+                else:
+                    if cap is not None:
+                        cap.release()
+                    cap = None
+        
+        # ПРИОРИТЕТ 2: Пробуем указанный backend (V4L2, GSTREAMER, AUTO)
         backend = None
         if CAMERA_BACKEND == 'V4L2':
             backend = cv2.CAP_V4L2
@@ -459,7 +586,7 @@ class DetectionService:
                 cap.release()
             logger.warning('Не удалось открыть локальную камеру: %s (backend: %s)', index, CAMERA_BACKEND)
             
-            # Если V4L2 не работает, пробуем GStreamer с libcamera (для PiCamera2)
+            # ПРИОРИТЕТ 3: Если V4L2 не работает, пробуем GStreamer с libcamera (для PiCamera2)
             if CAMERA_BACKEND == 'V4L2':
                 logger.info('V4L2 не работает, пробуем GStreamer с libcamera (rpicam-vid)')
                 cap = self._try_rpicam_gstreamer(index)
@@ -477,7 +604,7 @@ class DetectionService:
                             cap.release()
                         cap = None
             
-            # Если использовался не AUTO backend и GStreamer не помог, попробуем AUTO
+            # ПРИОРИТЕТ 4: Если использовался не AUTO backend и другие методы не помогли, попробуем AUTO
             if cap is None and CAMERA_BACKEND != 'AUTO':
                 logger.info('Попытка открыть камеру с AUTO backend')
                 cap = cv2.VideoCapture(index)
@@ -496,7 +623,7 @@ class DetectionService:
         # PiCamera2 может требовать больше времени для инициализации
         time.sleep(0.5)
         
-        # Проверяем backend камеры (для GStreamer параметры уже заданы в pipeline)
+        # Проверяем backend камеры (для GStreamer и Picamera2 параметры уже заданы)
         actual_backend = None
         try:
             actual_backend = cap.getBackendName()
@@ -504,10 +631,9 @@ class DetectionService:
             pass
         
         # Настройка параметров камеры для лучшей производительности
-        # Для PiCamera2 важно установить параметры ПОСЛЕ небольшой задержки
-        # Пропускаем настройку для GStreamer, так как параметры уже в pipeline
-        if actual_backend and 'GSTREAMER' in actual_backend.upper():
-            logger.debug('Пропускаем настройку параметров для GStreamer (параметры в pipeline)')
+        # Для PiCamera2 и GStreamer параметры уже заданы при конфигурации/pipeline
+        if actual_backend and ('GSTREAMER' in actual_backend.upper() or 'PICAMERA2' in actual_backend.upper()):
+            logger.debug('Пропускаем настройку параметров для %s (параметры уже заданы)', actual_backend)
         else:
             try:
                 # Буферизация: 1 кадр (для минимальной задержки) - устанавливаем первым
