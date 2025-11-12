@@ -7,7 +7,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libglib2.0-0 libsm6 libxext6 libxrender1 ffmpeg curl \
+    libglib2.0-0 libsm6 libxext6 libxrender1 ffmpeg curl \     
+    libcamera-dev \
+    python3-picamera2 \
  && rm -rf /var/lib/apt/lists/*
 
 # Попытка установить picamera2

@@ -10,7 +10,10 @@ services:
     tmpfs:
       - /tmp:rw,exec,nosuid,nodev,size=256m
     devices:
+      - "/dev/vchiq:/dev/vchiq"
+      - "/dev/vcsm:/dev/vcsm"
       - "/dev/video0:/dev/video0"
+    privileged: true
     environment:
       - CAMERA_INDEX=${CAMERA_INDEX:-0}
       - CAMERA_SCAN_LIMIT=${CAMERA_SCAN_LIMIT:-5}
