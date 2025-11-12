@@ -433,54 +433,84 @@ class DetectionService:
                 self.scan_cameras(force=True)
                 return None
         
+        # ВАЖНО: Даем время на инициализацию камеры перед настройкой параметров
+        # PiCamera2 может требовать больше времени для инициализации
+        time.sleep(0.5)
+        
         # Настройка параметров камеры для лучшей производительности
+        # Для PiCamera2 важно установить параметры ПОСЛЕ небольшой задержки
         try:
-            # Для V4L2 (PiCamera2) может потребоваться установить формат пикселей
+            # Буферизация: 1 кадр (для минимальной задержки) - устанавливаем первым
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            
+            # Для V4L2 (PiCamera2) пробуем разные форматы пикселей
             if backend == cv2.CAP_V4L2:
-                # Пробуем установить формат YUYV (часто поддерживается PiCamera2)
-                try:
-                    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('Y', 'U', 'Y', 'V'))
-                    logger.debug('Установлен формат YUYV для V4L2')
-                except Exception as e:
-                    logger.debug('Не удалось установить формат YUYV: %s', e)
+                # Список форматов для попытки (в порядке приоритета)
+                formats_to_try = [
+                    ('YUYV', cv2.VideoWriter_fourcc('Y', 'U', 'Y', 'V')),
+                    ('RGB3', cv2.VideoWriter_fourcc('R', 'G', 'B', '3')),
+                    ('BGR3', cv2.VideoWriter_fourcc('B', 'G', 'R', '3')),
+                ]
+                
+                format_set = False
+                for fmt_name, fmt_code in formats_to_try:
+                    try:
+                        if cap.set(cv2.CAP_PROP_FOURCC, fmt_code):
+                            logger.debug('Попытка установить формат %s для V4L2', fmt_name)
+                            # Проверяем, что формат действительно установлен
+                            actual_fourcc = cap.get(cv2.CAP_PROP_FOURCC)
+                            if actual_fourcc == fmt_code:
+                                logger.info('✅ Установлен формат %s для V4L2', fmt_name)
+                                format_set = True
+                                break
+                    except Exception as e:
+                        logger.debug('Не удалось установить формат %s: %s', fmt_name, e)
+                        continue
+                
+                if not format_set:
+                    logger.debug('Не удалось установить явный формат, используем формат по умолчанию')
             
             # Устанавливаем разрешение (если поддерживается)
+            # Для PiCamera2 лучше устанавливать после формата
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-            # Буферизация: 1 кадр (для минимальной задержки)
-            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            
         except Exception as e:
             logger.debug('Не удалось установить некоторые параметры камеры: %s', e)
         
-        # ВАЖНО: Даем время на инициализацию камеры (особенно для PiCamera2)
-        # PiCamera2 может требовать больше времени для инициализации
-        time.sleep(1.0)
+        # Дополнительная задержка после настройки параметров
+        time.sleep(0.5)
         
         # Проверяем, что камера действительно работает
         # Пробуем несколько раз, так как первое чтение может не сработать
         # Для PiCamera2 может потребоваться больше попыток
         ret = False
         frame = None
-        max_attempts = 5
+        max_attempts = 10  # Увеличиваем количество попыток
         for attempt in range(max_attempts):
             ret, frame = cap.read()
-            if ret and frame is not None:
-                logger.debug('✅ Кадр успешно прочитан с попытки %d/%d', attempt + 1, max_attempts)
+            if ret and frame is not None and frame.size > 0:
+                logger.info('✅ Кадр успешно прочитан с попытки %d/%d (размер: %dx%d)', 
+                           attempt + 1, max_attempts, frame.shape[1], frame.shape[0])
                 break
+            
             if attempt < max_attempts - 1:  # Не ждем после последней попытки
-                wait_time = 0.3 * (attempt + 1)  # Увеличиваем время ожидания с каждой попыткой
-                logger.debug('Попытка %d/%d: кадр не получен, ожидание %.1f сек...', 
-                           attempt + 1, max_attempts, wait_time)
+                wait_time = 0.2 * (attempt + 1)  # Увеличиваем время ожидания с каждой попыткой
+                logger.debug('Попытка %d/%d: кадр не получен (ret=%s, frame=%s), ожидание %.1f сек...', 
+                           attempt + 1, max_attempts, ret, 'None' if frame is None else f'{frame.shape if hasattr(frame, "shape") else "invalid"}', wait_time)
                 time.sleep(wait_time)
         
-        if not ret or frame is None:
+        if not ret or frame is None or (hasattr(frame, 'size') and frame.size == 0):
             logger.warning('Камера открыта, но не может получать кадры после %d попыток', max_attempts)
             # Пробуем получить информацию о камере для диагностики
             try:
                 width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
                 height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
                 fourcc = cap.get(cv2.CAP_PROP_FOURCC)
-                logger.debug('Параметры камеры: %dx%d, FOURCC=%s', width, height, fourcc)
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                backend_name = cap.getBackendName()
+                logger.warning('Параметры камеры: %dx%d, FOURCC=%s, FPS=%.2f, backend=%s', 
+                             width, height, fourcc, fps, backend_name)
             except Exception as e:
                 logger.debug('Не удалось получить параметры камеры: %s', e)
             cap.release()
