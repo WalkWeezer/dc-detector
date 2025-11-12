@@ -8,6 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 libsm6 libxext6 libxrender1 ffmpeg curl \
+ && (apt-get install -y --no-install-recommends python3-picamera2 || echo "⚠️ python3-picamera2 недоступен (не Raspberry Pi)") \
  && rm -rf /var/lib/apt/lists/*
 
 COPY services/detection/requirements.txt ./requirements.txt
