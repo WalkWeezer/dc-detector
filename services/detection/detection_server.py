@@ -13,15 +13,15 @@ import numpy as np
 import requests
 from flask import Flask, Response, jsonify, request
 
-from .tracking.sort_tracker import SortTracker
+from tracking.sort_tracker import SortTracker
 
 # Импорты модулей
-from .camera.capture import open_capture, Picamera2Wrapper
-from .camera.servos import ServoController
-from .detection.inference import InferenceEngine
-from .models.manager import ModelManager
-from .streaming.generators import mjpeg_generator_raw, mjpeg_generator_detections
-from .tracking.trackers import (
+from camera.capture import open_capture, Picamera2Wrapper
+from camera.servos import ServoController
+from detection.inference import InferenceEngine
+from models.manager import ModelManager
+from streaming.generators import mjpeg_generator_raw, mjpeg_generator_detections
+from tracking.trackers import (
     get_active_trackers, get_tracker_by_id, crop_frame_for_tracker,
     get_tracker_frames, update_tracker_cache
 )
