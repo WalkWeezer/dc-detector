@@ -13,9 +13,12 @@ app = Flask(__name__)
 try:
     from picamera2 import Picamera2
     PICAMERA2_AVAILABLE = True
-except ImportError:
+    print("✅ picamera2 успешно импортирован")
+except ImportError as e:
     PICAMERA2_AVAILABLE = False
     Picamera2 = None
+    print(f"⚠️ Не удалось импортировать picamera2: {e}")
+    print("💡 Убедитесь, что python3-picamera2 установлен в контейнере")
 
 # Глобальная переменная для камеры (как в рабочем скрипте)
 picam2: Optional[Picamera2] = None

@@ -8,8 +8,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 libsm6 libxext6 libxrender1 ffmpeg curl \
- && (apt-get install -y --no-install-recommends python3-picamera2 || echo "⚠️ python3-picamera2 недоступен (не Raspberry Pi)") \
  && rm -rf /var/lib/apt/lists/*
+
+# Попытка установить picamera2
+# Сначала пробуем через apt (только на Raspberry Pi OS)
+# Если не получается, пробуем через pip
+RUN apt-get update && \
+    (apt-get install -y --no-install-recommends python3-picamera2 2>&1 || \
+     (echo "⚠️ python3-picamera2 недоступен через apt, пробуем pip..." && \
+      pip install --no-cache-dir picamera2 2>&1 || \
+      echo "⚠️ picamera2 недоступен ни через apt, ни через pip" )) && \
+    rm -rf /var/lib/apt/lists/* && \
+    (python3 -c "import picamera2; print('✅ picamera2 доступен')" 2>&1 || echo "⚠️ picamera2 не может быть импортирован")
 
 COPY services/detection/requirements.txt ./requirements.txt
 RUN python -m pip install --upgrade pip \
