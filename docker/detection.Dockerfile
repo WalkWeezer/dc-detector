@@ -8,10 +8,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 libsm6 libxext6 libxrender1 ffmpeg curl \
+    gnupg ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
-# Попытка установить Raspberry Pi специфичные пакеты (доступны только на Raspberry Pi OS)
-# Если пакеты недоступны, сборка продолжается без них
+# Добавляем репозитории Raspberry Pi для доступа к libcamera и picamera2
+# Эти пакеты доступны только в репозиториях Raspberry Pi OS
+RUN echo "deb http://archive.raspberrypi.org/debian/ bullseye main" > /etc/apt/sources.list.d/raspi.list && \
+    (apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 82B129927FA3303E || \
+     curl -fsSL https://archive.raspberrypi.org/debian/raspberrypi.gpg.key | apt-key add - || \
+     echo "⚠️ Не удалось добавить ключ Raspberry Pi репозитория")
+
+# Попытка установить Raspberry Pi специфичные пакеты
 RUN apt-get update && \
     (apt-get install -y --no-install-recommends \
         libcamera-dev \
