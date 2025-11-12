@@ -6,6 +6,8 @@ import glob
 import logging
 import os
 import queue
+import shutil
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -385,6 +387,44 @@ class DetectionService:
                 logger.error('Ошибка в цикле инференса: %s', exc)
                 time.sleep(0.2)
 
+    def _try_rpicam_gstreamer(self, index: int) -> Optional[cv2.VideoCapture]:
+        """Попытка использовать rpicam-vid через GStreamer pipeline для PiCamera2"""
+        # Проверяем доступность rpicam-vid
+        rpicam_cmd = shutil.which('rpicam-vid') or shutil.which('libcamera-vid')
+        if not rpicam_cmd:
+            logger.debug('rpicam-vid/libcamera-vid не найден, пропускаем GStreamer pipeline')
+            return None
+        
+        # Проверяем доступность GStreamer backend в OpenCV
+        if not hasattr(cv2, 'CAP_GSTREAMER'):
+            logger.debug('GStreamer backend не доступен в OpenCV')
+            return None
+        
+        logger.info('Попытка использовать rpicam-vid через GStreamer pipeline')
+        
+        # Создаем GStreamer pipeline с libcamera
+        # Используем appsink для передачи кадров в OpenCV
+        pipeline = (
+            f'libcamerasrc camera={index} ! '
+            'video/x-raw,width=1280,height=720,framerate=30/1 ! '
+            'videoconvert ! '
+            'video/x-raw,format=BGR ! '
+            'appsink drop=true max-buffers=1'
+        )
+        
+        try:
+            cap = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
+            if cap and cap.isOpened():
+                logger.info('✅ Камера открыта через GStreamer (libcamera)')
+                return cap
+            else:
+                if cap is not None:
+                    cap.release()
+        except Exception as e:
+            logger.debug('Ошибка при открытии камеры через GStreamer: %s', e)
+        
+        return None
+    
     def _open_capture(self, index: int) -> Optional[cv2.VideoCapture]:
         if index < 0:
             logger.error('Индекс камеры должен быть неотрицательным, получено %s', index)
@@ -408,6 +448,7 @@ class DetectionService:
                 backend = None
         
         # Попытка открыть камеру с указанным backend
+        cap = None
         if backend is not None:
             cap = cv2.VideoCapture(index, backend)
         else:
@@ -416,10 +457,28 @@ class DetectionService:
         if not cap or not cap.isOpened():
             if cap is not None:
                 cap.release()
-            logger.error('Не удалось открыть локальную камеру: %s (backend: %s)', index, CAMERA_BACKEND)
+            logger.warning('Не удалось открыть локальную камеру: %s (backend: %s)', index, CAMERA_BACKEND)
             
-            # Если использовался не AUTO backend, попробуем AUTO
-            if CAMERA_BACKEND != 'AUTO':
+            # Если V4L2 не работает, пробуем GStreamer с libcamera (для PiCamera2)
+            if CAMERA_BACKEND == 'V4L2':
+                logger.info('V4L2 не работает, пробуем GStreamer с libcamera (rpicam-vid)')
+                cap = self._try_rpicam_gstreamer(index)
+                if cap and cap.isOpened():
+                    # Пропускаем настройку параметров для GStreamer, так как они уже в pipeline
+                    time.sleep(0.5)
+                    ret, frame = cap.read()
+                    if ret and frame is not None and frame.size > 0:
+                        logger.info('✅ Камера успешно подключена через GStreamer (разрешение: %dx%d)', 
+                                   frame.shape[1], frame.shape[0])
+                        detection_results['active_camera'] = index
+                        return cap
+                    else:
+                        if cap is not None:
+                            cap.release()
+                        cap = None
+            
+            # Если использовался не AUTO backend и GStreamer не помог, попробуем AUTO
+            if cap is None and CAMERA_BACKEND != 'AUTO':
                 logger.info('Попытка открыть камеру с AUTO backend')
                 cap = cv2.VideoCapture(index)
                 if cap and cap.isOpened():
@@ -429,7 +488,7 @@ class DetectionService:
                         cap.release()
                     self.scan_cameras(force=True)
                     return None
-            else:
+            elif cap is None:
                 self.scan_cameras(force=True)
                 return None
         
@@ -437,46 +496,57 @@ class DetectionService:
         # PiCamera2 может требовать больше времени для инициализации
         time.sleep(0.5)
         
+        # Проверяем backend камеры (для GStreamer параметры уже заданы в pipeline)
+        actual_backend = None
+        try:
+            actual_backend = cap.getBackendName()
+        except Exception:
+            pass
+        
         # Настройка параметров камеры для лучшей производительности
         # Для PiCamera2 важно установить параметры ПОСЛЕ небольшой задержки
-        try:
-            # Буферизация: 1 кадр (для минимальной задержки) - устанавливаем первым
-            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-            
-            # Для V4L2 (PiCamera2) пробуем разные форматы пикселей
-            if backend == cv2.CAP_V4L2:
-                # Список форматов для попытки (в порядке приоритета)
-                formats_to_try = [
-                    ('YUYV', cv2.VideoWriter_fourcc('Y', 'U', 'Y', 'V')),
-                    ('RGB3', cv2.VideoWriter_fourcc('R', 'G', 'B', '3')),
-                    ('BGR3', cv2.VideoWriter_fourcc('B', 'G', 'R', '3')),
-                ]
+        # Пропускаем настройку для GStreamer, так как параметры уже в pipeline
+        if actual_backend and 'GSTREAMER' in actual_backend.upper():
+            logger.debug('Пропускаем настройку параметров для GStreamer (параметры в pipeline)')
+        else:
+            try:
+                # Буферизация: 1 кадр (для минимальной задержки) - устанавливаем первым
+                cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                 
-                format_set = False
-                for fmt_name, fmt_code in formats_to_try:
-                    try:
-                        if cap.set(cv2.CAP_PROP_FOURCC, fmt_code):
-                            logger.debug('Попытка установить формат %s для V4L2', fmt_name)
-                            # Проверяем, что формат действительно установлен
-                            actual_fourcc = cap.get(cv2.CAP_PROP_FOURCC)
-                            if actual_fourcc == fmt_code:
-                                logger.info('✅ Установлен формат %s для V4L2', fmt_name)
-                                format_set = True
-                                break
-                    except Exception as e:
-                        logger.debug('Не удалось установить формат %s: %s', fmt_name, e)
-                        continue
+                # Для V4L2 (PiCamera2) пробуем разные форматы пикселей
+                if backend == cv2.CAP_V4L2:
+                    # Список форматов для попытки (в порядке приоритета)
+                    formats_to_try = [
+                        ('YUYV', cv2.VideoWriter_fourcc('Y', 'U', 'Y', 'V')),
+                        ('RGB3', cv2.VideoWriter_fourcc('R', 'G', 'B', '3')),
+                        ('BGR3', cv2.VideoWriter_fourcc('B', 'G', 'R', '3')),
+                    ]
+                    
+                    format_set = False
+                    for fmt_name, fmt_code in formats_to_try:
+                        try:
+                            if cap.set(cv2.CAP_PROP_FOURCC, fmt_code):
+                                logger.debug('Попытка установить формат %s для V4L2', fmt_name)
+                                # Проверяем, что формат действительно установлен
+                                actual_fourcc = cap.get(cv2.CAP_PROP_FOURCC)
+                                if actual_fourcc == fmt_code:
+                                    logger.info('✅ Установлен формат %s для V4L2', fmt_name)
+                                    format_set = True
+                                    break
+                        except Exception as e:
+                            logger.debug('Не удалось установить формат %s: %s', fmt_name, e)
+                            continue
+                    
+                    if not format_set:
+                        logger.debug('Не удалось установить явный формат, используем формат по умолчанию')
                 
-                if not format_set:
-                    logger.debug('Не удалось установить явный формат, используем формат по умолчанию')
-            
-            # Устанавливаем разрешение (если поддерживается)
-            # Для PiCamera2 лучше устанавливать после формата
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-            
-        except Exception as e:
-            logger.debug('Не удалось установить некоторые параметры камеры: %s', e)
+                # Устанавливаем разрешение (если поддерживается)
+                # Для PiCamera2 лучше устанавливать после формата
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+                
+            except Exception as e:
+                logger.debug('Не удалось установить некоторые параметры камеры: %s', e)
         
         # Дополнительная задержка после настройки параметров
         time.sleep(0.5)
