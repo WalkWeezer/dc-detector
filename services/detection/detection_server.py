@@ -443,10 +443,22 @@ class DetectionService:
         except Exception as e:
             logger.debug('Не удалось установить некоторые параметры камеры: %s', e)
         
+        # ВАЖНО: Даем время на инициализацию камеры (особенно для PiCamera2)
+        time.sleep(0.5)
+        
         # Проверяем, что камера действительно работает
-        ret, frame = cap.read()
+        # Пробуем несколько раз, так как первое чтение может не сработать
+        ret = False
+        frame = None
+        for attempt in range(3):
+            ret, frame = cap.read()
+            if ret and frame is not None:
+                break
+            if attempt < 2:  # Не ждем после последней попытки
+                time.sleep(0.2)
+        
         if not ret or frame is None:
-            logger.warning('Камера открыта, но не может получать кадры')
+            logger.warning('Камера открыта, но не может получать кадры после %d попыток', 3)
             cap.release()
             self.scan_cameras(force=True)
             return None
