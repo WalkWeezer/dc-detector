@@ -60,6 +60,19 @@ docker compose down
    - Health check: `http://localhost:8001/health`
 
 4. Backend и Frontend можно запустить в Docker, они будут подключаться к detection service на `http://localhost:8001`
+   
+   **Важно:** Если detection service запущен напрямую на хосте, нужно настроить backend для подключения к нему:
+   
+   В `.env` или `docker-compose.pi.yml` установите:
+   ```yaml
+   environment:
+     - DETECTION_URL=http://host.docker.internal:8001
+   ```
+   
+   Или если backend тоже запускается напрямую (не в Docker), используйте:
+   ```bash
+   export DETECTION_URL=http://localhost:8001
+   ```
 
 ### Вариант B: Полный запуск через Docker
 
