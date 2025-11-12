@@ -48,6 +48,11 @@ docker compose down
 
 3. Запустите проект:
    ```bash
+   # Если возникают ошибки сети, сначала очистите старые контейнеры и сети:
+   docker compose -f docker-compose.yml -f docker-compose.pi.yml down
+   docker network prune -f
+   
+   # Затем запустите проект:
    docker compose -f docker-compose.yml -f docker-compose.pi.yml up -d --build
    ```
 
