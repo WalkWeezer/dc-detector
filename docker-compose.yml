@@ -54,6 +54,8 @@ services:
       - CAMERA_SCAN_LIMIT=5
       - MODEL_PATH=models/bestfire.pt
       - BACKEND_NOTIFY_URL=http://backend:8080/internal/detections
+    ports:
+      - "8001:8001"
     dns:
       - 8.8.8.8
       - 1.1.1.1
