@@ -1,0 +1,22 @@
+{
+  "id": "1762962156502-lawrwa",
+  "date": "2025-11-12",
+  "savedAt": 1762962159.016,
+  "detection": {
+    "trackId": 1786901479,
+    "bbox": [
+      5.73480224609375,
+      155.07708740234375,
+      239.80136108398438,
+      592.4773559570312
+    ],
+    "label": "cell phone",
+    "classId": 67,
+    "confidence": 0.7671289443969727,
+    "cameraIndex": null,
+    "model": "yolov8n.pt",
+    "capturedAt": 1762962156
+  },
+  "gifPath": "/files/detections/saved/2025-11-12/1762962156502-lawrwa.gif",
+  "jsonPath": "/files/detections/saved/2025-11-12/1762962156502-lawrwa.json"
+}

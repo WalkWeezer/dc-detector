@@ -1,0 +1,22 @@
+{
+  "id": "1762962110511-lccn6z",
+  "date": "2025-11-12",
+  "savedAt": 1762962111.971,
+  "detection": {
+    "trackId": 1691684315,
+    "bbox": [
+      453.6227722167969,
+      96.35906982421875,
+      1168.9814453125,
+      712.7664794921875
+    ],
+    "label": "person",
+    "classId": 0,
+    "confidence": 0.9344092011451721,
+    "cameraIndex": null,
+    "model": "yolov8n.pt",
+    "capturedAt": 1762962110
+  },
+  "gifPath": "/files/detections/saved/2025-11-12/1762962110511-lccn6z.gif",
+  "jsonPath": "/files/detections/saved/2025-11-12/1762962110511-lccn6z.json"
+}
