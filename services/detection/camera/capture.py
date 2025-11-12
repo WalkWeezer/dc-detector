@@ -22,58 +22,54 @@ CAMERA_BACKEND = os.getenv('CAMERA_BACKEND', 'V4L2').upper()
 
 
 class Picamera2Wrapper:
-    """Обертка для Picamera2, которая работает как cv2.VideoCapture"""
+    """Обертка для Picamera2, которая работает как cv2.VideoCapture
+    Использует рабочий подход из эталонного скрипта: create_preview_configuration + capture_file"""
     
     def __init__(self, camera_index: int = 0, width: int = 1280, height: int = 720):
         if not PICAMERA2_AVAILABLE:
             raise RuntimeError('picamera2 не доступен')
         
-        self.picam2 = Picamera2(camera_index)
+        # Как в рабочем скрипте: Picamera2() без индекса или с индексом
+        self.picam2 = Picamera2(camera_index) if camera_index > 0 else Picamera2()
         self.width = width
         self.height = height
         self._is_opened = False
         
     def open(self) -> bool:
-        """Открывает камеру и настраивает конфигурацию"""
+        """Открывает камеру и настраивает конфигурацию (точно как в рабочем скрипте)"""
         try:
-            # Для захвата кадров используем preview конфигурацию (быстрее, чем video)
-            try:
-                preview_config = self.picam2.create_preview_configuration(
-                    main={"size": (self.width, self.height)},
-                    buffer_count=2
-                )
-                self.picam2.configure(preview_config)
-                logger.debug('Используется preview конфигурация для Picamera2')
-            except Exception as e:
-                logger.debug('Preview конфигурация не доступна, используем video: %s', e)
-                video_config = self.picam2.create_video_configuration(
-                    main={"size": (self.width, self.height)}
-                )
-                self.picam2.configure(video_config)
+            # ТОЧНО как в рабочем скрипте: create_preview_configuration, не video!
+            config = self.picam2.create_preview_configuration(main={"size": (self.width, self.height)})
+            self.picam2.configure(config)
+            logger.info('✅ Picamera2 настроен с create_preview_configuration (как в рабочем скрипте)')
             
             self.picam2.start()
             self._is_opened = True
+            
+            # Даем время на инициализацию
             time.sleep(0.5)
             
-            # Проверяем, что камера действительно работает
+            # Проверяем, что камера работает (используем capture_file как в рабочем скрипте)
             try:
-                test_frame = self.picam2.capture_array()
-                if test_frame is not None and test_frame.size > 0:
-                    logger.debug('Тестовый кадр успешно захвачен: %s', test_frame.shape)
+                buffer = BytesIO()
+                self.picam2.capture_file(buffer, format='jpeg')
+                buffer.seek(0)
+                if buffer.getbuffer().nbytes > 0:
+                    logger.info('✅ Тестовый кадр успешно захвачен через capture_file')
                     return True
                 else:
-                    logger.warning('Тестовый кадр пустой')
+                    logger.warning('⚠️ Тестовый кадр пустой')
                     self.picam2.stop()
                     self._is_opened = False
                     return False
             except Exception as e:
-                logger.warning('Не удалось захватить тестовый кадр: %s', e)
+                logger.warning('⚠️ Не удалось захватить тестовый кадр: %s', e)
                 self.picam2.stop()
                 self._is_opened = False
                 return False
                 
         except Exception as e:
-            logger.error('Ошибка при открытии Picamera2: %s', e)
+            logger.error('❌ Ошибка при открытии Picamera2: %s', e)
             self._is_opened = False
             return False
     
@@ -101,11 +97,12 @@ class Picamera2Wrapper:
             return False, None
     
     def capture_jpeg(self) -> Optional[bytes]:
-        """Захватывает кадр напрямую в JPEG (оптимизация для стриминга)"""
+        """Захватывает кадр напрямую в JPEG (точно как в рабочем скрипте)"""
         if not self._is_opened:
             return None
         
         try:
+            # ТОЧНО как в рабочем скрипте
             buffer = BytesIO()
             self.picam2.capture_file(buffer, format='jpeg')
             buffer.seek(0)
@@ -145,22 +142,24 @@ class Picamera2Wrapper:
 
 
 def try_picamera2(index: int) -> Optional[Picamera2Wrapper]:
-    """Попытка использовать Picamera2 для захвата кадров"""
+    """Попытка использовать Picamera2 для захвата кадров (как в рабочем скрипте)"""
     if not PICAMERA2_AVAILABLE:
         logger.debug('picamera2 не доступен, пропускаем')
         return None
     
-    logger.info('Попытка использовать Picamera2 для захвата кадров')
+    logger.info('🎥 Попытка использовать Picamera2 (эталонный подход с video_configuration)')
     
     try:
+        # Используем тот же подход, что в рабочем скрипте
         wrapper = Picamera2Wrapper(camera_index=index, width=1280, height=720)
         if wrapper.open():
-            logger.info('✅ Камера открыта через Picamera2')
+            logger.info('✅ Камера успешно открыта через Picamera2')
             return wrapper
         else:
+            logger.warning('⚠️ Не удалось открыть камеру через Picamera2')
             wrapper.release()
     except Exception as e:
-        logger.debug('Ошибка при открытии камеры через Picamera2: %s', e)
+        logger.warning('⚠️ Ошибка при открытии камеры через Picamera2: %s', e)
     
     return None
 
