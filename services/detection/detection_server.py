@@ -25,18 +25,47 @@ def init_picamera2():
     """Инициализирует Picamera2 (как в рабочем скрипте)"""
     global picam2
     if not PICAMERA2_AVAILABLE:
-        print("picamera2 не доступен")
+        print("⚠️ picamera2 не доступен")
         return False
     
     try:
+        print("🎥 Инициализация Picamera2...")
         picam2 = Picamera2()
+        print("✅ Picamera2 объект создан")
+        
         config = picam2.create_preview_configuration(main={"size": (1280, 720)})
+        print("✅ Конфигурация создана")
+        
         picam2.configure(config)
+        print("✅ Конфигурация применена")
+        
         picam2.start()
-        print("✅ Picamera2 инициализирован (как в рабочем скрипте)")
-        return True
+        print("✅ Picamera2 запущен")
+        
+        # Даем время на инициализацию
+        import time
+        time.sleep(1.0)
+        
+        # Проверяем, что камера работает
+        try:
+            buffer = BytesIO()
+            picam2.capture_file(buffer, format='jpeg')
+            buffer.seek(0)
+            if buffer.getbuffer().nbytes > 0:
+                print(f"✅ Тестовый кадр захвачен: {buffer.getbuffer().nbytes} байт")
+                print("✅ Picamera2 полностью инициализирован (как в рабочем скрипте)")
+                return True
+            else:
+                print("⚠️ Тестовый кадр пустой")
+                return False
+        except Exception as e:
+            print(f"⚠️ Не удалось захватить тестовый кадр: {e}")
+            return False
+            
     except Exception as e:
         print(f"❌ Ошибка при инициализации Picamera2: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
@@ -118,14 +147,26 @@ def health():
 
 def main():
     """Главная функция"""
+    print("🚀 Запуск Detection Service...")
+    print(f"PICAMERA2_AVAILABLE: {PICAMERA2_AVAILABLE}")
+    
     # Инициализируем Picamera2 (рабочий скрипт)
     if PICAMERA2_AVAILABLE:
-        init_picamera2()
+        print("Попытка инициализации Picamera2...")
+        success = init_picamera2()
+        if success:
+            print("✅ Камера успешно инициализирована")
+        else:
+            print("⚠️ Не удалось инициализировать камеру")
+    else:
+        print("⚠️ Picamera2 не доступен (не на Raspberry Pi или не установлен)")
     
     debug_enabled = str(os.environ.get('DEBUG', '0')).lower() in ('1', 'true', 'yes')
+    print(f"🌐 Запуск Flask сервера на 0.0.0.0:8001 (debug={debug_enabled})")
     try:
         app.run(host='0.0.0.0', port=8001, debug=debug_enabled, threaded=True)
     finally:
+        print("🛑 Остановка сервиса...")
         stop_picamera2()
 
 
