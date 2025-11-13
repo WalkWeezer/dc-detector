@@ -1,18 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Detection Service - только видеострим"""
+"""Detection Service - простой видеострим как в рабочем скрипте"""
 
 import os
 import sys
 import time
 import threading
-import socket
 from io import BytesIO
-from typing import Optional, TYPE_CHECKING
-from flask import Flask, Response
-
-if TYPE_CHECKING:
-    from cv2 import VideoCapture
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # Настройка кодировки для Windows
 if sys.platform == 'win32':
@@ -20,26 +15,19 @@ if sys.platform == 'win32':
         sys.stdout.reconfigure(encoding='utf-8')
         sys.stderr.reconfigure(encoding='utf-8')
     except AttributeError:
-        # Для старых версий Python
         import codecs
         sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
         sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
 
-app = Flask(__name__)
-
-# Попытка импортировать picamera2 (доступно только на Raspberry Pi)
-# Сначала пробуем стандартный импорт
+# Попытка импортировать picamera2
+picam2 = None
 PICAMERA2_AVAILABLE = False
-Picamera2 = None
-
 try:
     from picamera2 import Picamera2
     PICAMERA2_AVAILABLE = True
     print("✅ picamera2 успешно импортирован")
 except ImportError:
-    # Если не удалось, пробуем найти системный picamera2
-    # (может быть установлен через apt, но не в venv)
-    import sys
+    # Пробуем найти системный picamera2
     system_paths = [
         '/usr/lib/python3/dist-packages',
         '/usr/local/lib/python3/dist-packages',
@@ -47,421 +35,177 @@ except ImportError:
     for path in system_paths:
         if path not in sys.path:
             sys.path.insert(0, path)
-    
     try:
         from picamera2 import Picamera2
         PICAMERA2_AVAILABLE = True
         print("✅ picamera2 успешно импортирован из системных пакетов")
-    except ImportError as e:
-        PICAMERA2_AVAILABLE = False
-        Picamera2 = None
-        print(f"⚠️ Не удалось импортировать picamera2: {e}")
-        print("💡 Будет использована веб-камера через OpenCV")
+    except ImportError:
+        print("⚠️ picamera2 не доступен, будет использована веб-камера")
 
 # Попытка импортировать OpenCV для веб-камеры
+webcam = None
+CV2_AVAILABLE = False
 try:
     import cv2
     CV2_AVAILABLE = True
     print("✅ OpenCV успешно импортирован")
-except ImportError as e:
-    CV2_AVAILABLE = False
-    cv2 = None
-    print(f"⚠️ Не удалось импортировать OpenCV: {e}")
-    print("💡 Установите opencv-python: pip install opencv-python")
+except ImportError:
+    print("⚠️ OpenCV не доступен")
 
-# Глобальные переменные для камеры и буферизации кадров
-picam2: Optional[Picamera2] = None
-webcam: Optional['VideoCapture'] = None  # Используем строковую аннотацию для избежания ошибок при отсутствии cv2
-camera_type: Optional[str] = None  # 'picamera2' или 'webcam'
-current_frame: Optional[bytes] = None
-frame_lock = threading.Lock()
-capture_thread: Optional[threading.Thread] = None
+camera_type = None  # 'picamera2' или 'webcam'
 
 
-def capture_frames_loop():
-    """Поток для захвата кадров (улучшенная версия с буферизацией)"""
-    global picam2, webcam, camera_type, current_frame
+def init_camera():
+    """Инициализирует камеру (picamera2 или webcam)"""
+    global picam2, webcam, camera_type
     
-    if camera_type == 'picamera2' and picam2 is None:
-        return
-    if camera_type == 'webcam' and webcam is None:
-        return
-    
-    print("🎬 Запуск потока захвата кадров...")
-    
-    try:
-        while True:
-            try:
-                jpeg_data = None
-                
-                if camera_type == 'picamera2' and picam2 is not None:
-                    # Захватываем кадр с Picamera2ек
-                    buffer = BytesIO()
-                    picam2.capture_file(buffer, format='jpeg')
-                    jpeg_data = buffer.getvalue()
-                    
-                elif camera_type == 'webcam' and webcam is not None:
-                    # Захватываем кадр с веб-камеры
-                    ret, frame = webcam.read()
-                    if ret:
-                        # Конвертируем в JPEG
-                        _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-                        jpeg_data = buffer.tobytes()
-                
-                if jpeg_data:
-                    # Обновляем буфер кадра
-                    with frame_lock:
-                        current_frame = jpeg_data
-                
-                time.sleep(0.033)  # ~30 FPS
-                
-            except Exception as e:
-                print(f"⚠️ Ошибка при захвате кадра: {e}")
-                time.sleep(0.1)
-                
-    except Exception as e:
-        print(f"❌ Критическая ошибка в потоке захвата: {e}")
-
-
-def init_picamera2():
-    """Инициализирует Picamera2 с буферизацией кадров"""
-    global picam2, capture_thread, camera_type
-    
-    if not PICAMERA2_AVAILABLE:
-        print("⚠️ picamera2 не доступен")
-        return False
-    
-    try:
-        print("🎥 Инициализация Picamera2...")
-        picam2 = Picamera2()
-        print("✅ Picamera2 объект создан")
-        
-        config = picam2.create_preview_configuration(
-            main={"size": (1280, 720)},
-            encode="main"
-        )
-        print("✅ Конфигурация создана")
-        
-        picam2.configure(config)
-        print("✅ Конфигурация применена")
-        
-        picam2.start()
-        print("✅ Picamera2 запущен")
-        
-        # Даем время на инициализацию
-        time.sleep(2.0)
-        
-        # Проверяем, что камера работает
+    # Сначала пробуем picamera2
+    if PICAMERA2_AVAILABLE:
         try:
+            print("🎥 Инициализация Picamera2...")
+            picam2 = Picamera2()
+            config = picam2.create_preview_configuration(main={"size": (1280, 720)})
+            picam2.configure(config)
+            picam2.start()
+            time.sleep(2)  # Даем время на инициализацию
+            
+            # Проверяем, что камера работает
             buffer = BytesIO()
             picam2.capture_file(buffer, format='jpeg')
-            buffer.seek(0)
             if buffer.getbuffer().nbytes > 0:
-                print(f"✅ Тестовый кадр захвачен: {buffer.getbuffer().nbytes} байт")
-                
-                # Устанавливаем тип камеры
                 camera_type = 'picamera2'
-                
-                # Запускаем поток захвата кадров
-                capture_thread = threading.Thread(target=capture_frames_loop, daemon=True)
-                capture_thread.start()
-                print("✅ Поток захвата кадров запущен")
-                
-                print("✅ Picamera2 полностью инициализирован")
+                print("✅ Picamera2 инициализирован")
                 return True
-            else:
-                print("⚠️ Тестовый кадр пустой")
-                return False
         except Exception as e:
-            print(f"⚠️ Не удалось захватить тестовый кадр: {e}")
-            return False
-            
-    except Exception as e:
-        print(f"❌ Ошибка при инициализации Picamera2: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-
-def init_webcam():
-    """Инициализирует веб-камеру через OpenCV"""
-    global webcam, capture_thread, camera_type
+            print(f"⚠️ Ошибка инициализации Picamera2: {e}")
+            picam2 = None
     
-    if not CV2_AVAILABLE:
-        print("⚠️ OpenCV не доступен")
-        return False
-    
-    try:
-        print("🎥 Инициализация веб-камеры...")
-        
-        # Пробуем разные индексы камер (0, 1, 2)
-        camera_indices = [0, 1, 2]
-        webcam = None
-        
-        for idx in camera_indices:
-            print(f"   Попытка открыть камеру с индексом {idx}...")
-            test_cam = cv2.VideoCapture(idx)
-            
-            if test_cam.isOpened():
-                # Даем время на инициализацию
-                time.sleep(0.5)
-                
-                # Пробуем захватить несколько кадров для "прогрева" камеры
-                for _ in range(5):
+    # Если picamera2 не сработал, пробуем webcam
+    if CV2_AVAILABLE:
+        try:
+            print("🎥 Инициализация веб-камеры...")
+            for idx in [0, 1, 2]:
+                test_cam = cv2.VideoCapture(idx)
+                if test_cam.isOpened():
+                    time.sleep(0.5)
                     ret, frame = test_cam.read()
                     if ret and frame is not None:
-                        print(f"✅ Камера {idx} открыта и работает")
                         webcam = test_cam
-                        break
-                    time.sleep(0.2)
-                
-                if webcam is not None:
-                    break
-                else:
+                        camera_type = 'webcam'
+                        print(f"✅ Веб-камера {idx} инициализирована")
+                        return True
                     test_cam.release()
-            else:
-                test_cam.release()
-        
-        if webcam is None:
-            print("⚠️ Не удалось открыть ни одну камеру")
-            return False
-        
-        # Устанавливаем разрешение (не все камеры поддерживают эти настройки)
-        try:
-            webcam.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-            webcam.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-        except:
-            pass  # Игнорируем ошибки установки разрешения
-        
-        print("✅ Веб-камера открыта")
-        
-        # Даем дополнительное время на инициализацию
-        time.sleep(1.0)
-        
-        # Проверяем, что камера работает - делаем несколько попыток
-        frame = None
-        for attempt in range(10):
-            ret, frame = webcam.read()
-            if ret and frame is not None and frame.size > 0:
-                print(f"✅ Тестовый кадр захвачен: {frame.shape}")
-                break
-            time.sleep(0.3)
-        
-        if frame is None or frame.size == 0:
-            print("⚠️ Не удалось захватить тестовый кадр с веб-камеры после нескольких попыток")
-            webcam.release()
-            webcam = None
-            return False
-        
-        # Устанавливаем тип камеры
-        camera_type = 'webcam'
-        
-        # Запускаем поток захвата кадров
-        capture_thread = threading.Thread(target=capture_frames_loop, daemon=True)
-        capture_thread.start()
-        print("✅ Поток захвата кадров запущен")
-        
-        print("✅ Веб-камера полностью инициализирована")
-        return True
+        except Exception as e:
+            print(f"⚠️ Ошибка инициализации веб-камеры: {e}")
+    
+    print("❌ Не удалось инициализировать ни одну камеру")
+    return False
+
+
+def capture_frame():
+    """Захватывает один кадр и возвращает JPEG bytes"""
+    global picam2, webcam, camera_type
+    
+    if camera_type == 'picamera2' and picam2 is not None:
+        buffer = BytesIO()
+        picam2.capture_file(buffer, format='jpeg')
+        return buffer.getvalue()
+    
+    elif camera_type == 'webcam' and webcam is not None:
+        ret, frame = webcam.read()
+        if ret and frame is not None:
+            _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            return buffer.tobytes()
+    
+    return None
+
+
+class StreamingHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/video_feed_raw' or self.path == '/stream.mjpeg':
+            self.send_response(200)
+            self.send_header('Content-Type', 'multipart/x-mixed-replace; boundary=frame')
+            self.end_headers()
             
-    except Exception as e:
-        print(f"❌ Ошибка при инициализации веб-камеры: {e}")
-        import traceback
-        traceback.print_exc()
-        if webcam is not None:
             try:
-                webcam.release()
-            except:
-                pass
-            webcam = None
-        return False
-
-
-def capture_frame_jpeg() -> Optional[bytes]:
-    """Получает последний захваченный кадр из буфера"""
-    global current_frame
-    with frame_lock:
-        return current_frame
-
-
-def stop_picamera2():
-    """Останавливает Picamera2"""
-    global picam2, camera_type
-    if picam2 is not None:
-        try:
-            picam2.stop()
-            picam2 = None
-            camera_type = None
-            print("✅ Picamera2 остановлен")
-        except Exception as e:
-            print(f"⚠️ Ошибка при остановке Picamera2: {e}")
-
-
-def stop_webcam():
-    """Останавливает веб-камеру"""
-    global webcam, camera_type
-    if webcam is not None:
-        try:
-            webcam.release()
-            webcam = None
-            camera_type = None
-            print("✅ Веб-камера остановлена")
-        except Exception as e:
-            print(f"⚠️ Ошибка при остановке веб-камеры: {e}")
-
-
-def stop_camera():
-    """Останавливает любую активную камеру"""
-    stop_picamera2()
-    stop_webcam()
-
-
-def is_port_available(port: int, host: str = '0.0.0.0') -> bool:
-    """Проверяет, доступен ли порт"""
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            s.bind((host, port))
-            return True
-    except OSError:
-        return False
-
-
-def find_free_port(start_port: int = 8001, max_attempts: int = 10) -> int:
-    """Находит свободный порт, начиная с start_port"""
-    for i in range(max_attempts):
-        port = start_port + i
-        if is_port_available(port):
-            return port
-    raise RuntimeError(f"Не удалось найти свободный порт в диапазоне {start_port}-{start_port + max_attempts - 1}")
-
-
-@app.get('/video_feed_raw')
-def video_feed_raw():
-    """Сырой MJPEG поток с буферизацией кадров"""
-    if camera_type is None or (picam2 is None and webcam is None):
-        return Response('Camera not available', status=503)
-    
-    def mjpeg_generator():
-        """Генератор MJPEG потока с использованием буферизованных кадров"""
-        boundary = b'--frame'
-        
-        while True:
-            try:
-                # Получаем кадр из буфера
-                frame = capture_frame_jpeg()
-                if frame is not None:
-                    # Отправляем кадр
-                    yield (
-                        boundary + b"\r\n"
-                        + b'Content-Type: image/jpeg\r\n'
-                        + b'Content-Length: ' + str(len(frame)).encode() + b"\r\n\r\n"
-                        + frame + b"\r\n"
-                    )
+                while True:
+                    frame_data = capture_frame()
+                    if frame_data:
+                        self.wfile.write(b'--frame\r\n')
+                        self.send_header('Content-Type', 'image/jpeg')
+                        self.send_header('Content-Length', str(len(frame_data)))
+                        self.end_headers()
+                        self.wfile.write(frame_data)
+                        self.wfile.write(b'\r\n')
                     time.sleep(0.033)  # ~30 FPS
-                else:
-                    # Если кадр еще не готов, ждем немного
-                    time.sleep(0.01)
             except Exception as e:
-                print(f"Stream error: {e}")
-                time.sleep(0.1)
-    
-    response = Response(
-        mjpeg_generator(),
-        mimetype='multipart/x-mixed-replace; boundary=frame'
-    )
-    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-    response.headers['Pragma'] = 'no-cache'
-    response.headers['Connection'] = 'keep-alive'
-    return response
+                print(f"Stream closed: {e}")
+        
+        elif self.path == '/health':
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            status = {
+                'status': 'ok',
+                'camera_available': camera_type is not None,
+                'camera_type': camera_type
+            }
+            import json
+            self.wfile.write(json.dumps(status).encode())
+        
+        else:
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html')
+            self.end_headers()
+            self.wfile.write(b'''
+                <html>
+                    <head>
+                        <title>Video Stream</title>
+                    </head>
+                    <body>
+                        <h1>Video Stream</h1>
+                        <img src="/video_feed_raw" width="1280" height="720">
+                    </body>
+                </html>
+            ''')
 
 
-@app.get('/health')
-def health():
-    """Health check"""
-    camera_available = camera_type is not None and (picam2 is not None or webcam is not None)
-    return {
-        'status': 'ok',
-        'camera_available': camera_available,
-        'camera_type': camera_type
-    }
+def run_server(port=8001):
+    """Запускает HTTP сервер"""
+    server = HTTPServer(('0.0.0.0', port), StreamingHandler)
+    print(f"🌐 Сервер запущен на http://0.0.0.0:{port}")
+    print(f"📹 Видео поток: http://localhost:{port}/video_feed_raw")
+    print(f"🏥 Health check: http://localhost:{port}/health")
+    server.serve_forever()
 
 
 def main():
     """Главная функция"""
     print("🚀 Запуск Detection Service...")
-    print(f"PICAMERA2_AVAILABLE: {PICAMERA2_AVAILABLE}")
-    print(f"CV2_AVAILABLE: {CV2_AVAILABLE}")
     
-    # Сначала пытаемся инициализировать Picamera2
-    camera_initialized = False
-    if PICAMERA2_AVAILABLE:
-        print("📷 Попытка инициализации Picamera2...")
-        if init_picamera2():
-            print("✅ Picamera2 успешно инициализирован")
-            camera_initialized = True
-        else:
-            print("⚠️ Не удалось инициализировать Picamera2")
+    # Инициализируем камеру
+    if not init_camera():
+        print("⚠️ ВНИМАНИЕ: Камера не инициализирована!")
+        print("💡 Сервер запустится, но видео поток будет недоступен")
     
-    # Если Picamera2 не удалось, пытаемся веб-камеру
-    if not camera_initialized and CV2_AVAILABLE:
-        print("📷 Попытка инициализации веб-камеры...")
-        if init_webcam():
-            print("✅ Веб-камера успешно инициализирована")
-            camera_initialized = True
-        else:
-            print("⚠️ Не удалось инициализировать веб-камеру")
+    # Получаем порт из переменной окружения
+    port = int(os.environ.get('PORT', 8001))
     
-    if not camera_initialized:
-        print("⚠️ ВНИМАНИЕ: Ни одна камера не инициализирована!")
-        print("💡 Убедитесь, что:")
-        print("   - На Raspberry Pi установлен picamera2, или")
-        print("   - Установлен opencv-python и подключена веб-камера")
-    
-    # Получаем порт из переменной окружения или используем 8001 по умолчанию
-    requested_port = int(os.environ.get('PORT', 8001))
-    debug_enabled = str(os.environ.get('DEBUG', '0')).lower() in ('1', 'true', 'yes')
-    
-    # Проверяем доступность порта
-    if not is_port_available(requested_port):
-        print(f"⚠️ Порт {requested_port} уже занят!")
-        print("💡 Попробую найти свободный порт...")
-        try:
-            port = find_free_port(requested_port)
-            print(f"✅ Найден свободный порт: {port}")
-        except RuntimeError as e:
-            print(f"❌ {e}")
-            print(f"💡 Остановите процесс, использующий порт {requested_port}:")
-            print(f"   sudo lsof -i :{requested_port}")
-            print(f"   sudo kill <PID>")
-            print(f"💡 Или укажите другой порт: PORT=8080 python3 detection_server.py")
-            stop_camera()
-            sys.exit(1)
-    else:
-        port = requested_port
-    
-    print(f"🌐 Запуск Flask сервера на http://localhost:{port}")
-    print(f"📹 Видео поток доступен по адресу: http://localhost:{port}/video_feed_raw")
-    print(f"🏥 Health check: http://localhost:{port}/health")
+    # Запускаем сервер в отдельном потоке
+    server_thread = threading.Thread(target=run_server, args=(port,))
+    server_thread.daemon = True
+    server_thread.start()
     
     try:
-        app.run(host='0.0.0.0', port=port, debug=debug_enabled, threaded=True)
-    except OSError as e:
-        if "Address already in use" in str(e) or e.errno == 98:
-            print(f"❌ Ошибка: Порт {port} занят!")
-            print(f"💡 Остановите процесс, использующий порт {port}:")
-            print(f"   sudo lsof -i :{port}")
-            print(f"   sudo kill <PID>")
-            print(f"💡 Или укажите другой порт: PORT={port + 1} python3 detection_server.py")
-        else:
-            print(f"❌ Ошибка при запуске сервера: {e}")
-        stop_camera()
-        sys.exit(1)
+        print(f"✅ Камера запущена. Откройте http://localhost:{port} в браузере")
+        while True:
+            time.sleep(1)
     except KeyboardInterrupt:
-        print("\n🛑 Получен сигнал остановки (Ctrl+C)")
-    finally:
-        print("🛑 Остановка сервиса...")
-        stop_camera()
+        print("\n🛑 Останавливаем...")
+        if picam2 is not None:
+            picam2.stop()
+        if webcam is not None:
+            webcam.release()
 
 
 if __name__ == '__main__':
