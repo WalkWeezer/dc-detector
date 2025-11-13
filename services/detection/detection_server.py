@@ -260,8 +260,8 @@ class StreamingHandler(BaseHTTPRequestHandler):
                     </head>
                     <body>
                         <h1>Video Stream</h1>
-                        <p><a href="/video_feed_raw">Raw stream (без детекции)</a> | 
-                           <a href="/video_feed">Stream с детекцией YOLO</a></p>
+                        <p><a href="/video_feed_raw">Raw stream (no detection)</a> | 
+                           <a href="/video_feed">Stream with YOLO detection</a></p>
                         <img src="/video_feed" width="1280" height="720">
                     </body>
                 </html>
