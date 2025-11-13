@@ -28,15 +28,35 @@ if sys.platform == 'win32':
 app = Flask(__name__)
 
 # Попытка импортировать picamera2 (доступно только на Raspberry Pi)
+# Сначала пробуем стандартный импорт
+PICAMERA2_AVAILABLE = False
+Picamera2 = None
+
 try:
     from picamera2 import Picamera2
     PICAMERA2_AVAILABLE = True
     print("✅ picamera2 успешно импортирован")
-except ImportError as e:
-    PICAMERA2_AVAILABLE = False
-    Picamera2 = None
-    print(f"⚠️ Не удалось импортировать picamera2: {e}")
-    print("💡 Будет использована веб-камера через OpenCV")
+except ImportError:
+    # Если не удалось, пробуем найти системный picamera2
+    # (может быть установлен через apt, но не в venv)
+    import sys
+    system_paths = [
+        '/usr/lib/python3/dist-packages',
+        '/usr/local/lib/python3/dist-packages',
+    ]
+    for path in system_paths:
+        if path not in sys.path:
+            sys.path.insert(0, path)
+    
+    try:
+        from picamera2 import Picamera2
+        PICAMERA2_AVAILABLE = True
+        print("✅ picamera2 успешно импортирован из системных пакетов")
+    except ImportError as e:
+        PICAMERA2_AVAILABLE = False
+        Picamera2 = None
+        print(f"⚠️ Не удалось импортировать picamera2: {e}")
+        print("💡 Будет использована веб-камера через OpenCV")
 
 # Попытка импортировать OpenCV для веб-камеры
 try:
@@ -173,50 +193,86 @@ def init_webcam():
     
     try:
         print("🎥 Инициализация веб-камеры...")
-        # Пытаемся открыть камеру (обычно индекс 0)
-        webcam = cv2.VideoCapture(0)
         
-        if not webcam.isOpened():
-            print("⚠️ Не удалось открыть веб-камеру")
-            webcam = None
+        # Пробуем разные индексы камер (0, 1, 2)
+        camera_indices = [0, 1, 2]
+        webcam = None
+        
+        for idx in camera_indices:
+            print(f"   Попытка открыть камеру с индексом {idx}...")
+            test_cam = cv2.VideoCapture(idx)
+            
+            if test_cam.isOpened():
+                # Даем время на инициализацию
+                time.sleep(0.5)
+                
+                # Пробуем захватить несколько кадров для "прогрева" камеры
+                for _ in range(5):
+                    ret, frame = test_cam.read()
+                    if ret and frame is not None:
+                        print(f"✅ Камера {idx} открыта и работает")
+                        webcam = test_cam
+                        break
+                    time.sleep(0.2)
+                
+                if webcam is not None:
+                    break
+                else:
+                    test_cam.release()
+            else:
+                test_cam.release()
+        
+        if webcam is None:
+            print("⚠️ Не удалось открыть ни одну камеру")
             return False
         
-        # Устанавливаем разрешение
-        webcam.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-        webcam.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        # Устанавливаем разрешение (не все камеры поддерживают эти настройки)
+        try:
+            webcam.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+            webcam.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        except:
+            pass  # Игнорируем ошибки установки разрешения
         
         print("✅ Веб-камера открыта")
         
-        # Даем время на инициализацию
+        # Даем дополнительное время на инициализацию
         time.sleep(1.0)
         
-        # Проверяем, что камера работает
-        ret, frame = webcam.read()
-        if ret and frame is not None:
-            print(f"✅ Тестовый кадр захвачен: {frame.shape}")
-            
-            # Устанавливаем тип камеры
-            camera_type = 'webcam'
-            
-            # Запускаем поток захвата кадров
-            capture_thread = threading.Thread(target=capture_frames_loop, daemon=True)
-            capture_thread.start()
-            print("✅ Поток захвата кадров запущен")
-            
-            print("✅ Веб-камера полностью инициализирована")
-            return True
-        else:
-            print("⚠️ Не удалось захватить тестовый кадр с веб-камеры")
+        # Проверяем, что камера работает - делаем несколько попыток
+        frame = None
+        for attempt in range(10):
+            ret, frame = webcam.read()
+            if ret and frame is not None and frame.size > 0:
+                print(f"✅ Тестовый кадр захвачен: {frame.shape}")
+                break
+            time.sleep(0.3)
+        
+        if frame is None or frame.size == 0:
+            print("⚠️ Не удалось захватить тестовый кадр с веб-камеры после нескольких попыток")
             webcam.release()
             webcam = None
             return False
+        
+        # Устанавливаем тип камеры
+        camera_type = 'webcam'
+        
+        # Запускаем поток захвата кадров
+        capture_thread = threading.Thread(target=capture_frames_loop, daemon=True)
+        capture_thread.start()
+        print("✅ Поток захвата кадров запущен")
+        
+        print("✅ Веб-камера полностью инициализирована")
+        return True
             
     except Exception as e:
         print(f"❌ Ошибка при инициализации веб-камеры: {e}")
         import traceback
         traceback.print_exc()
         if webcam is not None:
-            webcam.release()
+            try:
+                webcam.release()
+            except:
+                pass
             webcam = None
         return False
 
