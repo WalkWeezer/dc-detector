@@ -161,6 +161,8 @@ BACKEND_NOTIFY_URL=http://backend:8080/internal/detections
 
 ## 🏁 Raspberry Pi / прод режим
 
+> 📖 **Подробная инструкция по запуску detection service без Docker:** см. [RASPBERRY_PI_SETUP.md](RASPBERRY_PI_SETUP.md)
+
 ### Подготовка и инициализация
 
 1. Склонируйте репозиторий на Raspberry Pi:
