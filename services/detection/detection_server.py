@@ -7,8 +7,11 @@ import sys
 import time
 import threading
 from io import BytesIO
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from flask import Flask, Response
+
+if TYPE_CHECKING:
+    from cv2 import VideoCapture
 
 # Настройка кодировки для Windows
 if sys.platform == 'win32':
@@ -47,7 +50,7 @@ except ImportError as e:
 
 # Глобальные переменные для камеры и буферизации кадров
 picam2: Optional[Picamera2] = None
-webcam: Optional[cv2.VideoCapture] = None
+webcam: Optional['VideoCapture'] = None  # Используем строковую аннотацию для избежания ошибок при отсутствии cv2
 camera_type: Optional[str] = None  # 'picamera2' или 'webcam'
 current_frame: Optional[bytes] = None
 frame_lock = threading.Lock()
@@ -71,7 +74,7 @@ def capture_frames_loop():
                 jpeg_data = None
                 
                 if camera_type == 'picamera2' and picam2 is not None:
-                    # Захватываем кадр с Picamera2
+                    # Захватываем кадр с Picamera2ек
                     buffer = BytesIO()
                     picam2.capture_file(buffer, format='jpeg')
                     jpeg_data = buffer.getvalue()
