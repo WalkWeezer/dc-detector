@@ -25,7 +25,7 @@
    python3 -m venv venv
    source venv/bin/activate
    cd services/detection
-   pip install flask opencv-python
+   pip install flask opencv-python ultralytics
    ```
    
    Или установите все зависимости из requirements.txt:
@@ -36,6 +36,8 @@
    cd services/detection
    pip install -r requirements.txt
    ```
+   
+   **Важно:** Для детекции YOLO нужен `ultralytics`. Если его нет, детекция будет отключена, но видео поток будет работать.
 
    **Вариант B: Системные пакеты через apt (если доступны)**
    ```bash
