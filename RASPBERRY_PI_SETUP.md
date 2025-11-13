@@ -14,18 +14,37 @@
 2. Установите необходимые системные пакеты:
    ```bash
    sudo apt update
-   sudo apt install -y python3-picamera2 python3-pip python3-venv
+   sudo apt install -y python3-picamera2 python3-pip python3-venv python3-full
    ```
 
-3. Установите зависимости Python:
+3. **Важно:** На современных версиях Raspberry Pi OS (начиная с Debian 12) нельзя устанавливать пакеты глобально через `pip3` из-за защиты PEP 668. Используйте один из вариантов:
+
+   **Вариант A: Виртуальное окружение (рекомендуется)**
    ```bash
-   pip3 install flask opencv-python
+   cd /path/to/DC-Detector
+   python3 -m venv venv
+   source venv/bin/activate
+   cd services/detection
+   pip install flask opencv-python
    ```
    
    Или установите все зависимости из requirements.txt:
    ```bash
+   cd /path/to/DC-Detector
+   python3 -m venv venv
+   source venv/bin/activate
    cd services/detection
-   pip3 install -r requirements.txt
+   pip install -r requirements.txt
+   ```
+
+   **Вариант B: Системные пакеты через apt (если доступны)**
+   ```bash
+   sudo apt install -y python3-flask python3-opencv
+   ```
+   
+   **Вариант C: Использовать флаг --break-system-packages (не рекомендуется)**
+   ```bash
+   pip3 install --break-system-packages flask opencv-python
    ```
 
 ### Шаг 2: Запуск сервиса
@@ -36,11 +55,15 @@
    ```
 
 2. Запустите скрипт:
+
+   **Если используете виртуальное окружение:**
    ```bash
+   source venv/bin/activate  # если еще не активировано
+   cd services/detection
    python3 detection_server.py
    ```
 
-   Или используйте готовый скрипт:
+   **Или используйте готовый скрипт (автоматически создаст и активирует venv):**
    ```bash
    ./scripts/run-detection-direct.sh
    ```
@@ -80,17 +103,19 @@ PORT=8080 python3 detection_server.py
 
    [Service]
    Type=simple
-   User=pi
-   WorkingDirectory=/home/pi/DC-Detector/services/detection
-   Environment="PATH=/usr/bin:/usr/local/bin"
+   User=admin
+   WorkingDirectory=/home/admin/DC-Detector
+   Environment="PATH=/home/admin/DC-Detector/venv/bin:/usr/bin:/usr/local/bin"
    Environment="PORT=8001"
-   ExecStart=/usr/bin/python3 /home/pi/DC-Detector/services/detection/detection_server.py
+   ExecStart=/home/admin/DC-Detector/venv/bin/python /home/admin/DC-Detector/services/detection/detection_server.py
    Restart=always
    RestartSec=10
 
    [Install]
    WantedBy=multi-user.target
    ```
+   
+   **Важно:** Замените `/home/admin/DC-Detector` на ваш реальный путь к проекту и `admin` на ваше имя пользователя.
 
 2. Активируйте сервис:
    ```bash
@@ -139,9 +164,24 @@ sudo apt install python3-picamera2
 
 **Проблема: Ошибка "ModuleNotFoundError: No module named 'cv2'"**
 
-Установите OpenCV:
+Установите OpenCV в виртуальное окружение:
 ```bash
-pip3 install opencv-python
+source venv/bin/activate
+pip install opencv-python
+```
+
+Или через системные пакеты:
+```bash
+sudo apt install python3-opencv
+```
+
+**Проблема: Ошибка "externally-managed-environment" при установке через pip3**
+
+Это нормальная защита в современных версиях Raspberry Pi OS. Используйте виртуальное окружение:
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install flask opencv-python
 ```
 
 **Проблема: Порт уже занят**
