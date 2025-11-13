@@ -6,6 +6,7 @@ import os
 import sys
 import time
 import threading
+import socket
 from io import BytesIO
 from typing import Optional, TYPE_CHECKING
 from flask import Flask, Response
@@ -259,6 +260,26 @@ def stop_camera():
     stop_webcam()
 
 
+def is_port_available(port: int, host: str = '0.0.0.0') -> bool:
+    """Проверяет, доступен ли порт"""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.bind((host, port))
+            return True
+    except OSError:
+        return False
+
+
+def find_free_port(start_port: int = 8001, max_attempts: int = 10) -> int:
+    """Находит свободный порт, начиная с start_port"""
+    for i in range(max_attempts):
+        port = start_port + i
+        if is_port_available(port):
+            return port
+    raise RuntimeError(f"Не удалось найти свободный порт в диапазоне {start_port}-{start_port + max_attempts - 1}")
+
+
 @app.get('/video_feed_raw')
 def video_feed_raw():
     """Сырой MJPEG поток с буферизацией кадров"""
@@ -342,8 +363,26 @@ def main():
         print("   - Установлен opencv-python и подключена веб-камера")
     
     # Получаем порт из переменной окружения или используем 8001 по умолчанию
-    port = int(os.environ.get('PORT', 8001))
+    requested_port = int(os.environ.get('PORT', 8001))
     debug_enabled = str(os.environ.get('DEBUG', '0')).lower() in ('1', 'true', 'yes')
+    
+    # Проверяем доступность порта
+    if not is_port_available(requested_port):
+        print(f"⚠️ Порт {requested_port} уже занят!")
+        print("💡 Попробую найти свободный порт...")
+        try:
+            port = find_free_port(requested_port)
+            print(f"✅ Найден свободный порт: {port}")
+        except RuntimeError as e:
+            print(f"❌ {e}")
+            print(f"💡 Остановите процесс, использующий порт {requested_port}:")
+            print(f"   sudo lsof -i :{requested_port}")
+            print(f"   sudo kill <PID>")
+            print(f"💡 Или укажите другой порт: PORT=8080 python3 detection_server.py")
+            stop_camera()
+            sys.exit(1)
+    else:
+        port = requested_port
     
     print(f"🌐 Запуск Flask сервера на http://localhost:{port}")
     print(f"📹 Видео поток доступен по адресу: http://localhost:{port}/video_feed_raw")
@@ -351,6 +390,19 @@ def main():
     
     try:
         app.run(host='0.0.0.0', port=port, debug=debug_enabled, threaded=True)
+    except OSError as e:
+        if "Address already in use" in str(e) or e.errno == 98:
+            print(f"❌ Ошибка: Порт {port} занят!")
+            print(f"💡 Остановите процесс, использующий порт {port}:")
+            print(f"   sudo lsof -i :{port}")
+            print(f"   sudo kill <PID>")
+            print(f"💡 Или укажите другой порт: PORT={port + 1} python3 detection_server.py")
+        else:
+            print(f"❌ Ошибка при запуске сервера: {e}")
+        stop_camera()
+        sys.exit(1)
+    except KeyboardInterrupt:
+        print("\n🛑 Получен сигнал остановки (Ctrl+C)")
     finally:
         print("🛑 Остановка сервиса...")
         stop_camera()
