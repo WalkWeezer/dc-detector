@@ -84,6 +84,14 @@ if [ -f "venv/bin/activate" ]; then
         }
     fi
     
+    if ! python -c "from ultralytics import YOLO" 2>/dev/null; then
+        echo "⚠️  Ultralytics YOLO не установлен. Устанавливаю..."
+        pip install ultralytics || {
+            echo "❌ Не удалось установить ultralytics"
+            echo "💡 Детекция будет отключена"
+        }
+    fi
+    
     echo "✅ Все зависимости установлены"
 else
     echo "❌ Не удалось создать виртуальное окружение"
