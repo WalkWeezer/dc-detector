@@ -207,13 +207,19 @@ class StreamingHandler(BaseHTTPRequestHandler):
                 while True:
                     frame_data = capture_frame()
                     if frame_data:
-                        self.wfile.write(b'--frame\r\n')
-                        self.send_header('Content-Type', 'image/jpeg')
-                        self.send_header('Content-Length', str(len(frame_data)))
-                        self.end_headers()
-                        self.wfile.write(frame_data)
-                        self.wfile.write(b'\r\n')
+                        try:
+                            self.wfile.write(b'--frame\r\n')
+                            self.send_header('Content-Type', 'image/jpeg')
+                            self.send_header('Content-Length', str(len(frame_data)))
+                            self.end_headers()
+                            self.wfile.write(frame_data)
+                            self.wfile.write(b'\r\n')
+                        except (BrokenPipeError, OSError):
+                            # Клиент отключился - это нормально
+                            break
                     time.sleep(0.033)  # ~30 FPS
+            except (BrokenPipeError, OSError):
+                pass  # Клиент отключился
             except Exception as e:
                 print(f"Stream closed: {e}")
         
@@ -227,45 +233,57 @@ class StreamingHandler(BaseHTTPRequestHandler):
                 while True:
                     frame_data = capture_frame_with_detection()
                     if frame_data:
-                        self.wfile.write(b'--frame\r\n')
-                        self.send_header('Content-Type', 'image/jpeg')
-                        self.send_header('Content-Length', str(len(frame_data)))
-                        self.end_headers()
-                        self.wfile.write(frame_data)
-                        self.wfile.write(b'\r\n')
+                        try:
+                            self.wfile.write(b'--frame\r\n')
+                            self.send_header('Content-Type', 'image/jpeg')
+                            self.send_header('Content-Length', str(len(frame_data)))
+                            self.end_headers()
+                            self.wfile.write(frame_data)
+                            self.wfile.write(b'\r\n')
+                        except (BrokenPipeError, OSError):
+                            # Клиент отключился - это нормально
+                            break
                     time.sleep(0.033)  # ~30 FPS
+            except (BrokenPipeError, OSError):
+                pass  # Клиент отключился
             except Exception as e:
                 print(f"Stream closed: {e}")
         
         elif self.path == '/health':
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            status = {
-                'status': 'ok',
-                'camera_available': camera_type is not None,
-                'camera_type': camera_type
-            }
-            import json
-            self.wfile.write(json.dumps(status).encode())
+            try:
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                status = {
+                    'status': 'ok',
+                    'camera_available': camera_type is not None,
+                    'camera_type': camera_type
+                }
+                import json
+                self.wfile.write(json.dumps(status).encode())
+            except (BrokenPipeError, OSError):
+                pass  # Клиент отключился до получения ответа
         
         else:
-            self.send_response(200)
-            self.send_header('Content-Type', 'text/html')
-            self.end_headers()
-            self.wfile.write(b'''
-                <html>
-                    <head>
-                        <title>Video Stream</title>
-                    </head>
-                    <body>
-                        <h1>Video Stream</h1>
-                        <p><a href="/video_feed_raw">Raw stream (no detection)</a> | 
-                           <a href="/video_feed">Stream with YOLO detection</a></p>
-                        <img src="/video_feed" width="1280" height="720">
-                    </body>
-                </html>
-            ''')
+            try:
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/html')
+                self.end_headers()
+                self.wfile.write(b'''
+                    <html>
+                        <head>
+                            <title>Video Stream</title>
+                        </head>
+                        <body>
+                            <h1>Video Stream</h1>
+                            <p><a href="/video_feed_raw">Raw stream (no detection)</a> | 
+                               <a href="/video_feed">Stream with YOLO detection</a></p>
+                            <img src="/video_feed" width="1280" height="720">
+                        </body>
+                    </html>
+                ''')
+            except (BrokenPipeError, OSError):
+                pass  # Клиент отключился до получения ответа
 
 
 def run_server(port=8001):
