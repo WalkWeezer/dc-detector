@@ -7,15 +7,8 @@ services:
       - ./services/backend/src:/app/src
       - ./data/detections:/app/data/detections
 
-  detection:
-    environment:
-      - DEBUG=1
-      - WATCHDOG_FORCE_POLLING=1
-      - LOCAL_CAMERA_ENABLED=0
-    command: python detection_server.py
-    volumes:
-      - ./services/detection/detection_server.py:/app/detection_server.py
-      - ./services/detection/models:/app/models
+  # Detection service запускается отдельно от Docker
+  # Запустите: cd services/detection && python detection_server.py
 
   frontend-dev:
     image: node:20-alpine

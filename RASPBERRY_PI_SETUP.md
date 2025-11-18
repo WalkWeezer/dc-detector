@@ -1,6 +1,6 @@
 # 🍓 Запуск Detection Service на Raspberry Pi
 
-## Быстрый запуск без Docker
+**Важно:** Detection Service запускается **отдельно от Docker** для лучшей работы с камерой. Это стандартный способ запуска.
 
 Скрипт `detection_server.py` автоматически определяет доступную камеру и запускает видео поток.
 
@@ -80,6 +80,9 @@
 **Доступные эндпоинты:**
 - Видео поток: `http://localhost:8001/video_feed_raw`
 - Health check: `http://localhost:8001/health`
+- Статус детекции: `http://localhost:8001/api/detection`
+- Список трекеров: `http://localhost:8001/api/trackers`
+- Управление моделями: `http://localhost:8001/models`
 
 Откройте в браузере на Raspberry Pi или с другого устройства в локальной сети:
 ```
@@ -95,29 +98,24 @@ PORT=8080 python3 detection_server.py
 
 ### Автозапуск при загрузке системы
 
-Для автоматического запуска при загрузке Raspberry Pi создайте systemd service:
+Для автоматического запуска при загрузке Raspberry Pi используйте готовый скрипт:
 
-1. Создайте файл `/etc/systemd/system/dc-detection.service`:
-   ```ini
-   [Unit]
-   Description=DC-Detector Detection Service
-   After=network.target
+```bash
+sudo ./scripts/install-systemd.sh
+```
 
-   [Service]
-   Type=simple
-   User=admin
-   WorkingDirectory=/home/admin/DC-Detector
-   Environment="PATH=/home/admin/DC-Detector/venv/bin:/usr/bin:/usr/local/bin"
-   Environment="PORT=8001"
-   ExecStart=/home/admin/DC-Detector/venv/bin/python /home/admin/DC-Detector/services/detection/detection_server.py
-   Restart=always
-   RestartSec=10
+Скрипт установит два systemd сервиса:
+- `dc-detection.service` - Detection Service (запускается отдельно)
+- `dc-detector.service` - Backend и Frontend (Docker Compose)
 
-   [Install]
-   WantedBy=multi-user.target
+**Или установите вручную:**
+
+1. Используйте готовый файл `systemd/dc-detection.service` и скопируйте его в `/etc/systemd/system/`, заменив пути:
+   ```bash
+   sudo cp systemd/dc-detection.service /etc/systemd/system/
+   sudo sed -i "s|/opt/dc-detector|$(pwd)|g" /etc/systemd/system/dc-detection.service
+   sudo sed -i "s|User=pi|User=$USER|g" /etc/systemd/system/dc-detection.service
    ```
-   
-   **Важно:** Замените `/home/admin/DC-Detector` на ваш реальный путь к проекту и `admin` на ваше имя пользователя.
 
 2. Активируйте сервис:
    ```bash
@@ -201,17 +199,18 @@ sudo kill <PID>
 
 ### Интеграция с остальными сервисами
 
-Если вы запускаете только detection service напрямую, а backend и frontend в Docker:
+Detection Service запускается отдельно, а Backend и Frontend в Docker:
 
-1. В `.env` или `docker-compose.pi.yml` настройте:
-   ```yaml
-   environment:
-     - DETECTION_URL=http://host.docker.internal:8001
+1. В `.env` настройте `DETECTION_URL`:
+   ```dotenv
+   DETECTION_URL=http://localhost:8001
    ```
 
-2. Или если backend тоже запускается напрямую:
-   ```bash
-   export DETECTION_URL=http://localhost:8001
+2. Backend автоматически подключится к Detection Service по указанному URL.
+
+3. Если Detection Service запущен на другом хосте, укажите его IP:
+   ```dotenv
+   DETECTION_URL=http://192.168.1.100:8001
    ```
 
 ### Производительность

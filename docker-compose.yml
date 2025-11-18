@@ -29,39 +29,18 @@ services:
       dockerfile: docker/backend.Dockerfile
     environment:
       - PORT=8080
-      - DETECTION_URL=http://detection:8001
+      - DETECTION_URL=${DETECTION_URL:-http://host.docker.internal:8001}
     depends_on:
       init:
         condition: service_completed_successfully
-      detection:
-        condition: service_started
     ports:
       - "8080:8080"
     volumes:
       - ./data:/app/data
     networks: [app]
 
-  detection:
-    depends_on:
-      init:
-        condition: service_completed_successfully
-    env_file: .env
-    build:
-      context: .
-      dockerfile: docker/detection.Dockerfile
-    environment:
-      - CAMERA_INDEX=0
-      - CAMERA_SCAN_LIMIT=5
-      - MODEL_PATH=models/bestfire.pt
-      - BACKEND_NOTIFY_URL=http://backend:8080/internal/detections
-    ports:
-      - "8001:8001"
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
-    volumes:
-      - ./services/detection/models:/app/models
-    networks: [app]
+  # Detection service запускается отдельно от Docker
+  # Запустите: cd services/detection && python detection_server.py
 
   frontend:
     depends_on:

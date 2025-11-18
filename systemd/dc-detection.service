@@ -1,0 +1,25 @@
+[Unit]
+Description=DC-Detector Detection Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/opt/dc-detector/services/detection
+# Используем venv из корня проекта
+Environment="PATH=/opt/dc-detector/venv/bin:/usr/bin:/usr/local/bin"
+Environment="PORT=8001"
+Environment="CAMERA_INDEX=0"
+Environment="CONFIDENCE_THRESHOLD=0.5"
+Environment="INFER_FPS=5"
+# Используем Python из venv (должен быть создан: python3 -m venv venv)
+ExecStart=/opt/dc-detector/venv/bin/python /opt/dc-detector/services/detection/detection_server.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+

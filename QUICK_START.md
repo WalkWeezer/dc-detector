@@ -1,22 +1,52 @@
-# 🚀 Быстрый старт (два сценария)
+# 🚀 Быстрый старт
 
-В проекте два варианта запуска:
-- Windows dev — Vite hot‑reload, удобная разработка
-- Raspberry Pi — собранный фронт под nginx, рабочий режим
+**Важно:** Detection Service запускается **отдельно от Docker** для лучшей работы с камерой.
 
 ## 1. Подготовка окружения
 
-1. Установите Docker Desktop (Windows/macOS) или Docker Engine + Compose v2 (Linux).
-2. Запустите скрипт инициализации для автоматического создания `.env` и необходимых директорий:
+1. Установите зависимости для Detection Service:
+   ```bash
+   cd services/detection
+   pip install -r requirements.txt
+   ```
+
+2. Поместите модель YOLO в `services/detection/models/`:
+   - `yolov8n.pt` (базовая модель)
+   - `bestfire.pt` (специализированная модель)
+
+3. (Опционально) Установите Docker Desktop (Windows/macOS) или Docker Engine + Compose v2 (Linux) для Backend и Frontend.
+
+4. Запустите скрипт инициализации для автоматического создания `.env`:
    ```bash
    ./scripts/init.sh
    ```
-   Или вручную скопируйте `env.example` в `.env` и измените при необходимости.
-3. Поместите модель YOLO в `services/detection/models/bestfire.pt`.
+   Или вручную скопируйте `env.example` в `.env` и убедитесь, что `DETECTION_URL=http://localhost:8001`.
 
-## 2. Windows dev (горячая перезагрузка фронтенда)
+## 2. Запуск Detection Service (обязательно, отдельно)
 
-Команда запуска:
+**Windows:**
+```powershell
+cd services\detection
+python detection_server.py
+```
+
+**Linux/macOS:**
+```bash
+cd services/detection
+python3 detection_server.py
+```
+
+**С параметрами:**
+```bash
+CAMERA_INDEX=0 PORT=8001 python detection_server.py
+```
+
+Сервис будет доступен на `http://localhost:8001`
+
+## 3. Windows dev (горячая перезагрузка фронтенда)
+
+После запуска Detection Service, запустите Backend и Frontend:
+
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
@@ -24,94 +54,83 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 Сервисы:
 - фронтенд (Vite): http://localhost:5173
 - backend (Node): http://localhost:8080
-- detection (Python): health http://localhost:8001/health
+- detection (Python): http://localhost:8001
 
 Остановка:
 ```bash
 docker compose down
+# Detection Service остановите через Ctrl+C
 ```
 
-## 3. Raspberry Pi (рабочий режим)
+## 4. Raspberry Pi (рабочий режим)
 
-### Вариант A: Прямой запуск detection service (рекомендуется для камеры)
+### Шаг 1: Установка зависимостей Detection Service
 
-Если у вас проблемы с Docker и доступом к камере, можно запустить detection service напрямую:
-
-1. Установите зависимости:
+1. Установите системные пакеты:
    ```bash
    sudo apt update
-   sudo apt install -y python3-picamera2 python3-pip
-   pip3 install flask
+   sudo apt install -y python3-picamera2 python3-pip python3-venv python3-full
    ```
 
-2. Запустите скрипт:
-   ```bash
-   ./scripts/run-detection-direct.sh
-   ```
-
-   Или вручную:
+2. Создайте виртуальное окружение и установите зависимости:
    ```bash
    cd services/detection
-   python3 detection_server.py
+   python3 -m venv venv
+   source venv/bin/activate
+   pip install -r requirements.txt
    ```
 
-3. Сервис будет доступен на `http://localhost:8001`
-   - Видеопоток: `http://localhost:8001/video_feed_raw`
-   - Health check: `http://localhost:8001/health`
+### Шаг 2: Запуск Detection Service
 
-4. Backend и Frontend можно запустить в Docker, они будут подключаться к detection service на `http://localhost:8001`
-   
-   **Важно:** Если detection service запущен напрямую на хосте, нужно настроить backend для подключения к нему:
-   
-   В `.env` или `docker-compose.pi.yml` установите:
-   ```yaml
-   environment:
-     - DETECTION_URL=http://host.docker.internal:8001
-   ```
-   
-   Или если backend тоже запускается напрямую (не в Docker), используйте:
-   ```bash
-   export DETECTION_URL=http://localhost:8001
-   ```
+**Вариант A: Через скрипт (рекомендуется)**
+```bash
+./scripts/run-detection-direct.sh
+```
 
-### Вариант B: Полный запуск через Docker
+**Вариант B: Вручную**
+```bash
+cd services/detection
+source venv/bin/activate
+python3 detection_server.py
+```
 
-### Первый запуск
+Сервис будет доступен на `http://localhost:8001`
+- Видеопоток: `http://localhost:8001/video_feed_raw`
+- Health check: `http://localhost:8001/health`
+- Статус детекции: `http://localhost:8001/api/detection`
 
-1. Запустите скрипт инициализации:
-   ```bash
-   ./scripts/init.sh
-   ```
+### Шаг 3: Запуск Backend и Frontend (Docker)
 
-2. (Опционально) Настройте `.env` для Pi Camera:
+1. Убедитесь, что в `.env` указан правильный `DETECTION_URL`:
    ```dotenv
-   CAMERA_BACKEND=V4L2  # лучше для Pi Camera
-   VIDEO_DEVICE=/dev/video0
+   DETECTION_URL=http://localhost:8001
    ```
 
-3. Запустите проект:
+2. Запустите Backend и Frontend:
    ```bash
-   # Если возникают ошибки сети, сначала очистите старые контейнеры и сети:
-   docker compose -f docker-compose.yml -f docker-compose.pi.yml down
-   docker network prune -f
-   
-   # Затем запустите проект:
    docker compose -f docker-compose.yml -f docker-compose.pi.yml up -d --build
    ```
 
 ### Автозапуск при загрузке системы
 
-Для автоматического запуска при загрузке Raspberry Pi:
+Для автоматического запуска всех сервисов при загрузке Raspberry Pi:
 
 ```bash
 sudo ./scripts/install-systemd.sh
 ```
 
 Управление:
-- `sudo systemctl start dc-detector` - запуск
-- `sudo systemctl stop dc-detector` - остановка
-- `sudo systemctl status dc-detector` - статус
-- `sudo journalctl -u dc-detector -f` - логи
+- **Detection Service:**
+  - `sudo systemctl start dc-detection` - запуск
+  - `sudo systemctl stop dc-detection` - остановка
+  - `sudo systemctl status dc-detection` - статус
+  - `sudo journalctl -u dc-detection -f` - логи
+
+- **Backend и Frontend (Docker):**
+  - `sudo systemctl start dc-detector` - запуск
+  - `sudo systemctl stop dc-detector` - остановка
+  - `sudo systemctl status dc-detector` - статус
+  - `sudo journalctl -u dc-detector -f` - логи
 
 ### Видеопоток
 
@@ -167,17 +186,25 @@ sudo ./scripts/install-systemd.sh
 docker compose down
 ```
 
-## 4. Управление и диагностика
+## 5. Управление и диагностика
 
-- Логи сервисов: `docker compose logs -f backend detection`
+**Detection Service:**
+- Логи: смотрите вывод в терминале или `sudo journalctl -u dc-detection -f`
+- Проверка статуса: `curl http://localhost:8001/api/detection`
+- Перезапуск: остановите через Ctrl+C и запустите снова
+
+**Backend/Frontend:**
+- Логи: `docker compose logs -f backend frontend`
 - Очистить данные детекций: удалите файлы в `data/detections`
 - Полный сброс: `docker compose down -v`
 
-## 5. Частые вопросы
+## 6. Частые вопросы
 
-- **Где хранить модели?** В `services/detection/models/`; каталог монтируется в контейнер.
-- **Где сохраняются GIF?** В `data/detections/saved/YYYY-MM-DD/`. Доступ к gif: `/files/detections/saved/YYYY-MM-DD/<id>.gif`.
-- **Как сохранить клип?** Во вкладке «Список» нажмите «Сохранить» у нужной детекции (кадры берутся из буфера).
-- **Где увидеть сохранённые?** Вкладка «Сохранённые» или `GET /api/detections/saved?date=YYYY-MM-DD`.
+- **Где хранить модели?** В `services/detection/models/` (например, `yolov8n.pt`, `bestfire.pt`)
+- **Как переключить модель?** Используйте API: `POST http://localhost:8001/models` с телом `{"name": "bestfire.pt"}`
+- **Где сохраняются GIF?** В `data/detections/saved/YYYY-MM-DD/`. Доступ к gif: `/files/detections/saved/YYYY-MM-DD/<id>.gif`
+- **Как сохранить клип?** Во вкладке «Список» нажмите «Сохранить» у нужной детекции (кадры берутся из буфера)
+- **Где увидеть сохранённые?** Вкладка «Сохранённые» или `GET /api/detections/saved?date=YYYY-MM-DD`
+- **Почему detection service запускается отдельно?** Для лучшей работы с камерой и доступа к устройствам без ограничений Docker
 
 
