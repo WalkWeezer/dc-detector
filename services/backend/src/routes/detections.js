@@ -2,6 +2,8 @@ import express from 'express'
 import { Readable } from 'node:stream'
 import { config } from '../config.js'
 import { listDetections, upsertDetections, listSavedDetections, saveUserDetection } from '../storage/detectionsStore.js'
+import { loadTrackerConfig } from '../config/trackerConfig.js'
+import { callDetectionJson } from '../utils/detectionClient.js'
 
 export const detectionsRouter = express.Router()
 export const internalDetectionsRouter = express.Router()
@@ -17,63 +19,53 @@ detectionsRouter.get('/', async (req, res, next) => {
   }
 })
 
-detectionsRouter.get('/status', async (_req, res) => {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 2000)
+export async function detectionStatusHandler(_req, res) {
   try {
-    const response = await fetch(`${config.detectionServiceUrl}/api/detection`, {
-      signal: controller.signal
-    })
-    if (!response.ok) {
-      return res.status(502).json({ error: 'Detection service unavailable' })
-    }
-    const body = await response.json()
-    res.json(body)
+    const payload = await callDetectionJson('/api/detection')
+    res.json(payload)
   } catch (err) {
-    res.status(502).json({ error: 'Detection service unreachable', details: err.message })
-  } finally {
-    clearTimeout(timeout)
+    console.error('Detection status error', err)
+    res.status(err.status ?? 502).json({ error: err.message || 'Detection service unavailable', details: err.payload })
   }
-})
+}
+
+detectionsRouter.get('/status', detectionStatusHandler)
 
 detectionsRouter.get('/models', async (_req, res) => {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 2000)
   try {
-    const response = await fetch(`${config.detectionServiceUrl}/models`, {
-      signal: controller.signal
-    })
-    const body = await response.json()
-    if (!response.ok) {
-      return res.status(response.status).json(body)
+    const payload = await callDetectionJson('/models')
+    // Нормализуем формат ответа для фронтенда
+    const normalized = {
+      models: Array.isArray(payload.available_models) ? payload.available_models : (Array.isArray(payload.models) ? payload.models : []),
+      active: typeof payload.active_model === 'string' ? payload.active_model : (typeof payload.active === 'string' ? payload.active : null)
     }
-    res.json(body)
+    res.json(normalized)
   } catch (err) {
-    res.status(502).json({ error: 'Detection service unreachable', details: err.message })
-  } finally {
-    clearTimeout(timeout)
+    console.error('Не удалось получить список моделей', err)
+    res.status(err.status ?? 502).json({ error: err.message || 'Detection service unreachable', details: err.payload })
   }
 })
 
 detectionsRouter.post('/models', async (req, res) => {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 5000)
   try {
-    const response = await fetch(`${config.detectionServiceUrl}/models`, {
+    const switchPayload = await callDetectionJson('/models', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(req.body ?? {}),
-      signal: controller.signal
-    })
-    const result = await response.json()
-    if (!response.ok) {
-      return res.status(response.status).json(result)
+      body: JSON.stringify(req.body ?? {})
+    }, 5000)
+    
+    // После переключения получаем обновленный список моделей
+    const modelsPayload = await callDetectionJson('/models')
+    
+    // Нормализуем формат ответа для фронтенда
+    const normalized = {
+      models: Array.isArray(modelsPayload.available_models) ? modelsPayload.available_models : (Array.isArray(modelsPayload.models) ? modelsPayload.models : []),
+      active: typeof switchPayload.active_model === 'string' ? switchPayload.active_model : (typeof modelsPayload.active_model === 'string' ? modelsPayload.active_model : (typeof switchPayload.active === 'string' ? switchPayload.active : null))
     }
-    res.json(result)
+    res.json(normalized)
   } catch (err) {
-    res.status(502).json({ error: 'Detection service unreachable', details: err.message })
-  } finally {
-    clearTimeout(timeout)
+    console.error('Не удалось переключить модель', err)
+    res.status(err.status ?? 502).json({ error: err.message || 'Detection service unreachable', details: err.payload })
   }
 })
 
@@ -252,15 +244,56 @@ detectionsRouter.get('/saved', async (req, res, next) => {
 
 detectionsRouter.post('/save', async (req, res) => {
   try {
-    const { detection, frames, fps } = req.body ?? {}
-    if (!detection || !Array.isArray(frames) || frames.length === 0) {
-      return res.status(400).json({ error: 'detection and frames are required' })
+    const { detection, frames, fps, trackId, name } = req.body ?? {}
+
+    if (detection && Array.isArray(frames) && frames.length > 0) {
+      const payload = await saveUserDetection({ detection, frames, fps: Number(fps) || 5 })
+      return res.status(201).json(payload)
     }
-    const payload = await saveUserDetection({ detection, frames, fps: Number(fps) || 5 })
+
+    const numericTrackId = Number.parseInt(trackId, 10)
+    if (!Number.isFinite(numericTrackId)) {
+      return res.status(400).json({ error: 'trackId is required when frames are not provided' })
+    }
+
+    const [trackersPayload, framesPayload, trackerConfig] = await Promise.all([
+      callDetectionJson('/api/trackers'),
+      callDetectionJson(`/api/trackers/${numericTrackId}/frames`, {}, 5000),
+      loadTrackerConfig()
+    ])
+
+    const trackers = Array.isArray(trackersPayload.trackers) ? trackersPayload.trackers : []
+    const target = trackers.find((t) => Number(t.trackId) === numericTrackId)
+    if (!target) {
+      return res.status(404).json({ error: 'Tracker not found' })
+    }
+    const cachedFrames = Array.isArray(framesPayload.frames) ? framesPayload.frames : []
+    if (cachedFrames.length === 0) {
+      return res.status(503).json({ error: 'Detection service did not return frames' })
+    }
+
+    const detectionPayload = {
+      id: target.id,
+      trackId: target.trackId,
+      label: target.label,
+      classId: target.classId ?? null,
+      confidence: target.confidence ?? target.lastConfidence ?? 0,
+      bbox: target.bbox,
+      model: trackersPayload.active_model ?? trackersPayload.activeModel ?? null,
+      capturedAt: target.lastSeen ?? Date.now() / 1000,
+      cameraIndex: target.cameraIndex ?? null,
+      name: name ?? target.name ?? null
+    }
+
+    const payload = await saveUserDetection({
+      detection: detectionPayload,
+      frames: cachedFrames,
+      fps: Number(fps) || trackerConfig.capture_fps || 8
+    })
     res.status(201).json(payload)
   } catch (err) {
     console.error('Save error', err)
-    res.status(500).json({ error: 'Unable to save detection', details: err.message })
+    res.status(err.status ?? 500).json({ error: err.message || 'Unable to save detection', details: err.payload ?? err.stack })
   }
 })
 

@@ -3,56 +3,130 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>DC-Detector — Поток Raspberry Pi</title>
+    <title>DC-Detector — мониторинг</title>
     <link rel="stylesheet" href="./styles.css" />
-    <style>
-      body { align-items: stretch; }
-      main { height: 100vh; }
-      .layout { grid-template-columns: 1fr; }
-      .preview { aspect-ratio: auto; height: calc(100vh - 120px); }
-      .info-row { display: flex; justify-content: space-between; gap: 12px; }
-    </style>
   </head>
   <body>
-    <main>
-      <h1>DC-Detector — поток с камеры Raspberry Pi</h1>
+    <div class="page">
 
-      <!-- Экранный переключатель: Поток | Сохранённые -->
-      <div class="screen-tabs">
-        <button class="screen-button active" data-screen="stream">Поток</button>
-        <button class="screen-button" data-screen="saved">Сохранённые</button>
-      </div>
+      <main class="tab-container">
+        <section id="tab-stream" class="tab-panel active" role="tabpanel">
+          <div class="stream-grid">
+            <div class="video-panel">
+              <div class="video-wrapper">
+                <img id="server-stream" alt="Live stream" />
+                <canvas id="overlay"></canvas>
+              </div>
+              <div class="status-bar">
+                <div class="status-item">
+                  <span>Состояние</span>
+                  <strong id="status-indicator">Подключение…</strong>
+                </div>
+                <div class="status-item">
+                  <span>Камера</span>
+                  <strong id="camera-type">—</strong>
+                </div>
+                <div class="status-item">
+                  <span>Детекций</span>
+                  <strong id="detection-count">—</strong>
+                </div>
+                <div class="status-item">
+                  <span>Макс. уверенность</span>
+                  <strong id="detection-confidence">—</strong>
+                </div>
+              </div>
+              <p id="error-message" class="status-error"></p>
+            </div>
 
-      <!-- Экран: поток -->
-      <div id="screen-stream" class="screen">
-        <div class="layout">
-          <div class="preview">
-            <img id="server-stream" alt="Raspberry Pi stream" />
-            <canvas id="overlay"></canvas>
+            <aside class="control-panel">
+              <nav class="panel-tabs" role="tablist">
+                <button class="panel-tab-button active" data-panel-tab="control" role="tab">Управление</button>
+                <button class="panel-tab-button" data-panel-tab="database" role="tab">База</button>
+              </nav>
+
+              <div class="panel-tab-container">
+                <div id="panel-tab-control" class="panel-tab-panel active" role="tabpanel">
+                  <section class="panel-card">
+                    <header>
+                      <h2>Модель</h2>
+                      <small id="active-model">—</small>
+                    </header>
+                    <form id="model-form" class="form-row">
+                      <label class="form-field">
+                        <span>Выберите модель</span>
+                        <select id="model-select"></select>
+                      </label>
+                      <button type="submit" id="model-apply-btn">Применить</button>
+                    </form>
+                  </section>
+
+                  <section class="panel-card">
+                    <header>
+                      <h2>Активные трекеры</h2>
+                      <span id="tracker-refresh" class="link-like">Обновить</span>
+                    </header>
+                    <div id="tracker-list" class="tracker-list empty-state">
+                      Нет активных трекеров
+                    </div>
+                  </section>
+
+                  <section class="panel-card">
+                    <header>
+                      <h2>Управление</h2>
+                    </header>
+                    <div class="control-actions">
+                      <label class="form-field">
+                        <span>Текущий таргет</span>
+                        <select id="target-select"></select>
+                      </label>
+                      <div class="action-buttons">
+                        <button id="apply-target-btn" type="button">Назначить таргет</button>
+                        <button id="save-detection-btn" type="button" class="accent">Сохранить детекцию</button>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+
+                <div id="panel-tab-database" class="panel-tab-panel" role="tabpanel">
+                  <section class="panel-card">
+                    <header>
+                      <h2>Сохранённые детекции</h2>
+                    </header>
+                    <div class="database-toolbar">
+                      <label class="form-field">
+                        <span>Дата</span>
+                        <input type="date" id="saved-screen-date" />
+                      </label>
+                      <div class="action-buttons">
+                        <button id="saved-screen-refresh" type="button">Обновить</button>
+                        <button id="saved-screen-clear" type="button" class="ghost" title="Очистить фильтр">Сбросить</button>
+                      </div>
+                    </div>
+                    <div id="saved-screen-list" class="saved-grid" style="max-height: calc(100vh - 400px); overflow-y: auto; margin-top: 16px;"></div>
+                  </section>
+                </div>
+              </div>
+            </aside>
           </div>
-        </div>
-
-        <section class="info" style="margin-top:12px">
-          <div class="info-row"><span>Состояние</span><span id="status-indicator">Подключение…</span></div>
-          <div class="info-row"><span>Активная модель</span><span id="active-model">—</span></div>
-          <div class="info-row"><span>Детекций</span><span id="detection-count">—</span></div>
-          <div class="info-row"><span>Макс. уверенность</span><span id="detection-confidence">—</span></div>
-          <p id="error-message" style="color:#ff8080"></p>
         </section>
-      </div>
 
-      <!-- Экран: сохранённые -->
-      <section id="screen-saved" class="screen hidden">
-        <div class="saved-screen-toolbar">
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <input type="date" id="saved-screen-date" />
-            <button id="saved-screen-refresh">Обновить</button>
+        <section id="tab-archive" class="tab-panel" role="tabpanel">
+          <div class="archive-toolbar">
+            <div class="toolbar-group">
+              <label>
+                Дата
+                <input type="date" id="saved-screen-date" />
+              </label>
+              <button id="saved-screen-refresh">Обновить</button>
+            </div>
+            <div class="toolbar-group">
+              <button id="saved-screen-clear" class="ghost" title="Очистить фильтр">Сбросить</button>
+            </div>
           </div>
-        </div>
-        <div id="saved-screen-list" class="saved-grid"></div>
-      </section>
-
-    </main>
+          <div id="saved-screen-list" class="saved-grid"></div>
+        </section>
+      </main>
+    </div>
 
     <!-- Modal for GIF preview -->
     <div id="gif-modal" class="modal hidden" aria-hidden="true">
@@ -73,6 +147,6 @@
 
     <script type="module" src="./pi.js"></script>
   </body>
-  </html>
+</html>
 
 

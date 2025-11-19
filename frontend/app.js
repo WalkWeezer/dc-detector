@@ -582,17 +582,42 @@
 
     isSwitchingModel = true;
     modelSelect.disabled = true;
-    try {
-      const response = await fetch(`${backendOrigin}/api/detections/models`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: modelName })
-      });
-      const payload = await readResponsePayload(response);
-      if (!response.ok) {
-        throw new Error(readErrorMessage(payload, "Не удалось переключить модель"));
-      }
+    
+    // Функция для выполнения запроса с повторными попытками
+    const makeRequest = async (retryCount = 0) => {
+      try {
+        const response = await fetch(`${backendOrigin}/api/detections/models`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: modelName }),
+          mode: "cors", // Явно указываем режим CORS
+          cache: "no-cache" // Отключаем кеширование
+        });
+        
+        // Проверяем, не является ли это CORS ошибкой
+        if (!response.ok && response.status === 0) {
+          throw new Error("CORS error: запрос заблокирован браузером");
+        }
+        
+        const payload = await readResponsePayload(response);
+        if (!response.ok) {
+          throw new Error(readErrorMessage(payload, "Не удалось переключить модель"));
+        }
 
+        return payload;
+      } catch (error) {
+        // Если это CORS ошибка и есть попытки, повторяем запрос
+        if (retryCount < 2 && (error.message.includes("CORS") || error.message.includes("Failed to fetch"))) {
+          console.warn(`CORS ошибка, повторная попытка ${retryCount + 1}/2...`);
+          await new Promise(resolve => setTimeout(resolve, 500 * (retryCount + 1))); // Увеличиваем задержку
+          return makeRequest(retryCount + 1);
+        }
+        throw error;
+      }
+    };
+    
+    try {
+      const payload = await makeRequest();
       const models = Array.isArray(payload.models) ? payload.models : availableModels;
       const nextActive = typeof payload.active === "string" ? payload.active : modelName;
       renderModelOptions(models, nextActive);

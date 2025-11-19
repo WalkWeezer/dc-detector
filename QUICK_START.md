@@ -2,7 +2,84 @@
 
 **Важно:** Detection Service запускается **отдельно от Docker** для лучшей работы с камерой.
 
-## 1. Подготовка окружения
+## 🖥️ Для разработки на Windows/ПК
+
+### Автоматический запуск (рекомендуется)
+
+```powershell
+.\scripts\start-dev.ps1
+```
+
+Скрипт автоматически проверит и установит все зависимости, затем запустит все сервисы:
+- Detection Service на порту 8001
+- Backend на порту 8080
+- Frontend (Vite) на порту 5173
+
+**Остановка:**
+```powershell
+.\scripts\stop-dev.ps1
+```
+
+### Ручной запуск
+
+1. **Detection Service:**
+   ```powershell
+   cd services\detection
+   python detection_server.py
+   ```
+
+2. **Backend** (в новом терминале):
+   ```powershell
+   cd services\backend
+   node src\server.js
+   ```
+
+3. **Frontend** (в новом терминале):
+   ```powershell
+   cd frontend
+   npm run dev
+   ```
+
+Или через Docker:
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+```
+
+## 🍓 Для продакшна на Raspberry Pi
+
+### Автоматический запуск (рекомендуется)
+
+```bash
+chmod +x scripts/start-prod.sh
+./scripts/start-prod.sh
+```
+
+Скрипт автоматически:
+- Проверит зависимости
+- Создаст виртуальное окружение
+- Установит недостающие пакеты
+- Запустит Detection Service в фоне
+- Запустит Backend и Frontend через Docker
+
+**Остановка:**
+```bash
+chmod +x scripts/stop-prod.sh
+./scripts/stop-prod.sh
+```
+
+### Ручной запуск
+
+1. **Detection Service:**
+   ```bash
+   ./scripts/run-detection-direct.sh
+   ```
+
+2. **Backend и Frontend через Docker:**
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.pi.yml up -d --build
+   ```
+
+## 📋 Подготовка окружения
 
 1. Установите зависимости для Detection Service:
    ```bash
@@ -14,55 +91,24 @@
    - `yolov8n.pt` (базовая модель)
    - `bestfire.pt` (специализированная модель)
 
-3. (Опционально) Установите Docker Desktop (Windows/macOS) или Docker Engine + Compose v2 (Linux) для Backend и Frontend.
-
-4. Запустите скрипт инициализации для автоматического создания `.env`:
+3. (Опционально) Запустите скрипт инициализации:
    ```bash
    ./scripts/init.sh
    ```
-   Или вручную скопируйте `env.example` в `.env` и убедитесь, что `DETECTION_URL=http://localhost:8001`.
 
-## 2. Запуск Detection Service (обязательно, отдельно)
+## 🌐 Доступ к сервисам
 
-**Windows:**
-```powershell
-cd services\detection
-python detection_server.py
-```
+**Разработка (Windows/ПК):**
+- Frontend: http://localhost:5173
+- Backend: http://localhost:8080
+- Detection: http://localhost:8001
 
-**Linux/macOS:**
-```bash
-cd services/detection
-python3 detection_server.py
-```
+**Продакшн (Raspberry Pi):**
+- Frontend: http://localhost (или IP адрес Raspberry Pi)
+- Backend: http://localhost:8080
+- Detection: http://localhost:8001
 
-**С параметрами:**
-```bash
-CAMERA_INDEX=0 PORT=8001 python detection_server.py
-```
-
-Сервис будет доступен на `http://localhost:8001`
-
-## 3. Windows dev (горячая перезагрузка фронтенда)
-
-После запуска Detection Service, запустите Backend и Frontend:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
-```
-
-Сервисы:
-- фронтенд (Vite): http://localhost:5173
-- backend (Node): http://localhost:8080
-- detection (Python): http://localhost:8001
-
-Остановка:
-```bash
-docker compose down
-# Detection Service остановите через Ctrl+C
-```
-
-## 4. Raspberry Pi (рабочий режим)
+## 📝 Дополнительная информация
 
 ### Шаг 1: Установка зависимостей Detection Service
 

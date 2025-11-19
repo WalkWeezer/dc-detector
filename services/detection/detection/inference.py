@@ -6,20 +6,19 @@ from typing import List, Optional, Tuple
 import cv2
 import numpy as np
 
-from tracking.sort_tracker import SortTracker
+from ..tracking.sort_tracker import SortTracker
 
 logger = logging.getLogger(__name__)
-
-CONFIDENCE_THRESHOLD = float(__import__('os').getenv('CONFIDENCE_THRESHOLD', '0.5'))
 
 
 class InferenceEngine:
     """Класс для инференса детекций"""
     
-    def __init__(self, model_manager, tracker: SortTracker, tracker_lock):
+    def __init__(self, model_manager, tracker: SortTracker, tracker_lock, confidence_threshold: Optional[float] = None):
         self.model_manager = model_manager
         self.tracker = tracker
         self.tracker_lock = tracker_lock
+        self.confidence_threshold = confidence_threshold or CONFIDENCE_THRESHOLD
     
     def _label_for_class(self, class_id: Optional[int], model) -> str:
         """Получает метку класса"""
@@ -36,7 +35,7 @@ class InferenceEngine:
         if model is None:
             raise RuntimeError('Модель не загружена')
         
-        results = model(frame, conf=CONFIDENCE_THRESHOLD, verbose=False)
+        results = model(frame, conf=self.confidence_threshold, verbose=False)
         annotated = frame.copy()
         raw_detections: List[dict] = []
         
@@ -58,17 +57,9 @@ class InferenceEngine:
                     'label': label
                 })
         
-        tracked = self.tracker.update(raw_detections, timestamp=timestamp)
-        
-        # Build stable tracks list
-        stable_tracks: List[dict] = []
-        try:
-            with self.tracker_lock:
-                for t in getattr(self.tracker, 'tracks', []) or []:
-                    if getattr(t, 'hits', 0) >= getattr(self.tracker, 'min_hits', 1) and getattr(t, 'misses', 0) <= getattr(self.tracker, 'max_age', 5):
-                        stable_tracks.append(t.to_dict())
-        except Exception:
-            stable_tracks = []
+        with self.tracker_lock:
+            tracked = self.tracker.update(raw_detections, timestamp=timestamp)
+            stable_tracks = self._collect_stable_tracks_locked()
         
         # Draw detections
         for track in tracked:
@@ -79,4 +70,14 @@ class InferenceEngine:
             cv2.putText(annotated, caption, (x1, max(y1 - 10, 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 200, 70), 2)
         
         return tracked, annotated, stable_tracks
+
+    def _collect_stable_tracks_locked(self) -> List[dict]:
+        stable_tracks: List[dict] = []
+        try:
+            for t in getattr(self.tracker, 'tracks', []) or []:
+                if getattr(t, 'hits', 0) >= getattr(self.tracker, 'min_hits', 1) and getattr(t, 'misses', 0) <= getattr(self.tracker, 'max_age', 5):
+                    stable_tracks.append(t.to_dict())
+        except Exception:
+            return []
+        return stable_tracks
 

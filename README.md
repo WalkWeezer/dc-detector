@@ -44,51 +44,91 @@
   - `numpy`
   - См. `services/detection/requirements.txt`
 
-## 🚀 Быстрый старт (dev, Windows/macOS/Linux)
+## 🚀 Быстрый старт
 
-### Шаг 1: Запуск Detection Service (обязательно, отдельно от Docker)
+### Для разработки на Windows/ПК
 
-1. Установите зависимости:
-   ```bash
-   cd services/detection
-   pip install -r requirements.txt
-   ```
+**Автоматический запуск всех сервисов:**
 
-2. Поместите модель YOLO в `services/detection/models/`:
-   - `yolov8n.pt` (базовая модель)
-   - `bestfire.pt` (специализированная модель)
+```powershell
+.\scripts\start-dev.ps1
+```
 
-3. Запустите detection service:
-   ```bash
-   cd services/detection
-   python detection_server.py
-   ```
-   
-   Или на Windows:
+Скрипт автоматически:
+- Проверит зависимости (Python, Node.js)
+- Установит недостающие пакеты
+- Запустит Detection Service (порт 8001)
+- Запустит Backend (порт 8080)
+- Запустит Frontend через Vite (порт 5173)
+
+**Доступные сервисы:**
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:8080
+- Detection Service: http://localhost:8001
+
+**Остановка всех сервисов:**
+```powershell
+.\scripts\stop-dev.ps1
+```
+
+**Ручной запуск (если нужно):**
+
+1. Detection Service:
    ```powershell
    cd services\detection
    python detection_server.py
    ```
 
-4. Сервис будет доступен на `http://localhost:8001`
-   - Health check: `http://localhost:8001/health`
-   - Статус детекции: `http://localhost:8001/api/detection`
-   - Список трекеров: `http://localhost:8001/api/trackers`
-   - Видео поток: `http://localhost:8001/video_feed_raw`
-
-### Шаг 2: Запуск Backend и Frontend
-
-1. (Опционально) скопируйте `env.example` в `.env` и убедитесь, что `DETECTION_URL=http://localhost:8001`
-
-2. Запустите backend и frontend:
-   ```bash
-   docker compose up --build
+2. Backend (в новом терминале):
+   ```powershell
+   cd services\backend
+   node src\server.js
    ```
 
-3. Доступы:
-   - Frontend: <http://localhost>
-   - Backend API: <http://localhost:8080>
-   - Detection Service: <http://localhost:8001>
+3. Frontend (в новом терминале):
+   ```powershell
+   cd frontend
+   npm run dev
+   ```
+
+### Для продакшна на Raspberry Pi
+
+**Автоматический запуск всех сервисов:**
+
+```bash
+chmod +x scripts/start-prod.sh
+./scripts/start-prod.sh
+```
+
+Скрипт автоматически:
+- Проверит зависимости (Python, Docker, Docker Compose)
+- Создаст виртуальное окружение если нужно
+- Установит недостающие пакеты
+- Запустит Detection Service в фоне (порт 8001)
+- Запустит Backend и Frontend через Docker (порты 8080 и 80)
+
+**Доступные сервисы:**
+- Frontend: http://localhost (или IP адрес Raspberry Pi)
+- Backend API: http://localhost:8080
+- Detection Service: http://localhost:8001
+
+**Остановка всех сервисов:**
+```bash
+chmod +x scripts/stop-prod.sh
+./scripts/stop-prod.sh
+```
+
+**Ручной запуск (если нужно):**
+
+1. Detection Service:
+   ```bash
+   ./scripts/run-detection-direct.sh
+   ```
+
+2. Backend и Frontend через Docker:
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.pi.yml up -d --build
+   ```
 
 ## 🌐 Доступ по сети (Ethernet)
 

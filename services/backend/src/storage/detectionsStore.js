@@ -254,9 +254,16 @@ export async function listSavedDetections(dateKeyInput) {
 }
 
 function parseDataUrl(dataUrl) {
-  const idx = String(dataUrl).indexOf(',')
-  if (idx === -1) return Buffer.from([])
-  return Buffer.from(dataUrl.slice(idx + 1), 'base64')
+  const str = String(dataUrl ?? '')
+  const idx = str.indexOf(',')
+  if (idx === -1) {
+    try {
+      return Buffer.from(str, 'base64')
+    } catch {
+      return Buffer.from([])
+    }
+  }
+  return Buffer.from(str.slice(idx + 1), 'base64')
 }
 
 async function toRgbaBuffer(jpegBuffer, targetWidth) {
