@@ -131,7 +131,15 @@ class CameraManager:
                 logger.info("Picamera2 успешно инициализирован")
                 return True
         except Exception as exc:
-            logger.warning("Ошибка инициализации Picamera2: %s", exc)
+            error_msg = str(exc)
+            # Проверяем, является ли ошибка связанной с занятостью камеры
+            if "busy" in error_msg.lower() or "in use" in error_msg.lower() or "did not complete" in error_msg.lower():
+                logger.warning(
+                    "Ошибка инициализации Picamera2: камера занята другим процессом. "
+                    "Проверьте запущенные процессы: 'ps aux | grep camera' или 'pkill -f detection_server.py'"
+                )
+            else:
+                logger.warning("Ошибка инициализации Picamera2: %s", exc)
             if self.picam2 is not None:
                 try:
                     self.picam2.stop()

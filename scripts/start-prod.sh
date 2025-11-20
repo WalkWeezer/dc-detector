@@ -145,21 +145,33 @@ cd services/detection
 if lsof -Pi :8001 -sTCP:LISTEN -t >/dev/null 2>&1; then
     echo "⚠️  Detection Service уже запущен на порту 8001"
 else
-    # Запускаем в фоне
+    # Активируем venv и используем полный путь к Python
     source ../../venv/bin/activate
-    nohup python detection_server.py > ../../.detection.log 2>&1 &
+    PYTHON_PATH=$(which python)
+    
+    # Запускаем в фоне с явным указанием рабочего каталога
+    nohup "$PYTHON_PATH" detection_server.py > ../../.detection.log 2>&1 &
     DETECTION_PID=$!
     echo "$DETECTION_PID" > ../../.detection.pid
     echo "✅ Detection Service запущен (PID: $DETECTION_PID)"
     
-    # Ждем запуска
-    sleep 3
+    # Увеличиваем задержку для инициализации камеры
+    echo "⏳ Ожидание инициализации камеры (5 секунд)..."
+    sleep 5
     
     # Проверка работоспособности
     if curl -s http://localhost:8001/health >/dev/null 2>&1; then
         echo "✅ Detection Service работает"
+        # Дополнительная проверка камеры
+        CAMERA_STATUS=$(curl -s http://localhost:8001/api/detection 2>/dev/null | grep -o '"camera_available":[^,]*' || echo "")
+        if echo "$CAMERA_STATUS" | grep -q "true"; then
+            echo "✅ Камера инициализирована"
+        else
+            echo "⚠️  Камера не инициализирована. Проверьте логи: tail -f .detection.log"
+        fi
     else
         echo "⚠️  Detection Service не отвечает, но процесс запущен"
+        echo "💡 Проверьте логи: tail -f .detection.log"
     fi
 fi
 
