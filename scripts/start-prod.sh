@@ -108,11 +108,19 @@ fi
 if [ "$VENV_NEEDS_RECREATE" = true ]; then
     echo ""
     echo "🔄 Пересоздание venv с --system-site-packages..."
+    DETECTION_DIR_ABS=$(pwd)
     cd ../..
+    PROJECT_ROOT_ABS=$(pwd)
+    echo "   Удаляю старый venv..."
     rm -rf venv
-    python3 -m venv venv --system-site-packages
+    echo "   Создаю новый venv с --system-site-packages..."
+    python3 -m venv venv --system-site-packages || {
+        echo "❌ Ошибка создания venv"
+        exit 1
+    }
     cd services/detection
     echo "✅ Venv пересоздан с --system-site-packages"
+    echo "   📁 Вернулся в: $(pwd)"
     # После пересоздания нужно будет установить зависимости заново
     VENV_RECREATED=true
 else
@@ -120,7 +128,22 @@ else
 fi
 
 # Активируем venv
-source ../../venv/bin/activate
+echo "🔌 Активация виртуального окружения..."
+source ../../venv/bin/activate || {
+    echo "❌ Ошибка активации venv"
+    exit 1
+}
+
+# Проверяем, что мы в правильной директории
+CURRENT_DIR=$(pwd)
+echo "📁 Текущая директория: $CURRENT_DIR"
+
+# Проверяем доступность pip
+if ! command -v pip &> /dev/null; then
+    echo "❌ pip не найден в venv"
+    exit 1
+fi
+echo "✅ pip доступен: $(which pip)"
 
 # Проверяем какие пакеты уже доступны из системы
 echo "🔍 Проверка доступных системных пакетов..."
@@ -128,7 +151,9 @@ python -c "
 import sys
 print(f'Python путь: {sys.prefix}')
 print(f'Системные пакеты доступны: {hasattr(sys, \"real_prefix\") or sys.base_prefix != sys.prefix}')
-"
+" || {
+    echo "⚠️  Ошибка при проверке Python окружения"
+}
 
 # Устанавливаем ТОЛЬКО недостающие пакеты
 echo "📦 Установка недостающих пакетов..."
@@ -138,22 +163,26 @@ MISSING_PACKAGES=()
 
 check_package() {
     local package=$1
-    python -c "import $package" 2>/dev/null
-    if [ $? -ne 0 ]; then
+    # Используем || true чтобы не падать при ошибке импорта
+    if python -c "import $package" 2>/dev/null; then
+        echo "✅ $package - уже установлен"
+        return 0
+    else
         MISSING_PACKAGES+=($package)
         echo "❌ $package - требуется установка"
-    else
-        echo "✅ $package - уже установлен"
+        return 1
     fi
 }
 
 echo ""
 echo "🔍 Проверка ключевых пакетов:"
+set +e  # Временно отключаем set -e для проверки пакетов
 check_package flask
 check_package cv2
 check_package ultralytics
 check_package numpy
 check_package PIL
+set -e  # Включаем обратно
 
 # Специальная проверка picamera2 (критично для Raspberry Pi)
 echo ""
@@ -190,15 +219,44 @@ if [ ${#MISSING_PACKAGES[@]} -gt 0 ] || [ "$VENV_RECREATED" = true ]; then
     if [ "$VENV_RECREATED" = true ]; then
         echo ""
         echo "📥 Устанавливаю зависимости (venv был пересоздан)..."
+        # Убеждаемся, что мы в правильной директории
+        if [ ! -d "services/detection" ] && [ -d "../../services/detection" ]; then
+            cd ../../services/detection
+            echo "   Перешел в services/detection"
+        fi
+        
+        # Проверяем путь к requirements.txt (он должен быть в services/detection)
+        REQ_FILE=""
         if [ -f "requirements.txt" ]; then
-            pip install -q -r requirements.txt
+            REQ_FILE="requirements.txt"
+            echo "   ✅ Найден requirements.txt в текущей директории: $(pwd)"
+        elif [ -f "services/detection/requirements.txt" ]; then
+            REQ_FILE="services/detection/requirements.txt"
+            echo "   ✅ Найден requirements.txt в services/detection"
+        elif [ -f "../../services/detection/requirements.txt" ]; then
+            REQ_FILE="../../services/detection/requirements.txt"
+            echo "   ✅ Найден requirements.txt относительно текущей директории"
+        fi
+        
+        if [ -n "$REQ_FILE" ] && [ -f "$REQ_FILE" ]; then
+            echo "   📦 Установка из $REQ_FILE..."
+            pip install -q -r "$REQ_FILE" || {
+                echo "⚠️  Ошибка при установке из requirements.txt, пробую установить основные пакеты..."
+                pip install -q flask opencv-python-headless numpy requests Pillow urllib3 Werkzeug || true
+            }
         else
-            pip install -q "${MISSING_PACKAGES[@]}"
+            echo "   ⚠️  requirements.txt не найден, устанавливаю основные пакеты..."
+            pip install -q flask opencv-python-headless numpy requests Pillow urllib3 Werkzeug || true
+            # Пытаемся установить ultralytics отдельно (может быть долго)
+            echo "   📦 Установка ultralytics (это может занять время)..."
+            pip install -q ultralytics || echo "⚠️  Не удалось установить ultralytics"
         fi
     else
         echo ""
         echo "📥 Устанавливаю недостающие пакеты: ${MISSING_PACKAGES[*]}"
-        pip install -q "${MISSING_PACKAGES[@]}"
+        pip install -q "${MISSING_PACKAGES[@]}" || {
+            echo "⚠️  Ошибка при установке некоторых пакетов"
+        }
     fi
     echo "✅ Зависимости установлены"
 else
@@ -225,10 +283,38 @@ rm -f .detection.log
 echo ""
 echo "🎬 Запуск Detection Service..."
 
-cd services/detection
+# Убеждаемся, что мы в корне проекта
+cd "$PROJECT_ROOT"
+echo "📁 Переход в корень проекта: $(pwd)"
+
+# Переходим в services/detection
+cd services/detection || {
+    echo "❌ Ошибка: не удалось перейти в services/detection"
+    exit 1
+}
+echo "📁 Текущая директория: $(pwd)"
+
+# Проверяем наличие detection_server.py
+if [ ! -f "detection_server.py" ]; then
+    echo "❌ Ошибка: detection_server.py не найден в $(pwd)"
+    exit 1
+fi
 
 # Запускаем напрямую с активированным venv
-source ../../venv/bin/activate
+echo "🔌 Активация venv перед запуском..."
+source ../../venv/bin/activate || {
+    echo "❌ Ошибка активации venv"
+    exit 1
+}
+
+# Проверяем, что Python доступен
+if ! command -v python &> /dev/null; then
+    echo "❌ Python не найден в venv"
+    exit 1
+fi
+
+echo "🐍 Python: $(which python)"
+echo "🚀 Запуск detection_server.py..."
 nohup python detection_server.py > "../../.detection.log" 2>&1 &
 DETECTION_PID=$!
 echo "$DETECTION_PID" > "../../.detection.pid"
