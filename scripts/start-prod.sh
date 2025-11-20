@@ -125,6 +125,52 @@ check_package ultralytics
 check_package numpy
 check_package PIL
 
+# Специальная проверка picamera2 (критично для Raspberry Pi)
+echo ""
+echo "📹 Проверка picamera2 (для Raspberry Pi камеры)..."
+if python -c "import picamera2" 2>/dev/null; then
+    echo "✅ picamera2 доступен в venv"
+else
+    echo "⚠️  picamera2 недоступен в venv"
+    # Проверяем, доступен ли он системно
+    if python3 -c "import picamera2" 2>/dev/null; then
+        echo "   ℹ️  picamera2 доступен системно, но не в venv"
+        echo "   💡 Возможно venv создан без --system-site-packages"
+        
+        # Проверяем, создан ли venv с --system-site-packages
+        if [ -f "../../venv/pyvenv.cfg" ]; then
+            if grep -q "include-system-site-packages = true" "../../venv/pyvenv.cfg"; then
+                echo "   ⚠️  Venv создан с --system-site-packages, но picamera2 все равно недоступен"
+                echo "   💡 Попробуйте пересоздать venv или установить picamera2 в venv"
+            else
+                echo "   ❌ Venv создан БЕЗ --system-site-packages"
+                echo "   💡 Нужно пересоздать venv с --system-site-packages"
+                echo ""
+                read -p "Пересоздать venv с --system-site-packages? (y/n) " -n 1 -r
+                echo
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    echo "🔄 Пересоздание venv..."
+                    cd ../..
+                    rm -rf venv
+                    python3 -m venv venv --system-site-packages
+                    cd services/detection
+                    source ../../venv/bin/activate
+                    echo "✅ Venv пересоздан с --system-site-packages"
+                    # Проверяем снова
+                    if python -c "import picamera2" 2>/dev/null; then
+                        echo "✅ picamera2 теперь доступен в venv"
+                    else
+                        echo "⚠️  picamera2 все еще недоступен. Установите: sudo apt install python3-picamera2"
+                    fi
+                fi
+            fi
+        fi
+    else
+        echo "   ❌ picamera2 не установлен системно"
+        echo "   💡 Установите: sudo apt install python3-picamera2"
+    fi
+fi
+
 # Устанавливаем только недостающие пакеты
 if [ ${#MISSING_PACKAGES[@]} -gt 0 ]; then
     echo ""
@@ -179,7 +225,7 @@ if curl -s --connect-timeout 5 http://localhost:8001/health >/dev/null; then
     else
         echo "⚠️  Камера не инициализирована"
         echo "📋 Последние логи:"
-        tail -5 "../../.detection.log"
+        tail -f "../../.detection.log"
     fi
 else
     echo "❌ Detection Service не отвечает"
