@@ -136,57 +136,83 @@ fi
 
 cd "$PROJECT_ROOT"
 
+# Остановка предыдущего процесса если запущен
+if [ -f ".detection.pid" ]; then
+    OLD_PID=$(cat .detection.pid)
+    if kill -0 $OLD_PID 2>/dev/null; then
+        echo "🛑 Останавливаю предыдущий Detection Service (PID: $OLD_PID)..."
+        kill $OLD_PID
+        sleep 2
+    fi
+    rm -f .detection.pid
+fi
+
+rm -f .detection.log
+
 # Запуск Detection Service в фоне
 echo ""
 echo "🎬 Запуск Detection Service..."
 cd services/detection
 
-# Проверка, не запущен ли уже
-if lsof -Pi :8001 -sTCP:LISTEN -t >/dev/null 2>&1; then
-    echo "⚠️  Detection Service уже запущен на порту 8001"
-else
-    # Сохраняем абсолютный путь к директории detection
-    DETECTION_DIR=$(pwd)
-    PROJECT_ROOT=$(cd ../.. && pwd)
-    
-    # Активируем venv и получаем полный путь к Python
-    source "$PROJECT_ROOT/venv/bin/activate"
-    PYTHON_PATH=$(which python)
-    
-    # Проверяем, что Python найден
-    if [ -z "$PYTHON_PATH" ]; then
-        echo "❌ Python не найден в venv"
-        exit 1
-    fi
-    
-    # Запускаем в фоне с явным указанием рабочего каталога
-    # Используем (cd ... && ...) чтобы гарантировать правильный рабочий каталог
-    (cd "$DETECTION_DIR" && nohup "$PYTHON_PATH" detection_server.py > "$PROJECT_ROOT/.detection.log" 2>&1 &)
-    DETECTION_PID=$!
-    echo "$DETECTION_PID" > "$PROJECT_ROOT/.detection.pid"
-    echo "✅ Detection Service запущен (PID: $DETECTION_PID)"
-    echo "📁 Рабочий каталог: $DETECTION_DIR"
-    
-    # Увеличиваем задержку для инициализации камеры
-    echo "⏳ Ожидание инициализации камеры (7 секунд)..."
-    sleep 7
-    
-    # Проверка работоспособности
-    if curl -s http://localhost:8001/health >/dev/null 2>&1; then
-        echo "✅ Detection Service работает"
-        # Дополнительная проверка камеры
-        CAMERA_STATUS=$(curl -s http://localhost:8001/api/detection 2>/dev/null | grep -o '"camera_available":[^,]*' || echo "")
-        if echo "$CAMERA_STATUS" | grep -q "true"; then
-            echo "✅ Камера инициализирована"
+# Сохраняем абсолютный путь к директории detection
+DETECTION_DIR=$(pwd)
+PROJECT_ROOT=$(cd ../.. && pwd)
+
+# Используем Python напрямую из venv без активации (более надежно для фоновых процессов)
+PYTHON_PATH="$PROJECT_ROOT/venv/bin/python"
+
+# Проверяем, что Python существует
+if [ ! -f "$PYTHON_PATH" ]; then
+    echo "❌ Python не найден в venv: $PYTHON_PATH"
+    exit 1
+fi
+
+# Запускаем в фоне с явным указанием рабочего каталога
+echo "📁 Рабочий каталог: $DETECTION_DIR"
+echo "🐍 Python: $PYTHON_PATH"
+
+# Запускаем процесс и сохраняем PID
+(cd "$DETECTION_DIR" && nohup env PATH="$PROJECT_ROOT/venv/bin:$PATH" "$PYTHON_PATH" detection_server.py > "$PROJECT_ROOT/.detection.log" 2>&1 &)
+DETECTION_PID=$!
+echo "$DETECTION_PID" > "$PROJECT_ROOT/.detection.pid"
+echo "✅ Detection Service запущен (PID: $DETECTION_PID)"
+
+# Увеличиваем время ожидания инициализации камеры
+echo "⏳ Ожидание инициализации Detection Service (10 секунд)..."
+sleep 10
+
+# Проверка работоспособности с повторными попытками
+echo "🔍 Проверка работоспособности Detection Service..."
+
+MAX_RETRIES=5
+RETRY_COUNT=0
+DETECTION_READY=false
+
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    if curl -s --connect-timeout 10 http://localhost:8001/health >/dev/null 2>&1; then
+        echo "✅ Detection Service отвечает на health check"
+        
+        # Проверяем статус камеры
+        CAMERA_RESPONSE=$(curl -s --connect-timeout 10 http://localhost:8001/api/detection 2>/dev/null || echo "")
+        if echo "$CAMERA_RESPONSE" | grep -q '"camera_available":true'; then
+            echo "✅ Камера успешно инициализирована"
+            DETECTION_READY=true
+            break
         else
-            echo "⚠️  Камера не инициализирована"
-            echo "💡 Проверьте логи: tail -f $PROJECT_ROOT/.detection.log"
-            echo "💡 Или проверьте процессы камеры: ps aux | grep camera"
+            echo "⏳ Камера еще не готова, попытка $((RETRY_COUNT + 1))/$MAX_RETRIES..."
+            sleep 5
         fi
     else
-        echo "⚠️  Detection Service не отвечает, но процесс запущен"
-        echo "💡 Проверьте логи: tail -f $PROJECT_ROOT/.detection.log"
+        echo "⏳ Detection Service не отвечает, попытка $((RETRY_COUNT + 1))/$MAX_RETRIES..."
+        sleep 5
     fi
+    RETRY_COUNT=$((RETRY_COUNT + 1))
+done
+
+if [ "$DETECTION_READY" = false ]; then
+    echo "⚠️  Detection Service запущен, но камера может быть не инициализирована"
+    echo "💡 Проверьте логи: tail -f $PROJECT_ROOT/.detection.log"
+    echo "💡 Проверьте камеру: ls -la /dev/video*"
 fi
 
 cd "$PROJECT_ROOT"
@@ -203,28 +229,51 @@ else
     docker compose up -d --build
 fi
 
-# Ждем запуска
-sleep 5
+# Ждем запуска контейнеров
+echo "⏳ Ожидание запуска Docker контейнеров (15 секунд)..."
+sleep 15
 
-# Проверка работоспособности
+# Проверка работоспособности всех сервисов
 echo ""
-echo "🔍 Проверка работоспособности сервисов..."
+echo "🔍 Проверка работоспособности всех сервисов..."
 
 check_service() {
     local url=$1
     local name=$2
-    if curl -s "$url" >/dev/null 2>&1; then
-        echo "✅ $name работает"
-        return 0
-    else
-        echo "⚠️  $name не отвечает"
-        return 1
-    fi
+    local max_retries=$3
+    local retry_count=0
+    
+    while [ $retry_count -lt $max_retries ]; do
+        if curl -s --connect-timeout 10 "$url" >/dev/null 2>&1; then
+            echo "✅ $name работает"
+            return 0
+        else
+            retry_count=$((retry_count + 1))
+            if [ $retry_count -lt $max_retries ]; then
+                echo "⏳ $name не отвечает, повторная попытка $retry_count/$max_retries..."
+                sleep 5
+            fi
+        fi
+    done
+    
+    echo "⚠️  $name не отвечает после $max_retries попыток"
+    return 1
 }
 
-check_service "http://localhost:8001/health" "Detection Service"
-check_service "http://localhost:8080/health" "Backend"
-check_service "http://localhost" "Frontend"
+check_service "http://localhost:8001/health" "Detection Service" 3
+check_service "http://localhost:8080/health" "Backend" 3
+check_service "http://localhost" "Frontend" 3
+
+# Проверка видео потока
+echo ""
+echo "🎥 Проверка видео потока..."
+
+if curl -s --connect-timeout 10 http://localhost:8001/video_feed_raw >/dev/null 2>&1; then
+    echo "✅ Видео поток доступен"
+else
+    echo "⚠️  Видео поток не доступен"
+    echo "💡 Проверьте камеру и логи Detection Service"
+fi
 
 # Итоговая информация
 echo ""
@@ -242,14 +291,13 @@ echo "   • Health Check (Backend):     http://localhost:8080/health"
 echo "   • Health Check (Detection):    http://localhost:8001/health"
 echo "   • API Status:                 http://localhost:8080/api/detections/status"
 echo "   • Video Stream:               http://localhost:8001/video_feed_raw"
+echo "   • Detection API:              http://localhost:8001/api/detection"
 echo ""
 echo "🛑 Для остановки всех сервисов:"
 echo "   Запустите: ./scripts/stop-prod.sh"
 echo ""
 echo "📝 Логи:"
-echo "   • Detection Service: .detection.log"
+echo "   • Detection Service: tail -f .detection.log"
 echo "   • Docker контейнеры:  docker compose logs -f"
+echo "   • Конкретный контейнер: docker compose logs -f backend"
 echo ""
-
-
-
