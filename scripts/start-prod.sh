@@ -145,19 +145,31 @@ cd services/detection
 if lsof -Pi :8001 -sTCP:LISTEN -t >/dev/null 2>&1; then
     echo "⚠️  Detection Service уже запущен на порту 8001"
 else
-    # Активируем venv и используем полный путь к Python
-    source ../../venv/bin/activate
+    # Сохраняем абсолютный путь к директории detection
+    DETECTION_DIR=$(pwd)
+    PROJECT_ROOT=$(cd ../.. && pwd)
+    
+    # Активируем venv и получаем полный путь к Python
+    source "$PROJECT_ROOT/venv/bin/activate"
     PYTHON_PATH=$(which python)
     
+    # Проверяем, что Python найден
+    if [ -z "$PYTHON_PATH" ]; then
+        echo "❌ Python не найден в venv"
+        exit 1
+    fi
+    
     # Запускаем в фоне с явным указанием рабочего каталога
-    nohup "$PYTHON_PATH" detection_server.py > ../../.detection.log 2>&1 &
+    # Используем (cd ... && ...) чтобы гарантировать правильный рабочий каталог
+    (cd "$DETECTION_DIR" && nohup "$PYTHON_PATH" detection_server.py > "$PROJECT_ROOT/.detection.log" 2>&1 &)
     DETECTION_PID=$!
-    echo "$DETECTION_PID" > ../../.detection.pid
+    echo "$DETECTION_PID" > "$PROJECT_ROOT/.detection.pid"
     echo "✅ Detection Service запущен (PID: $DETECTION_PID)"
+    echo "📁 Рабочий каталог: $DETECTION_DIR"
     
     # Увеличиваем задержку для инициализации камеры
-    echo "⏳ Ожидание инициализации камеры (5 секунд)..."
-    sleep 5
+    echo "⏳ Ожидание инициализации камеры (7 секунд)..."
+    sleep 7
     
     # Проверка работоспособности
     if curl -s http://localhost:8001/health >/dev/null 2>&1; then
@@ -167,11 +179,13 @@ else
         if echo "$CAMERA_STATUS" | grep -q "true"; then
             echo "✅ Камера инициализирована"
         else
-            echo "⚠️  Камера не инициализирована. Проверьте логи: tail -f .detection.log"
+            echo "⚠️  Камера не инициализирована"
+            echo "💡 Проверьте логи: tail -f $PROJECT_ROOT/.detection.log"
+            echo "💡 Или проверьте процессы камеры: ps aux | grep camera"
         fi
     else
         echo "⚠️  Detection Service не отвечает, но процесс запущен"
-        echo "💡 Проверьте логи: tail -f .detection.log"
+        echo "💡 Проверьте логи: tail -f $PROJECT_ROOT/.detection.log"
     fi
 fi
 
