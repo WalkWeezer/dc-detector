@@ -161,15 +161,26 @@ echo "📦 Установка недостающих пакетов..."
 # Проверяем и устанавливаем только то, что действительно нужно
 MISSING_PACKAGES=()
 
+# Маппинг между именами импортов и именами пакетов для pip
+declare -A PACKAGE_MAP=(
+    ["cv2"]="opencv-python-headless"
+    ["PIL"]="Pillow"
+    ["flask"]="flask"
+    ["numpy"]="numpy"
+    ["ultralytics"]="ultralytics"
+)
+
 check_package() {
-    local package=$1
+    local import_name=$1
+    local package_name=${PACKAGE_MAP[$import_name]:-$import_name}
+    
     # Используем || true чтобы не падать при ошибке импорта
-    if python -c "import $package" 2>/dev/null; then
-        echo "✅ $package - уже установлен"
+    if python -c "import $import_name" 2>/dev/null; then
+        echo "✅ $import_name - уже установлен"
         return 0
     else
-        MISSING_PACKAGES+=($package)
-        echo "❌ $package - требуется установка"
+        MISSING_PACKAGES+=($package_name)
+        echo "❌ $import_name - требуется установка (пакет: $package_name)"
         return 1
     fi
 }
