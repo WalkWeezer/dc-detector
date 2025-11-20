@@ -1,0 +1,187 @@
+[1mdiff --git a/.gitattributes b/.gitattributes[m
+[1mnew file mode 100644[m
+[1mindex 0000000..2ff8fac[m
+[1m--- /dev/null[m
+[1m+++ b/.gitattributes[m
+[36m@@ -0,0 +1,14 @@[m
+[32m+[m[32m* text=auto[m
+[32m+[m
+[32m+[m[32m# Enforce Unix endings for shell scripts and Python code[m
+[32m+[m[32m*.sh text eol=lf[m
+[32m+[m[32m*.py text eol=lf[m
+[32m+[m[32m*.sh? text eol=lf[m
+[32m+[m
+[32m+[m[32m# Windows scripts keep CRLF[m
+[32m+[m[32m*.bat text eol=crlf[m
+[32m+[m[32m*.cmd text eol=crlf[m
+[32m+[m[32m*.ps1 text eol=crlf[m
+[32m+[m
+[32m+[m[32m# Documentation stays LF for consistency[m
+[32m+[m[32m*.md text eol=lf[m
+[1mdiff --git a/scripts/start-dev.bat b/scripts/start-dev.bat[m
+[1mnew file mode 100644[m
+[1mindex 0000000..f5937f7[m
+[1m--- /dev/null[m
+[1m+++ b/scripts/start-dev.bat[m
+[36m@@ -0,0 +1,223 @@[m
+[32m+[m[32m﻿@echo off[m
+[32m+[m[32mchcp 65001 >nul[m
+[32m+[m[32msetlocal enabledelayedexpansion[m
+[32m+[m
+[32m+[m[32mREM Скрипт запуска всей системы для разработки на Windows/ПК[m
+[32m+[m[32mREM Запускает: Detection Service, Backend, Frontend (Vite)[m
+[32m+[m
+[32m+[m[32mset "SCRIPT_DIR=%~dp0"[m
+[32m+[m[32mset "PROJECT_ROOT=%SCRIPT_DIR%.."[m
+[32m+[m
+[32m+[m[32mecho.[m
+[32m+[m[32mecho 🚀 Запуск DC-Detector для разработки (Windows/ПК)[m
+[32m+[m[32mecho.[m
+[32m+[m
+[32m+[m[32mREM Переходим в корень проекта[m
+[32m+[m[32mcd /d "%PROJECT_ROOT%"[m
+[32m+[m
+[32m+[m[32mREM Проверка зависимостей[m
+[32m+[m[32mecho 📋 Проверка зависимостей...[m
+[32m+[m[32mecho.[m
+[32m+[m
+[32m+[m[32mREM Проверка Python[m
+[32m+[m[32mpython --version >nul 2>&1[m
+[32m+[m[32mif errorlevel 1 ([m
+[32m+[m[32m    echo ❌ Python не найден. Установите Python 3.11+[m
+[32m+[m[32m    pause[m
+[32m+[m[32m    exit /b 1[m
+[32m+[m[32m) else ([m
+[32m+[m[32m    for /f "tokens=*" %%i in ('python --version 2^>^&1') do echo ✅ Python: %%i[m
+[32m+[m[32m)[m
+[32m+[m
+[32m+[m[32mREM Проверка Node.js[m
+[32m+[m[32mnode --version >nul 2>&1[m
+[32m+[m[32mif errorlevel 1 ([m
+[32m+[m[32m    echo ❌ Node.js не найден. Установите Node.js 20+[m
+[32m+[m[32m    pause[m
+[32m+[m[32m    exit /b 1[m
+[32m+[m[32m) else ([m
+[32m+[m[32m    for /f "tokens=*" %%i in ('node --version') do echo ✅ Node.js: %%i[m
+[32m+[m[32m)[m
+[32m+[m
+[32m+[m[32mREM Проверка портов[m
+[32m+[m[32mecho.[m
+[32m+[m[32mecho 🔍 Проверка портов...[m
+[32m+[m[32mecho.[m
+[32m+[m
+[32m+[m[32mset PORTS_IN_USE=0[m
+[32m+[m[32mnetstat -an | findstr ":8001" >nul 2>&1[m
+[32m+[m[32mif not errorlevel 1 ([m
+[32m+[m[32m    echo [WARNING] Port 8001 Detection Service - BUSY[m
+[32m+[m[32m    set PORTS_IN_USE=1[m
+[32m+[m[32m) else ([m
+[32m+[m[32m    echo [OK] Port 8001 - FREE[m
+[32m+[m[32m)[m
+[32m+[m
+[32m+[m[32mnetstat -an | findstr ":8080" >nul 2>&1[m
+[32m+[m[32mif not errorlevel 1 ([m
+[32m+[m[32m    echo [WARNING] Port 8080 Backend - BUSY[m
+[32m+[m[32m    set PORTS_IN_USE=1[m
+[32m+[m[32m) else ([m
+[32m+[m[32m    echo [OK] Port 8080 - FREE[m
+[32m+[m[32m)[m
+[32m+[m
+[32m+[m[32mnetstat -an | findstr ":5173" >nul 2>&1[m
+[32m+[m[32mif not errorlevel 1 ([m
+[32m+[m[32m    echo [WARNING] Port 5173 Frontend - BUSY[m
+[32m+[m[32m    set PORTS_IN_USE=1[m
+[32m+[m[32m) else ([m
+[32m+[m[32m    echo [OK] Port 5173 - FREE[m
+[32m+[m[32m)[m
+[32m+[m
+[32m+[m[32mif !PORTS_IN_USE!==1 ([m
+[32m+[m[32m    echo.[m
+[32m+[m[32m    echo [WARNING] Some ports are busy. Stop processes or use different ports.[m
+[32m+[m[32m    set /p CONTINUE="Continue? (y/n): "[m
+[32m+[m[32m    if /i not "!CONTINUE!"=="y" ([m
+[32m+[m[32m        pause[m
+[32m+[m[32m        exit /b 1[m
+[32m+[m[32m    )[m
+[32m+[m[32m)[m
+[32m+[m
+[32m+[m[32mREM Проверка зависимостей Detection Service[m
+[32m+[m[32mecho.[m
+[32m+[m[32mecho 📦 Проверка зависимостей Detection Service...[m
+[32m+[m[32mset "DETECTION_DIR=%PROJECT_ROOT%\services\detection"[m
+[32m+[m[32mif not exist "%DETECTION_DIR%" ([m
+[32m+[m[32m    echo ❌ Директория services\detection не найдена[m
+[32m+[m[32m    pause[m
+[32m+[m[32m    exit /b 1[m
+[32m+[m[32m)[m
+[32m+[m
+[32m+[m[32mcd /d "%DETECTION_DIR%"[m
+[32m+[m[32mpython -c "import flask" >nul 2>&1[m
+[32m+[m[32mif errorlevel 1 ([m
+[32m+[m[32m    echo ⚠️  Flask не установлен. Устанавливаю...[m
+[32m+[m[32m    pip install -q flask[m
+[32m+[m[32m) else ([m
+[32m+[m[32m    echo ✅ Flask установлен[m
+[32m+[m[32m)[m
+[32m+[m
+[32m+[m[32mREM Проверка зависимостей Backend[m
+[32m+[m[32mecho.[m
+[32m+[m[32mecho 📦 Проверка зависимостей Backend...[m
+[32m+[m[32mset "BACKEND_DIR=%PROJECT_ROOT%\services\backend"[m
+[32m+[m[32mif not exist "%BACKEND_DIR%" ([m
+[32m+[m[32m    echo ❌ Директория services\backend не найдена[m
+[32m+[m[32m    pause[m
+[32m+[m[32m    exit /b 1[m
+[32m+[m[32m)[m
+[32m+[m
+[32m+[m[32mcd /d "%BACKEND_DIR%"[m
+[32m+[m[32mif not exist "node_modules" ([m
+[32m+[m[32m    echo ⚠️  node_modules не найден. Устанавливаю зависимости...[m
+[32m+[m[32m    call npm install[m
+[32m+[m[32m) else ([m
+[32m+[m[32m    echo ✅ Зависимости Backend установлены[m
+[32m+[m[32m)[m
+[32m+[m
+[32m+[m[32mREM Проверка зависимостей Frontend[m
+[32m+[m[32mecho.[m
+[32m+[m[32mecho 📦 Проверка зависимостей Frontend...[m
+[32m+[m[32mset "FRONTEND_DIR=%PROJECT_ROOT%\frontend"[m
+[32m+[m[32mif not exist "%FRONTEND_DIR%" ([m
+[32m+[m[32m    echo ❌ Директория frontend не найдена[m
+[32m+[m[32m    pause[m
+[32m+[m[32m    exit /b 1[m
+[32m+[m[32m)[m
+[32m+[m
+[32m+[m[32mcd /d "%FRONTEND_DIR%"[m
+[32m+[m[32mif not exist "node_modules" ([m
+[32m+[m[32m    echo ⚠️  node_modules не найден. Устанавливаю зависимости...[m
+[32m+[m[32m    call npm install[m
+[32m+[m[32m) else ([m
+[32m+[m[32m    echo ✅ Зависимости Frontend установлены[m
+[32m+[m[32m)[m
+[32m+[m
+[32m+[m[32mREM Создание файла для хранения PID процессов[m
+[32m+[m[32mset "PIDS_FILE=%PROJECT_ROOT%\.dev-pids.txt"[m
+[32m+[m[32mif exist "%PIDS_FILE%" del /f /q "%PIDS_FILE%"[m
+[32m+[m
+[32m+[m[32mREM Запуск Detection Service[m
+[32m+[m[32mecho.[m
+[32m+[m[32mecho 🎬 Запуск Detection Service...[m
+[32m+[m[32mcd /d "%DETECTION_DIR%"[m
+[32m+[m[32mif not exist "detection_server.py" ([m
+[32m+[m[32m    echo ❌ Файл detection_server.py не найден в %DETECTION_DIR%[m
+[32m+[m[32m    pause[m
+[32m+[m[32m    exit /b 1[m
+[32m+[m[32m)[m
+[32m+[m[32mstart "DC-Detector Detection Service" /min cmd /c "python detection_server.py > %PROJECT_ROOT%\.detection-output.log 2> %PROJECT_ROOT%\.detection-error.log"[m
+[32m+[m[32mtimeout /t 2 /nobreak >nul[m
+[32m+[m
+[32m+[m[32mREM Проверка Detection Service[m
+[32m+[m[32mpowershell -Command "try { $response = Invoke-WebRequest -Uri 'http://localhost:8001/health' -UseBasicParsing -TimeoutSec 2; Write-Host '✅ Detection Service работает' -ForegroundColor Green } catch { Write-Host '⚠️  Detection Service не отвечает, но процесс запущен' -ForegroundColor Yellow }" 2>nul[m
+[32m+[m[32mif errorlevel 1 ([m
+[32m+[m[32m    echo ⚠️  Detection Service не отвечает, но процесс запущен[m
+[32m+[m[32m)[m
+[32m+[m
+[32m+[m[32mREM Запуск Backend[m
+[32m+[m[32mecho.[m
+[32m+[m[32mecho 🎬 Запус
