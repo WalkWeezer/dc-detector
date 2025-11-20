@@ -70,6 +70,18 @@ class CameraManager:
 
     def capture_jpeg(self) -> Optional[bytes]:
         """Capture frame as JPEG bytes."""
+        # Для PiCamera2 используем capture_file() напрямую (как в рабочем скрипте)
+        if self.camera_type == "picamera2" and self.picam2 is not None:
+            try:
+                buffer = BytesIO()
+                self.picam2.capture_file(buffer, format="jpeg")
+                if buffer.getbuffer().nbytes > 0:
+                    return buffer.getvalue()
+            except Exception as exc:
+                logger.debug("Ошибка захвата JPEG с PiCamera2: %s", exc)
+            return None
+        
+        # Для веб-камеры используем OpenCV
         if not CV2_AVAILABLE:
             return None
         frame = self.capture_raw()
@@ -103,10 +115,6 @@ class CameraManager:
             else:
                 logger.debug("Picamera2 недоступен (ожидаемо на Windows)")
             return False
-        
-        if not CV2_AVAILABLE:
-            logger.warning("OpenCV недоступен (модуль не установлен). PiCamera2 требует OpenCV.")
-            return False
 
         try:
             logger.info("Инициализация Picamera2...")
@@ -114,14 +122,16 @@ class CameraManager:
             config = self.picam2.create_preview_configuration(main={"size": (1280, 720)})
             self.picam2.configure(config)
             self.picam2.start()
-            time.sleep(2)
+            # Небольшая задержка для стабилизации камеры (как в рабочем скрипте обычно не требуется, но для надежности оставляем минимальную)
+            time.sleep(0.5)
+            # Тестовый снимок для проверки работоспособности (как в рабочем скрипте)
             buffer = BytesIO()
             self.picam2.capture_file(buffer, format="jpeg")
             if buffer.getbuffer().nbytes > 0:
                 logger.info("Picamera2 успешно инициализирован")
                 return True
         except Exception as exc:
-            logger.debug("Ошибка инициализации Picamera2: %s", exc)
+            logger.warning("Ошибка инициализации Picamera2: %s", exc)
             if self.picam2 is not None:
                 try:
                     self.picam2.stop()
