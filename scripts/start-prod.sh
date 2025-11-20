@@ -112,27 +112,23 @@ fi
 # Активируем виртуальное окружение
 source ../../venv/bin/activate
 
-# Проверка Flask
-if ! python -c "import flask" 2>/dev/null; then
-    echo "⚠️  Flask не установлен. Устанавливаю..."
-    pip install -q flask
-fi
-echo "✅ Flask установлен"
+# Проверка и установка зависимостей
+echo "🔧 Проверка и установка Python зависимостей..."
 
-# Проверка других зависимостей
-if ! python -c "import cv2" 2>/dev/null; then
-    echo "⚠️  OpenCV не установлен. Устанавливаю..."
-    pip install -q opencv-python-headless || {
-        echo "⚠️  Не удалось установить через pip. Попробуйте: sudo apt install python3-opencv"
-    }
+REQUIREMENTS_FILE="requirements.txt"
+if [ -f "$REQUIREMENTS_FILE" ]; then
+    echo "📦 Установка зависимостей из $REQUIREMENTS_FILE..."
+    pip install -q -r "$REQUIREMENTS_FILE"
+else
+    echo "📦 Установка основных зависимостей..."
+    pip install -q flask opencv-python-headless ultralytics
 fi
 
-if ! python -c "from ultralytics import YOLO" 2>/dev/null; then
-    echo "⚠️  Ultralytics не установлен. Устанавливаю..."
-    pip install -q ultralytics || {
-        echo "⚠️  Не удалось установить ultralytics"
-    }
-fi
+# Проверяем установку ключевых библиотек
+echo "🔍 Проверка установленных библиотек..."
+python -c "import flask; print('✅ Flask установлен')" || echo "❌ Flask не установлен"
+python -c "import cv2; print('✅ OpenCV установлен')" || echo "❌ OpenCV не установлен"
+python -c "from ultralytics import YOLO; print('✅ Ultralytics установлен')" || echo "❌ Ultralytics не установлен"
 
 cd "$PROJECT_ROOT"
 
@@ -142,77 +138,116 @@ if [ -f ".detection.pid" ]; then
     if kill -0 $OLD_PID 2>/dev/null; then
         echo "🛑 Останавливаю предыдущий Detection Service (PID: $OLD_PID)..."
         kill $OLD_PID
-        sleep 2
+        sleep 3
     fi
     rm -f .detection.pid
 fi
 
 rm -f .detection.log
 
-# Запуск Detection Service в фоне
+# Запуск Detection Service в фоне с правильной активацией venv
 echo ""
 echo "🎬 Запуск Detection Service..."
 cd services/detection
 
-# Сохраняем абсолютный путь к директории detection
+# Сохраняем абсолютные пути
 DETECTION_DIR=$(pwd)
 PROJECT_ROOT=$(cd ../.. && pwd)
+VENV_PATH="$PROJECT_ROOT/venv"
 
-# Используем Python напрямую из venv без активации (более надежно для фоновых процессов)
-PYTHON_PATH="$PROJECT_ROOT/venv/bin/python"
+# Создаем скрипт для запуска с правильным окружением
+LAUNCH_SCRIPT="$PROJECT_ROOT/launch_detection.sh"
 
-# Проверяем, что Python существует
-if [ ! -f "$PYTHON_PATH" ]; then
-    echo "❌ Python не найден в venv: $PYTHON_PATH"
-    exit 1
-fi
+cat > "$LAUNCH_SCRIPT" << EOF
+#!/bin/bash
+cd "$DETECTION_DIR"
+source "$VENV_PATH/bin/activate"
+export PYTHONPATH="$DETECTION_DIR:$PYTHONPATH"
+exec python detection_server.py
+EOF
 
-# Запускаем в фоне с явным указанием рабочего каталога
+chmod +x "$LAUNCH_SCRIPT"
+
 echo "📁 Рабочий каталог: $DETECTION_DIR"
-echo "🐍 Python: $PYTHON_PATH"
+echo "🐍 Виртуальное окружение: $VENV_PATH"
 
-# Запускаем процесс и сохраняем PID
-(cd "$DETECTION_DIR" && nohup env PATH="$PROJECT_ROOT/venv/bin:$PATH" "$PYTHON_PATH" detection_server.py > "$PROJECT_ROOT/.detection.log" 2>&1 &)
+# Запускаем через launch скрипт чтобы гарантировать активацию venv
+nohup "$LAUNCH_SCRIPT" > "$PROJECT_ROOT/.detection.log" 2>&1 &
 DETECTION_PID=$!
 echo "$DETECTION_PID" > "$PROJECT_ROOT/.detection.pid"
 echo "✅ Detection Service запущен (PID: $DETECTION_PID)"
 
-# Увеличиваем время ожидания инициализации камеры
-echo "⏳ Ожидание инициализации Detection Service (10 секунд)..."
-sleep 10
+# Даем больше времени для инициализации камеры
+echo "⏳ Ожидание инициализации Detection Service (15 секунд)..."
+sleep 15
 
 # Проверка работоспособности с повторными попытками
 echo "🔍 Проверка работоспособности Detection Service..."
 
-MAX_RETRIES=5
+MAX_RETRIES=6
 RETRY_COUNT=0
 DETECTION_READY=false
+CAMERA_READY=false
 
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    echo "Попытка $((RETRY_COUNT + 1))/$MAX_RETRIES..."
+    
+    # Проверяем health endpoint
     if curl -s --connect-timeout 10 http://localhost:8001/health >/dev/null 2>&1; then
         echo "✅ Detection Service отвечает на health check"
         
-        # Проверяем статус камеры
-        CAMERA_RESPONSE=$(curl -s --connect-timeout 10 http://localhost:8001/api/detection 2>/dev/null || echo "")
-        if echo "$CAMERA_RESPONSE" | grep -q '"camera_available":true'; then
+        # Проверяем статус камеры через API
+        API_RESPONSE=$(curl -s --connect-timeout 10 http://localhost:8001/api/detection 2>/dev/null || echo "{}")
+        if echo "$API_RESPONSE" | grep -q '"camera_available":true'; then
             echo "✅ Камера успешно инициализирована"
+            CAMERA_READY=true
             DETECTION_READY=true
             break
+        elif echo "$API_RESPONSE" | grep -q '"camera_available":false'; then
+            echo "❌ Камера не инициализирована (camera_available: false)"
+            echo "💡 Проверьте доступность камеры в системе"
         else
-            echo "⏳ Камера еще не готова, попытка $((RETRY_COUNT + 1))/$MAX_RETRIES..."
-            sleep 5
+            echo "⚠️  Не удалось получить статус камеры из API"
         fi
     else
-        echo "⏳ Detection Service не отвечает, попытка $((RETRY_COUNT + 1))/$MAX_RETRIES..."
+        echo "⏳ Detection Service не отвечает на health check"
+    fi
+    
+    RETRY_COUNT=$((RETRY_COUNT + 1))
+    if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+        echo "Ожидание 5 секунд перед следующей попыткой..."
         sleep 5
     fi
-    RETRY_COUNT=$((RETRY_COUNT + 1))
 done
 
-if [ "$DETECTION_READY" = false ]; then
-    echo "⚠️  Detection Service запущен, но камера может быть не инициализирована"
-    echo "💡 Проверьте логи: tail -f $PROJECT_ROOT/.detection.log"
-    echo "💡 Проверьте камеру: ls -la /dev/video*"
+# Проверяем логи если камера не инициализирована
+if [ "$CAMERA_READY" = false ]; then
+    echo ""
+    echo "⚠️  Проблема с инициализацией камеры"
+    echo "🔍 Проверка доступности камеры в системе..."
+    
+    # Проверяем доступные камеры
+    if ls /dev/video* >/dev/null 2>&1; then
+        echo "📹 Доступные видео устройства:"
+        ls /dev/video*
+    else
+        echo "❌ Видео устройства не найдены в /dev/video*"
+    fi
+    
+    # Проверяем процессы использующие камеру
+    echo "🔍 Процессы использующие камеру:"
+    lsof /dev/video* 2>/dev/null || echo "Не удалось получить информацию о процессах"
+    
+    echo ""
+    echo "📋 Последние логи Detection Service:"
+    tail -20 "$PROJECT_ROOT/.detection.log"
+    
+    echo ""
+    echo "💡 Возможные решения:"
+    echo "   1. Проверьте подключение камеры к Raspberry Pi"
+    echo "   2. Убедитесь что камера включена в raspi-config"
+    echo "   3. Попробуйте перезагрузить систему"
+    echo "   4. Проверьте права доступа к /dev/video*"
 fi
 
 cd "$PROJECT_ROOT"
@@ -264,21 +299,29 @@ check_service "http://localhost:8001/health" "Detection Service" 3
 check_service "http://localhost:8080/health" "Backend" 3
 check_service "http://localhost" "Frontend" 3
 
-# Проверка видео потока
-echo ""
-echo "🎥 Проверка видео потока..."
-
-if curl -s --connect-timeout 10 http://localhost:8001/video_feed_raw >/dev/null 2>&1; then
-    echo "✅ Видео поток доступен"
+# Проверка видео потока если камера инициализирована
+if [ "$CAMERA_READY" = true ]; then
+    echo ""
+    echo "🎥 Проверка видео потока..."
+    
+    if curl -s --connect-timeout 10 http://localhost:8001/video_feed_raw >/dev/null 2>&1; then
+        echo "✅ Видео поток доступен"
+    else
+        echo "⚠️  Видео поток не доступен"
+    fi
 else
-    echo "⚠️  Видео поток не доступен"
-    echo "💡 Проверьте камеру и логи Detection Service"
+    echo ""
+    echo "⚠️  Видео поток недоступен - камера не инициализирована"
 fi
 
 # Итоговая информация
 echo ""
 echo "============================================================"
-echo "✨ Все сервисы запущены!"
+if [ "$CAMERA_READY" = true ]; then
+    echo "✨ Все сервисы запущены! Камера работает."
+else
+    echo "⚠️  Сервисы запущены, но камера не инициализирована"
+fi
 echo "============================================================"
 echo ""
 echo "📍 Доступные сервисы:"
@@ -301,3 +344,6 @@ echo "   • Detection Service: tail -f .detection.log"
 echo "   • Docker контейнеры:  docker compose logs -f"
 echo "   • Конкретный контейнер: docker compose logs -f backend"
 echo ""
+
+# Удаляем временный скрипт
+rm -f "$LAUNCH_SCRIPT"
