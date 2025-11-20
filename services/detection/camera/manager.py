@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 import time
 import warnings
 from io import BytesIO
@@ -95,7 +96,16 @@ class CameraManager:
     # Internal helpers -----------------------------------------------------------------
 
     def _try_init_picamera(self) -> bool:
-        if not (PICAMERA2_AVAILABLE and CV2_AVAILABLE):
+        if not PICAMERA2_AVAILABLE:
+            # На Linux (Raspberry Pi) это может быть проблемой, на Windows - нормально
+            if sys.platform != 'win32':
+                logger.info("Picamera2 недоступен (модуль не установлен). Попытка подключения веб-камеры...")
+            else:
+                logger.debug("Picamera2 недоступен (ожидаемо на Windows)")
+            return False
+        
+        if not CV2_AVAILABLE:
+            logger.warning("OpenCV недоступен (модуль не установлен). PiCamera2 требует OpenCV.")
             return False
 
         try:
