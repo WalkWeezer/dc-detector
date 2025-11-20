@@ -85,8 +85,38 @@ if [ ! -d "../../venv" ]; then
     python3 -m venv venv --system-site-packages
     cd services/detection
     echo "✅ Виртуальное окружение создано с --system-site-packages"
+    VENV_NEEDS_RECREATE=false
 else
     echo "✅ Виртуальное окружение уже существует"
+    # Проверяем, создан ли venv с --system-site-packages
+    if [ -f "../../venv/pyvenv.cfg" ]; then
+        if ! grep -q "include-system-site-packages = true" "../../venv/pyvenv.cfg"; then
+            echo "⚠️  Venv создан БЕЗ --system-site-packages"
+            echo "💡 Для работы с picamera2 нужно пересоздать venv"
+            VENV_NEEDS_RECREATE=true
+        else
+            echo "✅ Venv создан с --system-site-packages"
+            VENV_NEEDS_RECREATE=false
+        fi
+    else
+        echo "⚠️  Не удалось проверить конфигурацию venv"
+        VENV_NEEDS_RECREATE=false
+    fi
+fi
+
+# Пересоздаем venv если нужно
+if [ "$VENV_NEEDS_RECREATE" = true ]; then
+    echo ""
+    echo "🔄 Пересоздание venv с --system-site-packages..."
+    cd ../..
+    rm -rf venv
+    python3 -m venv venv --system-site-packages
+    cd services/detection
+    echo "✅ Venv пересоздан с --system-site-packages"
+    # После пересоздания нужно будет установить зависимости заново
+    VENV_RECREATED=true
+else
+    VENV_RECREATED=false
 fi
 
 # Активируем venv
@@ -144,25 +174,9 @@ else
                 echo "   💡 Попробуйте пересоздать venv или установить picamera2 в venv"
             else
                 echo "   ❌ Venv создан БЕЗ --system-site-packages"
-                echo "   💡 Нужно пересоздать venv с --system-site-packages"
-                echo ""
-                read -p "Пересоздать venv с --system-site-packages? (y/n) " -n 1 -r
-                echo
-                if [[ $REPLY =~ ^[Yy]$ ]]; then
-                    echo "🔄 Пересоздание venv..."
-                    cd ../..
-                    rm -rf venv
-                    python3 -m venv venv --system-site-packages
-                    cd services/detection
-                    source ../../venv/bin/activate
-                    echo "✅ Venv пересоздан с --system-site-packages"
-                    # Проверяем снова
-                    if python -c "import picamera2" 2>/dev/null; then
-                        echo "✅ picamera2 теперь доступен в venv"
-                    else
-                        echo "⚠️  picamera2 все еще недоступен. Установите: sudo apt install python3-picamera2"
-                    fi
-                fi
+                echo "   ⚠️  Это должно было быть исправлено автоматически выше"
+                echo "   💡 Если проблема сохраняется, пересоздайте venv вручную:"
+                echo "      cd ~/dc-detector && rm -rf venv && python3 -m venv venv --system-site-packages"
             fi
         fi
     else
@@ -172,11 +186,21 @@ else
 fi
 
 # Устанавливаем только недостающие пакеты
-if [ ${#MISSING_PACKAGES[@]} -gt 0 ]; then
-    echo ""
-    echo "📥 Устанавливаю недостающие пакеты: ${MISSING_PACKAGES[*]}"
-    pip install -q "${MISSING_PACKAGES[@]}"
-    echo "✅ Недостающие пакеты установлены"
+if [ ${#MISSING_PACKAGES[@]} -gt 0 ] || [ "$VENV_RECREATED" = true ]; then
+    if [ "$VENV_RECREATED" = true ]; then
+        echo ""
+        echo "📥 Устанавливаю зависимости (venv был пересоздан)..."
+        if [ -f "requirements.txt" ]; then
+            pip install -q -r requirements.txt
+        else
+            pip install -q "${MISSING_PACKAGES[@]}"
+        fi
+    else
+        echo ""
+        echo "📥 Устанавливаю недостающие пакеты: ${MISSING_PACKAGES[*]}"
+        pip install -q "${MISSING_PACKAGES[@]}"
+    fi
+    echo "✅ Зависимости установлены"
 else
     echo ""
     echo "🎉 Все необходимые пакеты уже установлены!"
@@ -225,7 +249,7 @@ if curl -s --connect-timeout 5 http://localhost:8001/health >/dev/null; then
     else
         echo "⚠️  Камера не инициализирована"
         echo "📋 Последние логи:"
-        tail -f "../../.detection.log"
+        tail -25 "../../.detection.log"
     fi
 else
     echo "❌ Detection Service не отвечает"
