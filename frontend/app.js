@@ -432,6 +432,62 @@
     }
   }
 
+  async function loadAutosaveConfig() {
+    try {
+      const response = await fetch(`${backendOrigin}/api/config/autosave`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" }
+      });
+
+      const payload = await readResponsePayload(response);
+      if (!response.ok) {
+        throw new Error(readErrorMessage(payload, "Не удалось загрузить настройки автосохранения"));
+      }
+
+      const autoSave = payload || {
+        enabled: true,
+        minConfidence: 0.3,
+        minHits: 1,
+        delay: 2000
+      };
+
+      const autosaveEnabledEl = document.getElementById('autosave-enabled');
+      const autosaveMinConfidenceEl = document.getElementById('autosave-min-confidence');
+      const autosaveMinHitsEl = document.getElementById('autosave-min-hits');
+      const autosaveDelayEl = document.getElementById('autosave-delay');
+
+      if (autosaveEnabledEl) {
+        autosaveEnabledEl.checked = !!autoSave.enabled;
+        updateAutosaveSettingsVisibility();
+      }
+      if (autosaveMinConfidenceEl) {
+        autosaveMinConfidenceEl.value = autoSave.minConfidence || 0.3;
+        updateSliderValue('autosave-min-confidence-value', autosaveMinConfidenceEl.value);
+      }
+      if (autosaveMinHitsEl) {
+        autosaveMinHitsEl.value = autoSave.minHits || 1;
+        updateSliderValue('autosave-min-hits-value', autosaveMinHitsEl.value);
+      }
+      if (autosaveDelayEl) {
+        autosaveDelayEl.value = autoSave.delay || 2000;
+        updateSliderValue('autosave-delay-value', autosaveDelayEl.value);
+      }
+
+      // Обновляем локальный конфиг
+      if (trackerConfig) {
+        trackerConfig.autoSave = autoSave;
+      }
+    } catch (error) {
+      console.error("Ошибка загрузки настроек автосохранения", error);
+      // Используем значения по умолчанию
+      const autosaveEnabledEl = document.getElementById('autosave-enabled');
+      if (autosaveEnabledEl) {
+        autosaveEnabledEl.checked = true;
+        updateAutosaveSettingsVisibility();
+      }
+    }
+  }
+
   function updateAutosaveSettingsVisibility() {
     const enabledEl = document.getElementById('autosave-enabled');
     const settingsGroup = document.getElementById('autosave-settings-group');
