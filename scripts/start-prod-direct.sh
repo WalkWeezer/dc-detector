@@ -141,6 +141,18 @@ echo "🎬 Запуск Detection Service..."
 cd services/detection
 source ../../venv/bin/activate
 
+# Загружаем переменные окружения из .env для detection service
+# ВАЖНО: Detection service должен использовать PORT=8001, не 8080!
+if [ -f "../../.env" ]; then
+    # Экспортируем переменные, но переопределяем PORT на 8001 для detection service
+    export $(grep -v '^#' ../../.env | grep -E '^(CAMERA_INDEX|CONFIDENCE_THRESHOLD|INFER_FPS|ROTATE_ANGLE|FLIP_HORIZONTAL|FLIP_VERTICAL)=' | xargs)
+    # Явно устанавливаем PORT=8001 для detection service
+    export PORT=8001
+fi
+# Если .env нет, устанавливаем PORT=8001 по умолчанию
+export PORT=${PORT:-8001}
+echo "   PORT для Detection Service: $PORT"
+
 nohup python detection_server.py > "../../.detection.log" 2>&1 &
 DETECTION_PID=$!
 echo "$DETECTION_PID" > "../../.detection.pid"
