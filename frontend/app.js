@@ -423,7 +423,21 @@
       }
 
       errorMessageEl.textContent = "";
-      alert("Настройки автосохранения сохранены");
+      
+      // Обновляем UI после успешного сохранения для синхронизации
+      updateAutosaveUI(payload);
+      
+      // Показываем уведомление без alert (менее навязчиво)
+      const saveBtn = document.getElementById("autosave-save-btn");
+      if (saveBtn) {
+        const originalText = saveBtn.textContent;
+        saveBtn.textContent = "✓ Сохранено";
+        saveBtn.style.opacity = "0.7";
+        setTimeout(() => {
+          saveBtn.textContent = originalText;
+          saveBtn.style.opacity = "1";
+        }, 2000);
+      }
     } catch (error) {
       console.error("Ошибка сохранения настроек автосохранения", error);
       errorMessageEl.textContent = error instanceof Error ? error.message : "Не удалось сохранить настройки автосохранения";
