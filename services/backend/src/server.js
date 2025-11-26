@@ -1,6 +1,7 @@
 import { createApp } from './app.js'
 import { config } from './config.js'
 import { startAutoTargetSelection } from './utils/autoTargetManager.js'
+import { startAutoSave } from './utils/autoSaveManager.js'
 
 const app = createApp()
 app.listen(config.port, async () => {
@@ -29,6 +30,13 @@ app.listen(config.port, async () => {
     await startAutoTargetSelection()
   } catch (err) {
     console.warn('Failed to start auto target selection:', err.message)
+  }
+  
+  // Запускаем автоматическое сохранение трекеров
+  try {
+    startAutoSave()
+  } catch (err) {
+    console.warn('Failed to start auto save:', err.message)
   }
 })
 

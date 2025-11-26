@@ -2,6 +2,7 @@ import express from 'express'
 import { loadTrackerConfig, saveTrackerConfig } from '../config/trackerConfig.js'
 import { config } from '../config.js'
 import { startAutoTargetSelection, stopAutoTargetSelection } from '../utils/autoTargetManager.js'
+import { resetAutoSavedTrackers } from '../utils/autoSaveManager.js'
 
 export const configRouter = express.Router()
 
@@ -51,6 +52,17 @@ configRouter.patch('/tracker', async (req, res, next) => {
         await startAutoTargetSelection()
       } catch (err) {
         console.warn('Failed to restart auto target selection:', err.message)
+      }
+    }
+    
+    // Если обновлены параметры автосохранения, сбрасываем список автосохраненных трекеров
+    // (чтобы новые настройки применились к уже существующим трекерам)
+    if (updates.autoSave !== undefined) {
+      try {
+        resetAutoSavedTrackers()
+        console.log('[Auto-save] Список автосохраненных трекеров сброшен после изменения настроек')
+      } catch (err) {
+        console.warn('Failed to reset auto saved trackers:', err.message)
       }
     }
     
