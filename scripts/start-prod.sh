@@ -333,6 +333,10 @@ fi
 
 echo "🐍 Python: $(which python)"
 echo "🚀 Запуск detection_server.py..."
+# Загружаем переменные окружения из .env для detection service
+if [ -f "../../.env" ]; then
+    export $(grep -v '^#' ../../.env | grep -E '^(CAMERA_INDEX|CONFIDENCE_THRESHOLD|INFER_FPS|PORT|ROTATE_ANGLE|FLIP_HORIZONTAL|FLIP_VERTICAL)=' | xargs)
+fi
 nohup python detection_server.py > "../../.detection.log" 2>&1 &
 DETECTION_PID=$!
 echo "$DETECTION_PID" > "../../.detection.pid"
