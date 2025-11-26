@@ -1,0 +1,108 @@
+#!/bin/bash
+# Скрипт остановки всех сервисов БЕЗ Docker для продакшна на Raspberry Pi
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+echo "🛑 Остановка всех сервисов (без Docker)..."
+
+cd "$PROJECT_ROOT"
+
+# Остановка Detection Service
+if [ -f .detection.pid ]; then
+    DETECTION_PID=$(cat .detection.pid)
+    if ps -p $DETECTION_PID > /dev/null 2>&1; then
+        echo "🛑 Остановка Detection Service (PID: $DETECTION_PID)..."
+        kill $DETECTION_PID 2>/dev/null || true
+        sleep 1
+        if ps -p $DETECTION_PID > /dev/null 2>&1; then
+            kill -9 $DETECTION_PID 2>/dev/null || true
+        fi
+        echo "✅ Detection Service остановлен"
+    else
+        echo "⚠️  Detection Service уже не запущен"
+    fi
+    rm -f .detection.pid
+else
+    # Пытаемся найти процесс по порту
+    if lsof -Pi :8001 -sTCP:LISTEN -t >/dev/null 2>&1; then
+        PID=$(lsof -Pi :8001 -sTCP:LISTEN -t 2>/dev/null | head -1)
+        if [ ! -z "$PID" ]; then
+            echo "🛑 Остановка Detection Service (PID: $PID)..."
+            kill $PID 2>/dev/null || true
+            sleep 1
+            if ps -p $PID > /dev/null 2>&1; then
+                kill -9 $PID 2>/dev/null || true
+            fi
+            echo "✅ Detection Service остановлен"
+        fi
+    fi
+fi
+
+# Остановка Backend
+if [ -f .backend.pid ]; then
+    BACKEND_PID=$(cat .backend.pid)
+    if ps -p $BACKEND_PID > /dev/null 2>&1; then
+        echo "🛑 Остановка Backend (PID: $BACKEND_PID)..."
+        kill $BACKEND_PID 2>/dev/null || true
+        sleep 1
+        if ps -p $BACKEND_PID > /dev/null 2>&1; then
+            kill -9 $BACKEND_PID 2>/dev/null || true
+        fi
+        echo "✅ Backend остановлен"
+    else
+        echo "⚠️  Backend уже не запущен"
+    fi
+    rm -f .backend.pid
+else
+    # Пытаемся найти процесс по порту
+    if lsof -Pi :8080 -sTCP:LISTEN -t >/dev/null 2>&1; then
+        PID=$(lsof -Pi :8080 -sTCP:LISTEN -t 2>/dev/null | head -1)
+        if [ ! -z "$PID" ]; then
+            echo "🛑 Остановка Backend (PID: $PID)..."
+            kill $PID 2>/dev/null || true
+            sleep 1
+            if ps -p $PID > /dev/null 2>&1; then
+                kill -9 $PID 2>/dev/null || true
+            fi
+            echo "✅ Backend остановлен"
+        fi
+    fi
+fi
+
+# Остановка Frontend
+if [ -f .frontend.pid ]; then
+    FRONTEND_PID=$(cat .frontend.pid)
+    if ps -p $FRONTEND_PID > /dev/null 2>&1; then
+        echo "🛑 Остановка Frontend (PID: $FRONTEND_PID)..."
+        kill $FRONTEND_PID 2>/dev/null || true
+        sleep 1
+        if ps -p $FRONTEND_PID > /dev/null 2>&1; then
+            kill -9 $FRONTEND_PID 2>/dev/null || true
+        fi
+        echo "✅ Frontend остановлен"
+    else
+        echo "⚠️  Frontend уже не запущен"
+    fi
+    rm -f .frontend.pid
+else
+    # Пытаемся найти процесс по порту
+    if lsof -Pi :5173 -sTCP:LISTEN -t >/dev/null 2>&1; then
+        PID=$(lsof -Pi :5173 -sTCP:LISTEN -t 2>/dev/null | head -1)
+        if [ ! -z "$PID" ]; then
+            echo "🛑 Остановка Frontend (PID: $PID)..."
+            kill $PID 2>/dev/null || true
+            sleep 1
+            if ps -p $PID > /dev/null 2>&1; then
+                kill -9 $PID 2>/dev/null || true
+            fi
+            echo "✅ Frontend остановлен"
+        fi
+    fi
+fi
+
+echo ""
+echo "✨ Все сервисы остановлены"
+
