@@ -328,6 +328,33 @@
       if (autosaveEnabledInput) autosaveEnabledInput.checked = !!autoSaveEnabled;
       if (autosaveThresholdInput) autosaveThresholdInput.value = autoSaveMinConfidence.toFixed(2);
 
+      // Загрузка настроек автосохранения из конфига
+      const autosaveEnabledEl = document.getElementById('autosave-enabled');
+      const autosaveMinConfidenceEl = document.getElementById('autosave-min-confidence');
+      const autosaveMinHitsEl = document.getElementById('autosave-min-hits');
+      const autosaveDelayEl = document.getElementById('autosave-delay');
+      const autosaveSettingsGroup = document.getElementById('autosave-settings-group');
+
+      if (config.autoSave) {
+        const autoSave = config.autoSave;
+        if (autosaveEnabledEl) {
+          autosaveEnabledEl.checked = !!autoSave.enabled;
+          updateAutosaveSettingsVisibility();
+        }
+        if (autosaveMinConfidenceEl) {
+          autosaveMinConfidenceEl.value = autoSave.minConfidence || 0.3;
+          updateSliderValue('autosave-min-confidence-value', autosaveMinConfidenceEl.value);
+        }
+        if (autosaveMinHitsEl) {
+          autosaveMinHitsEl.value = autoSave.minHits || 1;
+          updateSliderValue('autosave-min-hits-value', autosaveMinHitsEl.value);
+        }
+        if (autosaveDelayEl) {
+          autosaveDelayEl.value = autoSave.delay || 2000;
+          updateSliderValue('autosave-delay-value', autosaveDelayEl.value);
+        }
+      }
+
       return config;
     } catch (error) {
       console.error("Не удалось загрузить конфигурацию трекера", error);
@@ -387,6 +414,70 @@
     } catch (error) {
       console.error("Ошибка сохранения конфигурации", error);
       errorMessageEl.textContent = error instanceof Error ? error.message : "Не удалось сохранить конфигурацию";
+    }
+  }
+
+  async function saveAutosaveConfig() {
+    const enabledEl = document.getElementById('autosave-enabled');
+    const minConfidenceEl = document.getElementById('autosave-min-confidence');
+    const minHitsEl = document.getElementById('autosave-min-hits');
+    const delayEl = document.getElementById('autosave-delay');
+
+    const autoSave = {
+      enabled: enabledEl ? enabledEl.checked : false,
+      minConfidence: minConfidenceEl ? Number(minConfidenceEl.value) : 0.3,
+      minHits: minHitsEl ? Number(minHitsEl.value) : 1,
+      delay: delayEl ? Number(delayEl.value) : 2000
+    };
+
+    try {
+      const response = await fetch(`${backendOrigin}/api/config/tracker`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ autoSave })
+      });
+
+      const payload = await readResponsePayload(response);
+      if (!response.ok) {
+        throw new Error(readErrorMessage(payload, "Не удалось сохранить настройки автосохранения"));
+      }
+
+      if (trackerConfig) {
+        trackerConfig.autoSave = payload.autoSave || autoSave;
+      }
+
+      errorMessageEl.textContent = "";
+      alert("Настройки автосохранения сохранены");
+    } catch (error) {
+      console.error("Ошибка сохранения настроек автосохранения", error);
+      errorMessageEl.textContent = error instanceof Error ? error.message : "Не удалось сохранить настройки автосохранения";
+    }
+  }
+
+  function updateAutosaveSettingsVisibility() {
+    const enabledEl = document.getElementById('autosave-enabled');
+    const settingsGroup = document.getElementById('autosave-settings-group');
+    if (enabledEl && settingsGroup) {
+      if (enabledEl.checked) {
+        settingsGroup.style.opacity = '1';
+        settingsGroup.style.pointerEvents = 'auto';
+      } else {
+        settingsGroup.style.opacity = '0.5';
+        settingsGroup.style.pointerEvents = 'none';
+      }
+    }
+  }
+
+  function updateSliderValue(valueId, value) {
+    const valueEl = document.getElementById(valueId);
+    if (valueEl) {
+      if (valueId.includes('confidence')) {
+        valueEl.textContent = Number(value).toFixed(2);
+      } else if (valueId.includes('delay')) {
+        valueEl.textContent = Number(value).toLocaleString('ru-RU');
+      } else {
+        valueEl.textContent = Number(value);
+      }
     }
   }
 
@@ -1271,6 +1362,40 @@
     const saveBtn = document.getElementById("save-config-btn");
     if (saveBtn) {
       saveBtn.addEventListener("click", saveTrackerConfig);
+    }
+
+    // Инициализация вкладки автосохранения
+    const autosaveSaveBtn = document.getElementById("autosave-save-btn");
+    if (autosaveSaveBtn) {
+      autosaveSaveBtn.addEventListener("click", saveAutosaveConfig);
+    }
+
+    const autosaveEnabledEl = document.getElementById("autosave-enabled");
+    if (autosaveEnabledEl) {
+      autosaveEnabledEl.addEventListener("change", updateAutosaveSettingsVisibility);
+      updateAutosaveSettingsVisibility();
+    }
+
+    // Обновление значений ползунков в реальном времени
+    const minConfidenceEl = document.getElementById("autosave-min-confidence");
+    if (minConfidenceEl) {
+      minConfidenceEl.addEventListener("input", (e) => {
+        updateSliderValue("autosave-min-confidence-value", e.target.value);
+      });
+    }
+
+    const minHitsEl = document.getElementById("autosave-min-hits");
+    if (minHitsEl) {
+      minHitsEl.addEventListener("input", (e) => {
+        updateSliderValue("autosave-min-hits-value", e.target.value);
+      });
+    }
+
+    const delayEl = document.getElementById("autosave-delay");
+    if (delayEl) {
+      delayEl.addEventListener("input", (e) => {
+        updateSliderValue("autosave-delay-value", e.target.value);
+      });
     }
   });
   statusUpdateInterval = setInterval(updateDetectionsStatus, 1000);

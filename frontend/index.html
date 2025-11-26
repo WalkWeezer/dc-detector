@@ -42,6 +42,7 @@
               <nav class="panel-tabs" role="tablist">
                 <button class="panel-tab-button active" data-panel-tab="control" role="tab">Управление</button>
                 <button class="panel-tab-button" data-panel-tab="database" role="tab">База</button>
+                <button class="panel-tab-button" data-panel-tab="autosave" role="tab">Автосохранение</button>
               </nav>
 
               <div class="panel-tab-container">
@@ -103,6 +104,54 @@
                       </div>
                     </div>
                     <div id="saved-screen-list" class="saved-grid" style="max-height: calc(100vh - 400px); overflow-y: auto; margin-top: 16px;"></div>
+                  </section>
+                </div>
+
+                <div id="panel-tab-autosave" class="panel-tab-panel" role="tabpanel">
+                  <section class="panel-card">
+                    <header>
+                      <h2>Настройки автосохранения</h2>
+                      <small>Автоматическое сохранение новых трекеров</small>
+                    </header>
+                    <div class="autosave-settings">
+                      <label class="checkbox-field">
+                        <input type="checkbox" id="autosave-enabled" />
+                        <span>Включить автосохранение</span>
+                      </label>
+                      
+                      <div class="slider-group" id="autosave-settings-group" style="opacity: 0.5; pointer-events: none;">
+                        <label class="slider-field">
+                          <div class="slider-label">
+                            <span>Минимальная уверенность</span>
+                            <span class="slider-value" id="autosave-min-confidence-value">0.30</span>
+                          </div>
+                          <input type="range" id="autosave-min-confidence" min="0" max="1" step="0.01" value="0.3" />
+                          <div class="slider-hint">Трекеры с уверенностью ниже этого значения не будут сохраняться</div>
+                        </label>
+
+                        <label class="slider-field">
+                          <div class="slider-label">
+                            <span>Минимальное количество попаданий</span>
+                            <span class="slider-value" id="autosave-min-hits-value">1</span>
+                          </div>
+                          <input type="range" id="autosave-min-hits" min="1" max="50" step="1" value="1" />
+                          <div class="slider-hint">Трекеры с меньшим количеством попаданий не будут сохраняться</div>
+                        </label>
+
+                        <label class="slider-field">
+                          <div class="slider-label">
+                            <span>Задержка перед сохранением (мс)</span>
+                            <span class="slider-value" id="autosave-delay-value">2000</span>
+                          </div>
+                          <input type="range" id="autosave-delay" min="0" max="10000" step="100" value="2000" />
+                          <div class="slider-hint">Время ожидания для накопления кадров перед сохранением</div>
+                        </label>
+                      </div>
+
+                      <div class="action-buttons" style="margin-top: 16px;">
+                        <button id="autosave-save-btn" type="button" class="accent">Сохранить настройки</button>
+                      </div>
+                    </div>
                   </section>
                 </div>
               </div>

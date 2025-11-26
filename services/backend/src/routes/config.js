@@ -33,6 +33,12 @@ configRouter.patch('/tracker', async (req, res, next) => {
           ...(current.autoTargetSelection || {}),
           ...updates.autoTargetSelection
         }
+      }),
+      ...(updates.autoSave && typeof updates.autoSave === 'object' && {
+        autoSave: {
+          ...(current.autoSave || {}),
+          ...updates.autoSave
+        }
       })
     }
     

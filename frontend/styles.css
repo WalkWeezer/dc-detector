@@ -310,6 +310,123 @@ h1 {
   color: #94a3b8;
 }
 
+.autosave-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  padding: 12px;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.checkbox-field:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.checkbox-field input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: #7ee5ff;
+}
+
+.checkbox-field span {
+  font-weight: 500;
+  color: #cbd5f5;
+}
+
+.slider-group {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  transition: opacity 0.3s;
+}
+
+.slider-group:not([style*="opacity: 0.5"]) {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+.slider-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.slider-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  color: #cbd5f5;
+}
+
+.slider-label span:first-child {
+  font-weight: 500;
+}
+
+.slider-value {
+  font-weight: 600;
+  color: #7ee5ff;
+  font-variant-numeric: tabular-nums;
+  min-width: 60px;
+  text-align: right;
+}
+
+.slider-field input[type="range"] {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.slider-field input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #7ee5ff;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.slider-field input[type="range"]::-webkit-slider-thumb:hover {
+  background: #5dd5ff;
+  transform: scale(1.1);
+}
+
+.slider-field input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #7ee5ff;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+}
+
+.slider-field input[type="range"]::-moz-range-thumb:hover {
+  background: #5dd5ff;
+  transform: scale(1.1);
+}
+
+.slider-hint {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
 .form-row {
   display: flex;
   flex-direction: column;
