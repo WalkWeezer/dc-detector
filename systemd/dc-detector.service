@@ -8,9 +8,9 @@ Wants=network-online.target
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=/opt/dc-detector
-ExecStart=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.pi.yml up -d
-ExecStop=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.pi.yml down
-ExecReload=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.pi.yml restart
+ExecStart=/bin/sh -c 'if [ -f docker-compose.pi-standalone.yml ]; then docker compose -f docker-compose.pi-standalone.yml up -d; else docker compose -f docker-compose.yml -f docker-compose.pi.yml up -d; fi'
+ExecStop=/bin/sh -c 'if [ -f docker-compose.pi-standalone.yml ]; then docker compose -f docker-compose.pi-standalone.yml down; else docker compose -f docker-compose.yml -f docker-compose.pi.yml down; fi'
+ExecReload=/bin/sh -c 'if [ -f docker-compose.pi-standalone.yml ]; then docker compose -f docker-compose.pi-standalone.yml restart; else docker compose -f docker-compose.yml -f docker-compose.pi.yml restart; fi'
 StandardOutput=journal
 StandardError=journal
 

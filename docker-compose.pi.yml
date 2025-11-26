@@ -2,19 +2,21 @@ services:
   backend:
     # Полностью переопределяем backend для Raspberry Pi
     # Используем network_mode: host для доступа к localhost:8001
+    # ВАЖНО: network_mode и networks взаимоисключающие
+    # При объединении файлов нужно явно убрать networks из базового файла
     restart: unless-stopped
     env_file: .env
     environment:
       - PORT=8080
       - DETECTION_URL=${DETECTION_URL:-http://localhost:8001}
-    network_mode: "host"
+    network_mode: host
     build:
       context: .
       dockerfile: docker/backend.Dockerfile
     volumes:
       - ./data:/app/data
-    # При network_mode: host не используем ports, networks и depends_on
-    # Это полностью переопределяет конфигурацию из docker-compose.yml
+    # При network_mode: host не используем ports и depends_on
+    # networks не указываем вообще - это убирает наследование из базового файла
 
   # Detection service запускается отдельно от Docker
   # Запустите: cd services/detection && python3 detection_server.py

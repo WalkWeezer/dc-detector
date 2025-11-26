@@ -1,0 +1,75 @@
+# Полностью независимый compose файл для Raspberry Pi
+# НЕ объединяется с docker-compose.yml
+# Используйте: docker compose -f docker-compose.pi-standalone.yml up -d --build
+
+services:
+  init:
+    image: alpine:latest
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    command: >-
+      sh -c "
+      echo '🚀 Инициализация проекта...' &&
+      if [ ! -f .env ]; then \
+        if [ -f env.example ]; then \
+          cp env.example .env && \
+          echo '✅ .env файл создан из env.example'; \
+        else \
+          touch .env && \
+          echo '⚠️  Создан пустой .env файл'; \
+        fi; \
+      else \
+        echo 'ℹ️  .env файл уже существует'; \
+      fi &&
+      mkdir -p data/detections/saved &&
+      mkdir -p services/detection/models &&
+      echo '✅ Директории созданы' &&
+      echo '✨ Инициализация завершена'"
+
+  backend:
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - PORT=8080
+      - DETECTION_URL=${DETECTION_URL:-http://localhost:8001}
+    network_mode: host
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    volumes:
+      - ./data:/app/data
+    # При network_mode: host не используем ports, networks и depends_on
+
+  frontend-build:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - frontend_dist:/dist
+    command: >-
+      sh -c "\
+      if [ -f package-lock.json ]; then \
+        npm ci --prefer-offline --no-audit --no-fund; \
+      else \
+        npm install --no-audit --no-fund; \
+      fi \
+      && npm run build \
+      && rm -rf /dist/* \
+      && cp -r dist/* /dist/"
+
+  frontend:
+    restart: unless-stopped
+    depends_on:
+      frontend-build:
+        condition: service_completed_successfully
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    ports:
+      - "80:80"
+      - "443:443"
+
+volumes:
+  frontend_dist: {}
+

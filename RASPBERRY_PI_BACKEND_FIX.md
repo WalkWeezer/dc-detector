@@ -19,27 +19,21 @@ service backend declares mutually exclusive 'network_mode' and 'networks': inval
 
 ### Вариант 1: Использование network_mode: host (Рекомендуется для Raspberry Pi)
 
-В `docker-compose.pi.yml` бэкенд настроен с `network_mode: host`, что позволяет ему обращаться к `localhost:8001` напрямую.
+**Если возникает ошибка "mutually exclusive network_mode and networks"**, используйте полностью независимый compose файл:
 
-**ВАЖНО:** Если возникает ошибка "mutually exclusive network_mode and networks", попробуйте:
-
-1. **Обновить код:**
 ```bash
-git pull
+# Используйте standalone файл вместо объединения с docker-compose.yml
+docker compose -f docker-compose.pi-standalone.yml up -d --build
 ```
 
-2. **Если ошибка сохраняется**, используйте альтернативный файл:
-```bash
-# Вместо docker-compose.pi.yml используйте docker-compose.pi-alt.yml
-docker compose -f docker-compose.yml -f docker-compose.pi-alt.yml up -d --build
-```
-
-3. **Или используйте IP адрес хоста** (см. Вариант 2 ниже)
+Этот файл не объединяется с базовым `docker-compose.yml`, поэтому конфликта не будет.
 
 **Проверьте `.env` файл:**
 ```bash
 DETECTION_URL=http://localhost:8001
 ```
+
+**Альтернатива:** Если хотите использовать объединение файлов, используйте `docker-compose.pi-alt.yml` (см. Вариант 2).
 
 ### Вариант 2: Использование IP адреса хоста (Альтернатива при конфликте network_mode)
 
