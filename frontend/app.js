@@ -1330,6 +1330,33 @@
   });
   selectTab('status');
 
+  // Инициализация вкладок панели управления
+  const panelTabButtons = document.querySelectorAll('.panel-tab-button');
+  const panelTabPanels = document.querySelectorAll('.panel-tab-panel');
+  
+  panelTabButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.panelTab;
+      panelTabButtons.forEach(b => b.classList.toggle('active', b === btn));
+      panelTabPanels.forEach(panel => {
+        const isActive = panel.id === `panel-tab-${target}`;
+        panel.classList.toggle('active', isActive);
+      });
+      // Загружаем сохраненные детекции при открытии вкладки "База"
+      if (target === 'database') {
+        const dateInput = document.getElementById('saved-screen-date');
+        const value = dateInput && dateInput.value ? dateInput.value : undefined;
+        loadSavedDetections(value, 'saved-screen-list');
+      }
+      // Загружаем конфиг и инициализируем обработчики при открытии вкладки "Автосохранение"
+      if (target === 'autosave') {
+        loadTrackerConfig().then(() => {
+          initAutosaveHandlers();
+        });
+      }
+    });
+  });
+
   // ------- Экранный переключатель (Поток/Сохранённые) -------
   function selectScreen(name) {
     const stream = document.getElementById('screen-stream');
