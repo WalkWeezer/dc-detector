@@ -449,40 +449,49 @@
         delay: 2000
       };
 
-      const autosaveEnabledEl = document.getElementById('autosave-enabled');
-      const autosaveMinConfidenceEl = document.getElementById('autosave-min-confidence');
-      const autosaveMinHitsEl = document.getElementById('autosave-min-hits');
-      const autosaveDelayEl = document.getElementById('autosave-delay');
-
-      if (autosaveEnabledEl) {
-        autosaveEnabledEl.checked = !!autoSave.enabled;
-        updateAutosaveSettingsVisibility();
-      }
-      if (autosaveMinConfidenceEl) {
-        autosaveMinConfidenceEl.value = autoSave.minConfidence || 0.3;
-        updateSliderValue('autosave-min-confidence-value', autosaveMinConfidenceEl.value);
-      }
-      if (autosaveMinHitsEl) {
-        autosaveMinHitsEl.value = autoSave.minHits || 1;
-        updateSliderValue('autosave-min-hits-value', autosaveMinHitsEl.value);
-      }
-      if (autosaveDelayEl) {
-        autosaveDelayEl.value = autoSave.delay || 2000;
-        updateSliderValue('autosave-delay-value', autosaveDelayEl.value);
-      }
-
+      updateAutosaveUI(autoSave);
+      
       // Обновляем локальный конфиг
       if (trackerConfig) {
         trackerConfig.autoSave = autoSave;
       }
+      
+      return autoSave;
     } catch (error) {
       console.error("Ошибка загрузки настроек автосохранения", error);
       // Используем значения по умолчанию
-      const autosaveEnabledEl = document.getElementById('autosave-enabled');
-      if (autosaveEnabledEl) {
-        autosaveEnabledEl.checked = true;
-        updateAutosaveSettingsVisibility();
-      }
+      const defaultConfig = {
+        enabled: true,
+        minConfidence: 0.3,
+        minHits: 1,
+        delay: 2000
+      };
+      updateAutosaveUI(defaultConfig);
+      return defaultConfig;
+    }
+  }
+
+  function updateAutosaveUI(autoSave) {
+    const autosaveEnabledEl = document.getElementById('autosave-enabled');
+    const autosaveMinConfidenceEl = document.getElementById('autosave-min-confidence');
+    const autosaveMinHitsEl = document.getElementById('autosave-min-hits');
+    const autosaveDelayEl = document.getElementById('autosave-delay');
+
+    if (autosaveEnabledEl) {
+      autosaveEnabledEl.checked = !!autoSave.enabled;
+      updateAutosaveSettingsVisibility();
+    }
+    if (autosaveMinConfidenceEl) {
+      autosaveMinConfidenceEl.value = autoSave.minConfidence || 0.3;
+      updateSliderValue('autosave-min-confidence-value', autosaveMinConfidenceEl.value);
+    }
+    if (autosaveMinHitsEl) {
+      autosaveMinHitsEl.value = autoSave.minHits || 1;
+      updateSliderValue('autosave-min-hits-value', autosaveMinHitsEl.value);
+    }
+    if (autosaveDelayEl) {
+      autosaveDelayEl.value = autoSave.delay || 2000;
+      updateSliderValue('autosave-delay-value', autosaveDelayEl.value);
     }
   }
 
@@ -1431,29 +1440,51 @@
 
     const autosaveEnabledEl = document.getElementById("autosave-enabled");
     if (autosaveEnabledEl) {
-      autosaveEnabledEl.addEventListener("change", updateAutosaveSettingsVisibility);
+      autosaveEnabledEl.addEventListener("change", () => {
+        updateAutosaveSettingsVisibility();
+        // Автоматически сохраняем при изменении чекбокса
+        saveAutosaveConfig();
+      });
       updateAutosaveSettingsVisibility();
     }
 
-    // Обновление значений ползунков в реальном времени
+    // Обновление значений ползунков в реальном времени и автоматическое сохранение
     const minConfidenceEl = document.getElementById("autosave-min-confidence");
     if (minConfidenceEl) {
+      let confidenceTimeout;
       minConfidenceEl.addEventListener("input", (e) => {
         updateSliderValue("autosave-min-confidence-value", e.target.value);
+        // Автосохранение с задержкой (debounce) после остановки изменения
+        clearTimeout(confidenceTimeout);
+        confidenceTimeout = setTimeout(() => {
+          saveAutosaveConfig();
+        }, 500);
       });
     }
 
     const minHitsEl = document.getElementById("autosave-min-hits");
     if (minHitsEl) {
+      let hitsTimeout;
       minHitsEl.addEventListener("input", (e) => {
         updateSliderValue("autosave-min-hits-value", e.target.value);
+        // Автосохранение с задержкой (debounce) после остановки изменения
+        clearTimeout(hitsTimeout);
+        hitsTimeout = setTimeout(() => {
+          saveAutosaveConfig();
+        }, 500);
       });
     }
 
     const delayEl = document.getElementById("autosave-delay");
     if (delayEl) {
+      let delayTimeout;
       delayEl.addEventListener("input", (e) => {
         updateSliderValue("autosave-delay-value", e.target.value);
+        // Автосохранение с задержкой (debounce) после остановки изменения
+        clearTimeout(delayTimeout);
+        delayTimeout = setTimeout(() => {
+          saveAutosaveConfig();
+        }, 500);
       });
     }
   });
