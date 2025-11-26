@@ -486,6 +486,8 @@
   }
 
   function updateAutosaveUI(autoSave) {
+    console.log('[Autosave UI] Обновление интерфейса с настройками:', autoSave);
+    
     const autosaveEnabledEl = document.getElementById('autosave-enabled');
     const autosaveMinConfidenceEl = document.getElementById('autosave-min-confidence');
     const autosaveMinHitsEl = document.getElementById('autosave-min-hits');
@@ -493,19 +495,92 @@
 
     if (autosaveEnabledEl) {
       autosaveEnabledEl.checked = !!autoSave.enabled;
+      console.log('[Autosave UI] Чекбокс установлен:', autosaveEnabledEl.checked);
+      updateAutosaveSettingsVisibility();
+    } else {
+      console.warn('[Autosave UI] Элемент autosave-enabled не найден');
+    }
+    
+    if (autosaveMinConfidenceEl) {
+      autosaveMinConfidenceEl.value = String(autoSave.minConfidence || 0.3);
+      updateSliderValue('autosave-min-confidence-value', autosaveMinConfidenceEl.value);
+      console.log('[Autosave UI] Минимальная уверенность установлена:', autosaveMinConfidenceEl.value);
+    } else {
+      console.warn('[Autosave UI] Элемент autosave-min-confidence не найден');
+    }
+    
+    if (autosaveMinHitsEl) {
+      autosaveMinHitsEl.value = String(autoSave.minHits || 1);
+      updateSliderValue('autosave-min-hits-value', autosaveMinHitsEl.value);
+      console.log('[Autosave UI] Минимальное количество попаданий установлено:', autosaveMinHitsEl.value);
+    } else {
+      console.warn('[Autosave UI] Элемент autosave-min-hits не найден');
+    }
+    
+    if (autosaveDelayEl) {
+      autosaveDelayEl.value = String(autoSave.delay || 2000);
+      updateSliderValue('autosave-delay-value', autosaveDelayEl.value);
+      console.log('[Autosave UI] Задержка установлена:', autosaveDelayEl.value);
+    } else {
+      console.warn('[Autosave UI] Элемент autosave-delay не найден');
+    }
+  }
+  
+  function initAutosaveHandlers() {
+    // Инициализация обработчиков вкладки автосохранения
+    const autosaveSaveBtn = document.getElementById("autosave-save-btn");
+    if (autosaveSaveBtn) {
+      autosaveSaveBtn.addEventListener("click", saveAutosaveConfig);
+    }
+
+    const autosaveEnabledEl = document.getElementById("autosave-enabled");
+    if (autosaveEnabledEl) {
+      autosaveEnabledEl.addEventListener("change", () => {
+        updateAutosaveSettingsVisibility();
+        // Автоматически сохраняем при изменении чекбокса
+        saveAutosaveConfig();
+      });
       updateAutosaveSettingsVisibility();
     }
-    if (autosaveMinConfidenceEl) {
-      autosaveMinConfidenceEl.value = autoSave.minConfidence || 0.3;
-      updateSliderValue('autosave-min-confidence-value', autosaveMinConfidenceEl.value);
+
+    // Обновление значений ползунков в реальном времени и автоматическое сохранение
+    const minConfidenceEl = document.getElementById("autosave-min-confidence");
+    if (minConfidenceEl) {
+      let confidenceTimeout;
+      minConfidenceEl.addEventListener("input", (e) => {
+        updateSliderValue("autosave-min-confidence-value", e.target.value);
+        // Автосохранение с задержкой (debounce) после остановки изменения
+        clearTimeout(confidenceTimeout);
+        confidenceTimeout = setTimeout(() => {
+          saveAutosaveConfig();
+        }, 500);
+      });
     }
-    if (autosaveMinHitsEl) {
-      autosaveMinHitsEl.value = autoSave.minHits || 1;
-      updateSliderValue('autosave-min-hits-value', autosaveMinHitsEl.value);
+
+    const minHitsEl = document.getElementById("autosave-min-hits");
+    if (minHitsEl) {
+      let hitsTimeout;
+      minHitsEl.addEventListener("input", (e) => {
+        updateSliderValue("autosave-min-hits-value", e.target.value);
+        // Автосохранение с задержкой (debounce) после остановки изменения
+        clearTimeout(hitsTimeout);
+        hitsTimeout = setTimeout(() => {
+          saveAutosaveConfig();
+        }, 500);
+      });
     }
-    if (autosaveDelayEl) {
-      autosaveDelayEl.value = autoSave.delay || 2000;
-      updateSliderValue('autosave-delay-value', autosaveDelayEl.value);
+
+    const delayEl = document.getElementById("autosave-delay");
+    if (delayEl) {
+      let delayTimeout;
+      delayEl.addEventListener("input", (e) => {
+        updateSliderValue("autosave-delay-value", e.target.value);
+        // Автосохранение с задержкой (debounce) после остановки изменения
+        clearTimeout(delayTimeout);
+        delayTimeout = setTimeout(() => {
+          saveAutosaveConfig();
+        }, 500);
+      });
     }
   }
 
