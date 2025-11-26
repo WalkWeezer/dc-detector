@@ -54,19 +54,53 @@ class CameraManager:
 
     def capture_raw(self):
         """Capture raw frame as numpy array in BGR format."""
+        frame = None
+        
         if self.camera_type == "picamera2" and self.picam2 is not None and CV2_AVAILABLE:
             array = self.picam2.capture_array()
             if array is None:
                 return None
             if len(array.shape) == 3:
-                return cv2.cvtColor(array, cv2.COLOR_RGB2BGR)
-            return array
+                frame = cv2.cvtColor(array, cv2.COLOR_RGB2BGR)
+            else:
+                frame = array
 
-        if self.camera_type == "webcam" and self.webcam is not None and CV2_AVAILABLE:
+        elif self.camera_type == "webcam" and self.webcam is not None and CV2_AVAILABLE:
             ret, frame = self.webcam.read()
-            if ret and frame is not None:
-                return frame
-        return None
+            if not ret or frame is None:
+                return None
+        
+        if frame is None:
+            return None
+        
+        # Применяем трансформации изображения
+        frame = self._apply_image_transforms(frame)
+        
+        return frame
+    
+    def _apply_image_transforms(self, frame):
+        """Apply image transformations (flip, rotate) to frame."""
+        if not CV2_AVAILABLE or frame is None:
+            return frame
+        
+        # Поворот
+        if self.config.rotate_angle in (90, 180, 270):
+            if self.config.rotate_angle == 90:
+                frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+            elif self.config.rotate_angle == 180:
+                frame = cv2.rotate(frame, cv2.ROTATE_180)
+            elif self.config.rotate_angle == 270:
+                frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        
+        # Горизонтальный переворот
+        if self.config.flip_horizontal:
+            frame = cv2.flip(frame, 1)
+        
+        # Вертикальный переворот
+        if self.config.flip_vertical:
+            frame = cv2.flip(frame, 0)
+        
+        return frame
 
     def capture_jpeg(self) -> Optional[bytes]:
         """Capture frame as JPEG bytes."""

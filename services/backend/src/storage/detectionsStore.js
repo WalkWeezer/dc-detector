@@ -15,9 +15,31 @@ async function ensureBaseDir() {
 }
 
 async function ensureSavedDir(dateKey) {
-  const dir = path.join(savedBaseDir, dateKey)
-  await fs.mkdir(dir, { recursive: true })
-  return dir
+  try {
+    // Сначала убеждаемся, что базовая директория существует
+    await fs.mkdir(savedBaseDir, { recursive: true })
+    const dir = path.join(savedBaseDir, dateKey)
+    await fs.mkdir(dir, { recursive: true })
+    
+    // Проверяем права на запись
+    try {
+      const testFile = path.join(dir, '.write-test')
+      await fs.writeFile(testFile, 'test', 'utf8')
+      await fs.unlink(testFile)
+    } catch (writeErr) {
+      throw new Error(`No write permission in directory: ${dir}. Error: ${writeErr.message}`)
+    }
+    
+    return dir
+  } catch (err) {
+    console.error('Failed to ensure saved directory:', {
+      dateKey,
+      savedBaseDir,
+      error: err.message,
+      code: err.code
+    })
+    throw new Error(`Failed to create saved directory: ${err.message}`)
+  }
 }
 
 function toDateKey(input) {
@@ -254,16 +276,39 @@ export async function listSavedDetections(dateKeyInput) {
 }
 
 function parseDataUrl(dataUrl) {
-  const str = String(dataUrl ?? '')
+  if (!dataUrl || typeof dataUrl !== 'string') {
+    return Buffer.from([])
+  }
+  
+  const str = String(dataUrl).trim()
+  if (str.length === 0) {
+    return Buffer.from([])
+  }
+  
   const idx = str.indexOf(',')
   if (idx === -1) {
+    // Попробуем декодировать как чистый base64
     try {
-      return Buffer.from(str, 'base64')
+      const buf = Buffer.from(str, 'base64')
+      if (buf.length > 0) {
+        return buf
+      }
     } catch {
+      // Игнорируем ошибку декодирования
+    }
+    return Buffer.from([])
+  }
+  
+  try {
+    const base64Part = str.slice(idx + 1)
+    if (base64Part.length === 0) {
       return Buffer.from([])
     }
+    return Buffer.from(base64Part, 'base64')
+  } catch (err) {
+    console.warn('Failed to parse data URL:', err.message)
+    return Buffer.from([])
   }
-  return Buffer.from(str.slice(idx + 1), 'base64')
 }
 
 async function toRgbaBuffer(jpegBuffer, targetWidth) {
@@ -304,17 +349,42 @@ function computeCropRectFromBBox(bbox, imgW, imgH) {
 }
 
 async function toRgbaBufferCropped(jpegBuffer, cropRect, targetWidth) {
+  if (!jpegBuffer || jpegBuffer.length === 0) {
+    throw new Error('Empty JPEG buffer')
+  }
+  
   let buf = jpegBuffer
   try {
     const s = sharp(jpegBuffer)
     const meta = await s.metadata()
-    const rect = cropRect || { left: 0, top: 0, width: meta.width || 1, height: meta.height || 1 }
+    if (!meta || !meta.width || !meta.height) {
+      throw new Error('Invalid image metadata')
+    }
+    const rect = cropRect || { left: 0, top: 0, width: meta.width, height: meta.height }
     buf = await s.extract(rect).resize({ width: targetWidth }).jpeg({ quality: 85 }).toBuffer()
-  } catch {
+  } catch (err) {
     // fallback: try simple resize
-    buf = await sharp(jpegBuffer).resize({ width: targetWidth }).jpeg({ quality: 85 }).toBuffer()
+    try {
+      buf = await sharp(jpegBuffer).resize({ width: targetWidth }).jpeg({ quality: 85 }).toBuffer()
+    } catch (fallbackErr) {
+      console.error('Sharp processing failed:', {
+        original: err.message,
+        fallback: fallbackErr.message,
+        bufferSize: jpegBuffer.length
+      })
+      throw new Error(`Image processing failed: ${fallbackErr.message}`)
+    }
   }
+  
+  if (!buf || buf.length === 0) {
+    throw new Error('Empty processed buffer')
+  }
+  
   const decoded = JPEG.decode(buf, { useTArray: true })
+  if (!decoded || !decoded.data || !decoded.width || !decoded.height) {
+    throw new Error('Failed to decode JPEG')
+  }
+  
   return { width: decoded.width, height: decoded.height, data: decoded.data }
 }
 
@@ -323,76 +393,133 @@ export async function saveUserDetection({ detection, frames = [], fps = 5 }) {
     throw new Error('detection and frames are required')
   }
 
-  const epochSeconds = Number.isFinite(detection?.capturedAt) ? detection.capturedAt : Date.now() / 1000
-  const dateKey = toDateKey(epochSeconds)
-  const dir = await ensureSavedDir(dateKey)
+  try {
+    const epochSeconds = Number.isFinite(detection?.capturedAt) ? detection.capturedAt : Date.now() / 1000
+    const dateKey = toDateKey(epochSeconds)
+    const dir = await ensureSavedDir(dateKey)
 
-  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-  const jsonFile = path.join(dir, `${id}.json`)
-  const gifFile = path.join(dir, `${id}.gif`)
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const jsonFile = path.join(dir, `${id}.json`)
+    const gifFile = path.join(dir, `${id}.gif`)
 
-  const limit = Math.min(frames.length, 30)
-  const pick = frames.slice(-limit)
+    const limit = Math.min(frames.length, 30)
+    const pick = frames.slice(-limit)
 
-  // Build GIF: кроп по bbox детекции
-  const targetWidth = 320
-  const rgbaFrames = []
-  let cropRect = null
-  // Рассчитать cropRect один раз по первой картинке и bbox
-  if (Array.isArray(detection?.bbox)) {
-    try {
-      const firstBuf = parseDataUrl(pick[0])
-      const meta = await sharp(firstBuf).metadata()
-      cropRect = computeCropRectFromBBox(detection.bbox, meta.width || 0, meta.height || 0)
-    } catch {
-      cropRect = null
+    // Build GIF: кроп по bbox детекции
+    const targetWidth = 320
+    const rgbaFrames = []
+    let cropRect = null
+    
+    // Рассчитать cropRect один раз по первой картинке и bbox
+    if (Array.isArray(detection?.bbox) && pick.length > 0) {
+      try {
+        const firstBuf = parseDataUrl(pick[0])
+        if (firstBuf.length > 0) {
+          const meta = await sharp(firstBuf).metadata()
+          cropRect = computeCropRectFromBBox(detection.bbox, meta.width || 0, meta.height || 0)
+        }
+      } catch (err) {
+        console.warn('Failed to compute crop rect:', err.message)
+        cropRect = null
+      }
     }
-  }
-  for (const dataUrl of pick) {
-    const jpegBuf = parseDataUrl(dataUrl)
-    if (jpegBuf.length === 0) continue
-    // eslint-disable-next-line no-await-in-loop
-    const frame = await toRgbaBufferCropped(jpegBuf, cropRect, targetWidth)
-    rgbaFrames.push(frame)
-  }
-  if (rgbaFrames.length === 0) {
-    throw new Error('no valid frames')
-  }
-  const w = rgbaFrames[0].width
-  const h = rgbaFrames[0].height
-  const encoder = new GIFEncoder(w, h)
-
-  // Stream encoder output directly to the file and wait for finish to ensure integrity
-  await new Promise((resolve, reject) => {
-    const ws = createWriteStream(gifFile)
-    encoder.createReadStream()
-      .on('error', reject)
-      .pipe(ws)
-      .on('finish', resolve)
-      .on('error', reject)
-
-    encoder.start()
-    encoder.setRepeat(0)
-    encoder.setDelay(Math.max(50, Math.round(1000 / Math.max(1, fps))))
-    encoder.setQuality(10)
-    for (const fr of rgbaFrames) {
-      encoder.addFrame(fr.data)
+    
+    // Обрабатываем кадры
+    for (let i = 0; i < pick.length; i++) {
+      try {
+        const dataUrl = pick[i]
+        if (!dataUrl || typeof dataUrl !== 'string') {
+          console.warn(`Skipping invalid frame ${i}`)
+          continue
+        }
+        
+        const jpegBuf = parseDataUrl(dataUrl)
+        if (jpegBuf.length === 0) {
+          console.warn(`Skipping empty frame ${i}`)
+          continue
+        }
+        
+        // eslint-disable-next-line no-await-in-loop
+        const frame = await toRgbaBufferCropped(jpegBuf, cropRect, targetWidth)
+        if (frame && frame.width > 0 && frame.height > 0) {
+          rgbaFrames.push(frame)
+        }
+      } catch (err) {
+        console.warn(`Error processing frame ${i}:`, err.message)
+        // Продолжаем обработку остальных кадров
+        continue
+      }
     }
-    encoder.finish()
-  })
+    
+    if (rgbaFrames.length === 0) {
+      throw new Error('no valid frames after processing')
+    }
+    
+    const w = rgbaFrames[0].width
+    const h = rgbaFrames[0].height
+    
+    if (!w || !h || w <= 0 || h <= 0) {
+      throw new Error(`Invalid frame dimensions: ${w}x${h}`)
+    }
+    
+    const encoder = new GIFEncoder(w, h)
 
-  // Save JSON metadata
-  const payload = {
-    id,
-    date: dateKey,
-    savedAt: Date.now() / 1000,
-    detection,
-    gifPath: `/files/detections/saved/${dateKey}/${id}.gif`,
-    jsonPath: `/files/detections/saved/${dateKey}/${id}.json`
+    // Stream encoder output directly to the file and wait for finish to ensure integrity
+    await new Promise((resolve, reject) => {
+      const ws = createWriteStream(gifFile)
+      let streamError = null
+      
+      encoder.createReadStream()
+        .on('error', (err) => {
+          streamError = err
+          reject(err)
+        })
+        .pipe(ws)
+        .on('finish', () => {
+          if (!streamError) resolve()
+        })
+        .on('error', (err) => {
+          streamError = err
+          reject(err)
+        })
+
+      try {
+        encoder.start()
+        encoder.setRepeat(0)
+        encoder.setDelay(Math.max(50, Math.round(1000 / Math.max(1, fps))))
+        encoder.setQuality(10)
+        for (const fr of rgbaFrames) {
+          if (fr && fr.data && fr.data.length > 0) {
+            encoder.addFrame(fr.data)
+          }
+        }
+        encoder.finish()
+      } catch (err) {
+        reject(err)
+      }
+    })
+
+    // Save JSON metadata
+    const payload = {
+      id,
+      date: dateKey,
+      savedAt: Date.now() / 1000,
+      detection,
+      gifPath: `/files/detections/saved/${dateKey}/${id}.gif`,
+      jsonPath: `/files/detections/saved/${dateKey}/${id}.json`
+    }
+    await fs.writeFile(jsonFile, JSON.stringify(payload, null, 2), 'utf8')
+
+    return payload
+  } catch (err) {
+    console.error('Error in saveUserDetection:', {
+      message: err.message,
+      stack: err.stack,
+      detectionId: detection?.id || detection?.trackId,
+      framesCount: frames?.length || 0
+    })
+    throw err
   }
-  await fs.writeFile(jsonFile, JSON.stringify(payload, null, 2), 'utf8')
-
-  return payload
 }
 
 

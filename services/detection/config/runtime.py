@@ -33,6 +33,10 @@ class RuntimeConfig:
     tracker_iou_threshold: float = field(default=0.3)
     tracker_max_age: int = field(default=5)
     tracker_min_hits: int = field(default=1)
+    # Image transformation
+    flip_horizontal: bool = field(default=False)
+    flip_vertical: bool = field(default=False)
+    rotate_angle: int = field(default=0)  # 0, 90, 180, 270
 
     @classmethod
     def from_env(cls) -> "RuntimeConfig":
@@ -46,6 +50,9 @@ class RuntimeConfig:
             tracker_iou_threshold=float(os.environ.get("TRACKER_IOU_THRESHOLD", defaults.tracker_iou_threshold)),
             tracker_max_age=int(os.environ.get("TRACKER_MAX_AGE", defaults.tracker_max_age)),
             tracker_min_hits=int(os.environ.get("TRACKER_MIN_HITS", defaults.tracker_min_hits)),
+            flip_horizontal=os.environ.get("FLIP_HORIZONTAL", "false").lower() in ("true", "1", "yes"),
+            flip_vertical=os.environ.get("FLIP_VERTICAL", "false").lower() in ("true", "1", "yes"),
+            rotate_angle=int(os.environ.get("ROTATE_ANGLE", defaults.rotate_angle)),
         )
 
 

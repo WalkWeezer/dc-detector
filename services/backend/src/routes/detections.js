@@ -307,8 +307,18 @@ detectionsRouter.post('/save', async (req, res) => {
     })
     res.status(201).json(payload)
   } catch (err) {
-    console.error('Save error', err)
-    res.status(err.status ?? 500).json({ error: err.message || 'Unable to save detection', details: err.payload ?? err.stack })
+    console.error('Save error', {
+      message: err.message,
+      stack: err.stack,
+      trackId: req.body?.trackId,
+      hasFrames: Array.isArray(req.body?.frames) && req.body.frames.length > 0
+    })
+    const statusCode = err.status ?? 500
+    const errorMessage = err.message || 'Unable to save detection'
+    const details = process.env.NODE_ENV === 'development' 
+      ? { stack: err.stack, ...err.payload }
+      : { message: err.message }
+    res.status(statusCode).json({ error: errorMessage, details })
   }
 })
 
