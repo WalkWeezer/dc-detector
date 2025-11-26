@@ -5,6 +5,11 @@ export async function callDetectionJson(pathname, { method = 'GET', headers, bod
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
   const url = `${config.detectionServiceUrl}${pathname}`
   
+  // Логируем попытку подключения (только в dev режиме или при ошибках)
+  if (process.env.NODE_ENV === 'development' || process.env.DEBUG) {
+    console.debug(`[DetectionClient] ${method} ${url}`)
+  }
+  
   try {
     const response = await fetch(url, {
       method,
@@ -17,10 +22,13 @@ export async function callDetectionJson(pathname, { method = 'GET', headers, bod
       const error = new Error(payload.error || response.statusText)
       error.status = response.status
       error.payload = payload
+      console.error(`[DetectionClient] ${method} ${url} failed:`, response.status, payload)
       throw error
     }
     return payload
   } catch (err) {
+    // Логируем ошибки подключения
+    console.error(`[DetectionClient] Connection error to ${url}:`, err.message)
     // Обработка сетевых ошибок и таймаутов
     if (err.name === 'AbortError' || err.name === 'TimeoutError') {
       const error = new Error(`Detection service request timeout (${timeoutMs}ms)`)

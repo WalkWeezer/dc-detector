@@ -3,7 +3,10 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      - DETECTION_URL=${DETECTION_URL:-http://localhost:8001}
+      - DETECTION_URL=${DETECTION_URL:-http://host.docker.internal:8001}
+    network_mode: host
+    # Используем network_mode: host для доступа к localhost:8001
+    # Альтернатива: использовать host.docker.internal (работает не на всех системах)
 
   # Detection service запускается отдельно от Docker
   # Запустите: cd services/detection && python3 detection_server.py
