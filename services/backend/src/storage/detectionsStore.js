@@ -11,6 +11,9 @@ import { callDetectionJson } from '../utils/detectionClient.js'
 const baseDir = config.detectionsDataDir
 const savedBaseDir = path.join(baseDir, 'saved')
 
+// Отслеживание трекеров, которые уже были автосохранены (чтобы не сохранять повторно)
+const autoSavedTrackIds = new Set()
+
 async function ensureBaseDir() {
   await fs.mkdir(baseDir, { recursive: true })
 }
@@ -195,12 +198,18 @@ export async function upsertDetections(detections = [], meta = {}) {
       day.detections.push(record)
       
       // Автоматическое сохранение нового трекера (асинхронно, не блокирует ответ)
-      autoSaveNewTracker(normalized, meta).catch(err => {
-        console.warn('Failed to auto-save new tracker:', {
-          trackId: normalized.trackId,
-          error: err.message
+      // Проверяем, не был ли уже автосохранен этот трекер
+      if (!autoSavedTrackIds.has(normalized.trackId)) {
+        console.log(`[Auto-save] Новый трекер обнаружен: ${normalized.trackId} (${normalized.label}, confidence: ${normalized.lastConfidence})`)
+        autoSaveNewTracker(normalized, meta).catch(err => {
+          console.warn('Failed to auto-save new tracker:', {
+            trackId: normalized.trackId,
+            error: err.message
+          })
         })
-      })
+      } else {
+        console.log(`[Auto-save] Трекер ${normalized.trackId} уже был автосохранен ранее, пропускаем`)
+      }
     }
     changed = true
   }
@@ -632,6 +641,9 @@ async function autoSaveNewTracker(normalized, meta) {
     })
     
     console.log(`[Auto-save] ✅ Трекер ${trackId} успешно сохранен (${currentTracker.label || 'object'}, confidence: ${currentConfidence.toFixed(2)}, hits: ${currentHits})`)
+    
+    // Помечаем трекер как автосохраненный, чтобы не сохранять повторно
+    autoSavedTrackIds.add(trackId)
   } catch (err) {
     // Не критичная ошибка, просто логируем
     console.error(`[Auto-save] ❌ Ошибка сохранения трекера ${trackId}:`, {
