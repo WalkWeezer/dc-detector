@@ -1498,8 +1498,10 @@
       }
       // Загружаем настройки автосохранения через отдельный эндпоинт при открытии вкладки "Автосохранение"
       if (target === 'autosave') {
-        loadAutosaveConfig().then(() => {
-          initAutosaveHandlers();
+        // Сначала инициализируем обработчики, потом загружаем настройки
+        initAutosaveHandlers();
+        loadAutosaveConfig().catch(err => {
+          console.error("Ошибка загрузки настроек автосохранения при открытии вкладки:", err);
         });
       }
     });
