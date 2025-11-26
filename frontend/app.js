@@ -1446,61 +1446,13 @@
       saveBtn.addEventListener("click", saveTrackerConfig);
     }
 
-    // Инициализация вкладки автосохранения
-    const autosaveSaveBtn = document.getElementById("autosave-save-btn");
-    if (autosaveSaveBtn) {
-      autosaveSaveBtn.addEventListener("click", saveAutosaveConfig);
-    }
-
-    const autosaveEnabledEl = document.getElementById("autosave-enabled");
-    if (autosaveEnabledEl) {
-      autosaveEnabledEl.addEventListener("change", () => {
-        updateAutosaveSettingsVisibility();
-        // Автоматически сохраняем при изменении чекбокса
-        saveAutosaveConfig();
-      });
-      updateAutosaveSettingsVisibility();
-    }
-
-    // Обновление значений ползунков в реальном времени и автоматическое сохранение
-    const minConfidenceEl = document.getElementById("autosave-min-confidence");
-    if (minConfidenceEl) {
-      let confidenceTimeout;
-      minConfidenceEl.addEventListener("input", (e) => {
-        updateSliderValue("autosave-min-confidence-value", e.target.value);
-        // Автосохранение с задержкой (debounce) после остановки изменения
-        clearTimeout(confidenceTimeout);
-        confidenceTimeout = setTimeout(() => {
-          saveAutosaveConfig();
-        }, 500);
-      });
-    }
-
-    const minHitsEl = document.getElementById("autosave-min-hits");
-    if (minHitsEl) {
-      let hitsTimeout;
-      minHitsEl.addEventListener("input", (e) => {
-        updateSliderValue("autosave-min-hits-value", e.target.value);
-        // Автосохранение с задержкой (debounce) после остановки изменения
-        clearTimeout(hitsTimeout);
-        hitsTimeout = setTimeout(() => {
-          saveAutosaveConfig();
-        }, 500);
-      });
-    }
-
-    const delayEl = document.getElementById("autosave-delay");
-    if (delayEl) {
-      let delayTimeout;
-      delayEl.addEventListener("input", (e) => {
-        updateSliderValue("autosave-delay-value", e.target.value);
-        // Автосохранение с задержкой (debounce) после остановки изменения
-        clearTimeout(delayTimeout);
-        delayTimeout = setTimeout(() => {
-          saveAutosaveConfig();
-        }, 500);
-      });
-    }
+    // Инициализация обработчиков вкладки автосохранения
+    initAutosaveHandlers();
+    
+    // Загружаем настройки автосохранения после инициализации обработчиков
+    loadAutosaveConfig().catch(err => {
+      console.error("Ошибка загрузки настроек автосохранения при инициализации:", err);
+    });
   });
   statusUpdateInterval = setInterval(updateDetectionsStatus, 1000);
   loadModels();
