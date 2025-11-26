@@ -329,31 +329,8 @@
       if (autosaveThresholdInput) autosaveThresholdInput.value = autoSaveMinConfidence.toFixed(2);
 
       // Загрузка настроек автосохранения из конфига
-      const autosaveEnabledEl = document.getElementById('autosave-enabled');
-      const autosaveMinConfidenceEl = document.getElementById('autosave-min-confidence');
-      const autosaveMinHitsEl = document.getElementById('autosave-min-hits');
-      const autosaveDelayEl = document.getElementById('autosave-delay');
-      const autosaveSettingsGroup = document.getElementById('autosave-settings-group');
-
-      if (config.autoSave) {
-        const autoSave = config.autoSave;
-        if (autosaveEnabledEl) {
-          autosaveEnabledEl.checked = !!autoSave.enabled;
-          updateAutosaveSettingsVisibility();
-        }
-        if (autosaveMinConfidenceEl) {
-          autosaveMinConfidenceEl.value = autoSave.minConfidence || 0.3;
-          updateSliderValue('autosave-min-confidence-value', autosaveMinConfidenceEl.value);
-        }
-        if (autosaveMinHitsEl) {
-          autosaveMinHitsEl.value = autoSave.minHits || 1;
-          updateSliderValue('autosave-min-hits-value', autosaveMinHitsEl.value);
-        }
-        if (autosaveDelayEl) {
-          autosaveDelayEl.value = autoSave.delay || 2000;
-          updateSliderValue('autosave-delay-value', autosaveDelayEl.value);
-        }
-      }
+      // Загружаем настройки автосохранения через отдельный эндпоинт
+      await loadAutosaveConfig();
 
       return config;
     } catch (error) {
@@ -431,10 +408,10 @@
     };
 
     try {
-      const response = await fetch(`${backendOrigin}/api/config/tracker`, {
-        method: "PATCH",
+      const response = await fetch(`${backendOrigin}/api/config/autosave`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ autoSave })
+        body: JSON.stringify(autoSave)
       });
 
       const payload = await readResponsePayload(response);
@@ -442,8 +419,9 @@
         throw new Error(readErrorMessage(payload, "Не удалось сохранить настройки автосохранения"));
       }
 
+      // Обновляем локальный конфиг
       if (trackerConfig) {
-        trackerConfig.autoSave = payload.autoSave || autoSave;
+        trackerConfig.autoSave = payload;
       }
 
       errorMessageEl.textContent = "";
@@ -1348,9 +1326,9 @@
         const value = dateInput && dateInput.value ? dateInput.value : undefined;
         loadSavedDetections(value, 'saved-screen-list');
       }
-      // Загружаем конфиг и инициализируем обработчики при открытии вкладки "Автосохранение"
+      // Загружаем настройки автосохранения через отдельный эндпоинт при открытии вкладки "Автосохранение"
       if (target === 'autosave') {
-        loadTrackerConfig().then(() => {
+        loadAutosaveConfig().then(() => {
           initAutosaveHandlers();
         });
       }

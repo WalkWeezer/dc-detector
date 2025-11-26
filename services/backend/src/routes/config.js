@@ -122,3 +122,67 @@ configRouter.patch('/tracker/colors', async (req, res, next) => {
   }
 })
 
+// Эндпоинты для управления автосохранением
+configRouter.get('/autosave', async (_req, res, next) => {
+  try {
+    const trackerConfig = await loadTrackerConfig()
+    const autoSave = trackerConfig.autoSave || {
+      enabled: true,
+      minConfidence: 0.3,
+      minHits: 1,
+      delay: 2000
+    }
+    res.json(autoSave)
+  } catch (err) {
+    next(err)
+  }
+})
+
+configRouter.post('/autosave', async (req, res, next) => {
+  try {
+    const updates = req.body ?? {}
+    
+    if (typeof updates !== 'object' || Array.isArray(updates)) {
+      return res.status(400).json({ error: 'autosave config must be an object' })
+    }
+    
+    const current = await loadTrackerConfig()
+    
+    // Валидация параметров
+    const autoSave = {
+      enabled: typeof updates.enabled === 'boolean' ? updates.enabled : (current.autoSave?.enabled ?? true),
+      minConfidence: typeof updates.minConfidence === 'number' 
+        ? Math.max(0, Math.min(1, updates.minConfidence))
+        : (current.autoSave?.minConfidence ?? 0.3),
+      minHits: typeof updates.minHits === 'number'
+        ? Math.max(1, Math.min(1000, Math.round(updates.minHits)))
+        : (current.autoSave?.minHits ?? 1),
+      delay: typeof updates.delay === 'number'
+        ? Math.max(0, Math.min(60000, Math.round(updates.delay)))
+        : (current.autoSave?.delay ?? 2000)
+    }
+    
+    const updated = {
+      ...current,
+      autoSave
+    }
+    
+    const saved = await saveTrackerConfig(updated)
+    
+    // Сбрасываем список автосохраненных трекеров при изменении настроек
+    try {
+      resetAutoSavedTrackers()
+      console.log('[Auto-save] Список автосохраненных трекеров сброшен после изменения настроек')
+    } catch (err) {
+      console.warn('Failed to reset auto saved trackers:', err.message)
+    }
+    
+    res.json(saved.autoSave)
+  } catch (err) {
+    if (err.message.includes('validation')) {
+      return res.status(400).json({ error: err.message })
+    }
+    next(err)
+  }
+})
+
