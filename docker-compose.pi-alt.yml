@@ -1,0 +1,25 @@
+services:
+  backend:
+    # Альтернативный вариант: без network_mode: host
+    # Используйте IP адрес хоста в DETECTION_URL
+    # Этот файл можно использовать, если docker-compose.pi.yml вызывает конфликт
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - PORT=8080
+      - DETECTION_URL=${DETECTION_URL:-http://172.17.0.1:8001}
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+    networks: [app]
+    # Этот вариант использует стандартные networks, но требует правильный DETECTION_URL
+    # Узнайте IP адрес Docker bridge: ip addr show docker0 | grep "inet "
+    # Или используйте IP адрес Raspberry Pi в локальной сети
+

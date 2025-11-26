@@ -1,8 +1,19 @@
 # 🔧 Исправление ошибок подключения бэкенда на Raspberry Pi
 
-## Проблема: Ошибка 503 "Cannot connect to detection service"
+## Проблемы подключения бэкенда на Raspberry Pi
+
+### Проблема 1: Ошибка 503 "Cannot connect to detection service"
 
 Если бэкенд выдает ошибки 503 при попытке подключиться к detection service, это означает, что бэкенд не может достучаться до `http://localhost:8001`.
+
+### Проблема 2: Ошибка "mutually exclusive network_mode and networks"
+
+Если при запуске Docker Compose возникает ошибка:
+```
+service backend declares mutually exclusive 'network_mode' and 'networks': invalid compose project
+```
+
+Это означает конфликт между `network_mode: host` и `networks` в объединенных файлах Docker Compose.
 
 ## Решение
 
@@ -10,25 +21,50 @@
 
 В `docker-compose.pi.yml` бэкенд настроен с `network_mode: host`, что позволяет ему обращаться к `localhost:8001` напрямую.
 
+**ВАЖНО:** Если возникает ошибка "mutually exclusive network_mode and networks", попробуйте:
+
+1. **Обновить код:**
+```bash
+git pull
+```
+
+2. **Если ошибка сохраняется**, используйте альтернативный файл:
+```bash
+# Вместо docker-compose.pi.yml используйте docker-compose.pi-alt.yml
+docker compose -f docker-compose.yml -f docker-compose.pi-alt.yml up -d --build
+```
+
+3. **Или используйте IP адрес хоста** (см. Вариант 2 ниже)
+
 **Проверьте `.env` файл:**
 ```bash
 DETECTION_URL=http://localhost:8001
 ```
 
-### Вариант 2: Использование IP адреса хоста
+### Вариант 2: Использование IP адреса хоста (Альтернатива при конфликте network_mode)
 
-Если `network_mode: host` не работает, используйте IP адрес Raspberry Pi:
+Если `network_mode: host` вызывает конфликт с `networks`, используйте IP адрес хоста:
 
-1. Узнайте IP адрес:
+1. Узнайте IP адрес хоста из контейнера:
 ```bash
-hostname -I
-# или
-ip addr show | grep "inet " | grep -v 127.0.0.1
+# IP адрес Docker bridge (обычно 172.17.0.1)
+ip addr show docker0 | grep "inet " | awk '{print $2}' | cut -d/ -f1
+
+# Или IP адрес Raspberry Pi в локальной сети
+hostname -I | awk '{print $1}'
 ```
 
-2. Установите в `.env`:
+2. Используйте `docker-compose.pi-alt.yml` вместо `docker-compose.pi.yml`:
 ```bash
-DETECTION_URL=http://192.168.0.50:8001  # Замените на ваш IP
+docker compose -f docker-compose.yml -f docker-compose.pi-alt.yml up -d --build
+```
+
+3. Установите в `.env`:
+```bash
+# Используйте IP Docker bridge (172.17.0.1) или IP Raspberry Pi в сети
+DETECTION_URL=http://172.17.0.1:8001
+# или
+DETECTION_URL=http://192.168.1.100:8001  # Замените на IP Raspberry Pi
 ```
 
 ### Вариант 3: Использование host.docker.internal
