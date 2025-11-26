@@ -43,7 +43,7 @@ class DetectionService:
 
         self.last_raw_frame: Optional[np.ndarray] = None
         self.last_annotated_frame: Optional[bytes] = None
-        self.servo = ServoController()
+        self.servo = ServoController.from_config(config)
         self.target_track_id: Optional[int] = None
 
     # Lifecycle -----------------------------------------------------------------------
@@ -67,6 +67,9 @@ class DetectionService:
         if self.detection_thread and self.detection_thread.is_alive():
             self.detection_thread.join(timeout=3)
         self.camera.shutdown()
+        # Cleanup servo hardware
+        if self.servo:
+            self.servo.cleanup()
 
     # Properties ----------------------------------------------------------------------
 

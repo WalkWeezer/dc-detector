@@ -256,11 +256,26 @@ detectionsRouter.post('/save', async (req, res) => {
       return res.status(400).json({ error: 'trackId is required when frames are not provided' })
     }
 
-    const [trackersPayload, framesPayload, trackerConfig] = await Promise.all([
-      callDetectionJson('/api/trackers'),
-      callDetectionJson(`/api/trackers/${numericTrackId}/frames`, {}, 5000),
-      loadTrackerConfig()
-    ])
+    // Проверяем доступность detection service перед запросами
+    let trackersPayload, framesPayload
+    try {
+      [trackersPayload, framesPayload] = await Promise.all([
+        callDetectionJson('/api/trackers'),
+        callDetectionJson(`/api/trackers/${numericTrackId}/frames`, {}, 5000)
+      ])
+    } catch (err) {
+      console.error('Detection service connection error:', {
+        url: err.payload?.url || err.payload?.detectionServiceUrl,
+        message: err.message,
+        status: err.status
+      })
+      return res.status(err.status ?? 503).json({
+        error: 'Detection service unavailable',
+        details: err.payload ?? { message: err.message }
+      })
+    }
+    
+    const trackerConfig = await loadTrackerConfig()
 
     const trackers = Array.isArray(trackersPayload.trackers) ? trackersPayload.trackers : []
     const target = trackers.find((t) => Number(t.trackId) === numericTrackId)

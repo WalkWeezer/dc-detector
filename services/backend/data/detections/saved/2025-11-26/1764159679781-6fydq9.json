@@ -1,0 +1,23 @@
+{
+  "id": "1764159679781-6fydq9",
+  "date": "2025-11-26",
+  "savedAt": 1764159682.676,
+  "detection": {
+    "trackId": 2021767507,
+    "label": "person",
+    "classId": 0,
+    "confidence": 0.915603756904602,
+    "bbox": [
+      474.3704833984375,
+      31.87176513671875,
+      1280,
+      714.74755859375
+    ],
+    "model": null,
+    "capturedAt": 1764159679.5421865,
+    "cameraIndex": null,
+    "name": null
+  },
+  "gifPath": "/files/detections/saved/2025-11-26/1764159679781-6fydq9.gif",
+  "jsonPath": "/files/detections/saved/2025-11-26/1764159679781-6fydq9.json"
+}

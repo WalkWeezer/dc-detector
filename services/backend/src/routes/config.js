@@ -1,6 +1,7 @@
 import express from 'express'
 import { loadTrackerConfig, saveTrackerConfig } from '../config/trackerConfig.js'
 import { config } from '../config.js'
+import { startAutoTargetSelection, stopAutoTargetSelection } from '../utils/autoTargetManager.js'
 
 export const configRouter = express.Router()
 
@@ -26,10 +27,26 @@ configRouter.patch('/tracker', async (req, res, next) => {
       ...(updates.capture_fps !== undefined && { capture_fps: Number(updates.capture_fps) }),
       ...(updates.colors && typeof updates.colors === 'object' && {
         colors: { ...current.colors, ...updates.colors }
+      }),
+      ...(updates.autoTargetSelection && typeof updates.autoTargetSelection === 'object' && {
+        autoTargetSelection: {
+          ...(current.autoTargetSelection || {}),
+          ...updates.autoTargetSelection
+        }
       })
     }
     
     const saved = await saveTrackerConfig(updated)
+    
+    // Если обновлены настройки автоматического выбора, перезапускаем менеджер
+    if (updates.autoTargetSelection) {
+      try {
+        stopAutoTargetSelection()
+        await startAutoTargetSelection()
+      } catch (err) {
+        console.warn('Failed to restart auto target selection:', err.message)
+      }
+    }
     
     // Если обновлены параметры трекера, синхронизируем с detection service
     if (updates.iou_threshold !== undefined || updates.max_age !== undefined || updates.min_hits !== undefined) {

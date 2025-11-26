@@ -1,0 +1,235 @@
+"""Hardware implementations for servo control."""
+from __future__ import annotations
+
+import logging
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+
+class HardwareServoController:
+    """Base class for hardware servo controllers."""
+
+    def __init__(self, pan_pin: Optional[int] = None, tilt_pin: Optional[int] = None):
+        self.pan_pin = pan_pin
+        self.tilt_pin = tilt_pin
+        self._initialized = False
+
+    def initialize(self) -> bool:
+        """Initialize hardware. Returns True if successful."""
+        raise NotImplementedError
+
+    def set_angle(self, servo: str, angle: float) -> None:
+        """Set angle for servo (pan or tilt). Angle in degrees (0-180)."""
+        raise NotImplementedError
+
+    def cleanup(self) -> None:
+        """Cleanup hardware resources."""
+        raise NotImplementedError
+
+    def is_available(self) -> bool:
+        """Check if hardware is available."""
+        return self._initialized
+
+
+class GPIOServoController(HardwareServoController):
+    """Servo controller using RPi.GPIO for direct GPIO control.
+    
+    Requires: pip install RPi.GPIO
+    Suitable for: Raspberry Pi with servos connected directly to GPIO pins
+    """
+
+    def __init__(self, pan_pin: int = 18, tilt_pin: int = 19, frequency: int = 50):
+        """
+        Args:
+            pan_pin: GPIO pin number for pan servo (default: 18)
+            tilt_pin: GPIO pin number for tilt servo (default: 19)
+            frequency: PWM frequency in Hz (default: 50 for standard servos)
+        """
+        super().__init__(pan_pin, tilt_pin)
+        self.frequency = frequency
+        self.pan_pwm = None
+        self.tilt_pwm = None
+        self._gpio = None
+
+    def initialize(self) -> bool:
+        """Initialize GPIO and PWM."""
+        try:
+            import RPi.GPIO as GPIO
+
+            self._gpio = GPIO
+            GPIO.setmode(GPIO.BCM)
+            GPIO.setwarnings(False)
+
+            # Setup pan servo
+            if self.pan_pin:
+                GPIO.setup(self.pan_pin, GPIO.OUT)
+                self.pan_pwm = GPIO.PWM(self.pan_pin, self.frequency)
+                self.pan_pwm.start(0)
+
+            # Setup tilt servo
+            if self.tilt_pin:
+                GPIO.setup(self.tilt_pin, GPIO.OUT)
+                self.tilt_pwm = GPIO.PWM(self.tilt_pin, self.frequency)
+                self.tilt_pwm.start(0)
+
+            self._initialized = True
+            logger.info(
+                f"GPIO Servo initialized: pan_pin={self.pan_pin}, tilt_pin={self.tilt_pin}, freq={self.frequency}Hz"
+            )
+            return True
+        except ImportError:
+            logger.warning("RPi.GPIO not available (not running on Raspberry Pi?)")
+            return False
+        except Exception as exc:
+            logger.error(f"Failed to initialize GPIO servos: {exc}")
+            return False
+
+    def set_angle(self, servo: str, angle: float) -> None:
+        """Set servo angle. angle: 0-180 degrees."""
+        if not self._initialized:
+            return
+
+        # Clamp angle to valid range
+        angle = max(0.0, min(180.0, angle))
+
+        # Convert angle to duty cycle (0-180 degrees -> 2.5-12.5% duty cycle for standard servos)
+        # Standard servos: 0° = 2.5%, 90° = 7.5%, 180° = 12.5%
+        duty_cycle = 2.5 + (angle / 180.0) * 10.0
+
+        try:
+            if servo == "pan" and self.pan_pwm:
+                self.pan_pwm.ChangeDutyCycle(duty_cycle)
+            elif servo == "tilt" and self.tilt_pwm:
+                self.tilt_pwm.ChangeDutyCycle(duty_cycle)
+        except Exception as exc:
+            logger.error(f"Failed to set {servo} servo angle: {exc}")
+
+    def cleanup(self) -> None:
+        """Cleanup GPIO resources."""
+        if not self._initialized:
+            return
+
+        try:
+            if self.pan_pwm:
+                self.pan_pwm.stop()
+            if self.tilt_pwm:
+                self.tilt_pwm.stop()
+            if self._gpio:
+                self._gpio.cleanup()
+            self._initialized = False
+            logger.info("GPIO servos cleaned up")
+        except Exception as exc:
+            logger.error(f"Error cleaning up GPIO servos: {exc}")
+
+
+class PCA9685ServoController(HardwareServoController):
+    """Servo controller using PCA9685 I2C PWM controller.
+    
+    Requires: pip install adafruit-circuitpython-servokit
+    Suitable for: Multiple servos via I2C (more stable, no GPIO conflicts)
+    """
+
+    def __init__(
+        self,
+        pan_channel: int = 0,
+        tilt_channel: int = 1,
+        address: int = 0x40,
+        frequency: int = 50,
+    ):
+        """
+        Args:
+            pan_channel: PCA9685 channel for pan servo (0-15, default: 0)
+            tilt_channel: PCA9685 channel for tilt servo (0-15, default: 1)
+            address: I2C address of PCA9685 (default: 0x40)
+            frequency: PWM frequency in Hz (default: 50 for standard servos)
+        """
+        super().__init__(pan_channel, tilt_channel)
+        self.pan_channel = pan_channel
+        self.tilt_channel = tilt_channel
+        self.address = address
+        self.frequency = frequency
+        self._servo_kit = None
+
+    def initialize(self) -> bool:
+        """Initialize PCA9685."""
+        try:
+            from adafruit_servokit import ServoKit
+
+            self._servo_kit = ServoKit(channels=16, address=self.address, frequency=self.frequency)
+            self._initialized = True
+            logger.info(
+                f"PCA9685 Servo initialized: pan_channel={self.pan_channel}, "
+                f"tilt_channel={self.tilt_channel}, address=0x{self.address:02x}, freq={self.frequency}Hz"
+            )
+            return True
+        except ImportError:
+            logger.warning("adafruit-circuitpython-servokit not available")
+            return False
+        except Exception as exc:
+            logger.error(f"Failed to initialize PCA9685 servos: {exc}")
+            return False
+
+    def set_angle(self, servo: str, angle: float) -> None:
+        """Set servo angle. angle: 0-180 degrees."""
+        if not self._initialized or not self._servo_kit:
+            return
+
+        # Clamp angle to valid range
+        angle = max(0.0, min(180.0, angle))
+
+        try:
+            if servo == "pan":
+                self._servo_kit.servo[self.pan_channel].angle = angle
+            elif servo == "tilt":
+                self._servo_kit.servo[self.tilt_channel].angle = angle
+        except Exception as exc:
+            logger.error(f"Failed to set {servo} servo angle: {exc}")
+
+    def cleanup(self) -> None:
+        """Cleanup PCA9685 resources."""
+        if self._initialized:
+            # PCA9685 doesn't need explicit cleanup
+            self._initialized = False
+            logger.info("PCA9685 servos cleaned up")
+
+
+def create_servo_controller(
+    hardware_type: str = "none",
+    pan_pin: Optional[int] = None,
+    tilt_pin: Optional[int] = None,
+    pan_channel: Optional[int] = None,
+    tilt_channel: Optional[int] = None,
+    **kwargs,
+) -> HardwareServoController:
+    """
+    Factory function to create appropriate servo controller.
+    
+    Args:
+        hardware_type: "gpio", "pca9685", or "none" (software-only)
+        pan_pin: GPIO pin for pan servo (for GPIO mode)
+        tilt_pin: GPIO pin for tilt servo (for GPIO mode)
+        pan_channel: PCA9685 channel for pan servo (for PCA9685 mode)
+        tilt_channel: PCA9685 channel for tilt servo (for PCA9685 mode)
+        **kwargs: Additional arguments (address, frequency, etc.)
+    
+    Returns:
+        HardwareServoController instance
+    """
+    if hardware_type == "gpio":
+        pan = pan_pin if pan_pin is not None else 18
+        tilt = tilt_pin if tilt_pin is not None else 19
+        freq = kwargs.get("frequency", 50)
+        return GPIOServoController(pan_pin=pan, tilt_pin=tilt, frequency=freq)
+    elif hardware_type == "pca9685":
+        pan_ch = pan_channel if pan_channel is not None else 0
+        tilt_ch = tilt_channel if tilt_channel is not None else 1
+        address = kwargs.get("address", 0x40)
+        freq = kwargs.get("frequency", 50)
+        return PCA9685ServoController(
+            pan_channel=pan_ch, tilt_channel=tilt_ch, address=address, frequency=freq
+        )
+    else:
+        # Return None for software-only mode
+        return None
+

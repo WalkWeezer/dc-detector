@@ -16,4 +16,11 @@ pytest-cov==4.1.0
 # Если не установлено системно, раскомментируйте следующую строку:
 # picamera2
 
+# Servo control dependencies (optional, for hardware servo support)
+# Для прямого подключения через GPIO (Raspberry Pi):
+# RPi.GPIO
+
+# Для PCA9685 I2C контроллера (рекомендуется для множества сервоприводов):
+# adafruit-circuitpython-servokit
+
 

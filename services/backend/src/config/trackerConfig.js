@@ -15,6 +15,17 @@ function getDefaultConfig() {
       fire: '#ff0000',
       smoke: '#808080',
       object: '#40ffbc'
+    },
+    autoTargetSelection: {
+      enabled: true,
+      selectionMode: 'priority', // 'priority', 'hits', 'confidence', 'manual'
+      minConfidence: 0.3,
+      minHits: 1,
+      updateInterval: 500, // мс между обновлениями
+      preferHighConfidence: true,
+      preferHighHits: true,
+      preferLargeSize: false,
+      preferCenterPosition: false
     }
   }
 }
@@ -45,6 +56,26 @@ function validateConfig(config) {
       if (typeof value !== 'string' || !/^#[0-9A-Fa-f]{6}$/.test(value)) {
         errors.push(`color for "${key}" must be a valid hex color (e.g., #ff0000)`)
       }
+    }
+  }
+  
+  // Валидация autoTargetSelection
+  if (config.autoTargetSelection && typeof config.autoTargetSelection === 'object') {
+    const auto = config.autoTargetSelection
+    if (typeof auto.enabled !== 'boolean') {
+      errors.push('autoTargetSelection.enabled must be a boolean')
+    }
+    if (auto.selectionMode && !['priority', 'hits', 'confidence', 'manual'].includes(auto.selectionMode)) {
+      errors.push('autoTargetSelection.selectionMode must be one of: priority, hits, confidence, manual')
+    }
+    if (typeof auto.minConfidence === 'number' && (auto.minConfidence < 0 || auto.minConfidence > 1)) {
+      errors.push('autoTargetSelection.minConfidence must be between 0 and 1')
+    }
+    if (typeof auto.minHits === 'number' && (auto.minHits < 0 || auto.minHits > 1000)) {
+      errors.push('autoTargetSelection.minHits must be between 0 and 1000')
+    }
+    if (typeof auto.updateInterval === 'number' && (auto.updateInterval < 100 || auto.updateInterval > 60000)) {
+      errors.push('autoTargetSelection.updateInterval must be between 100 and 60000 ms')
     }
   }
   

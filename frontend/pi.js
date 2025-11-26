@@ -43,18 +43,17 @@
   };
 
   const backendOrigin = computeOrigin(8080);
-  const detectionOrigin = computeOrigin(8001);
 
-  // Прямой доступ к detection service (как указано в требованиях)
+  // Все запросы идут через бэкенд
   const api = {
-    detection: `${detectionOrigin}/api/detection`,
-    trackers: `${detectionOrigin}/api/trackers`,
+    detection: `${backendOrigin}/api/detection`,
+    trackers: `${backendOrigin}/api/trackers`,
     trackerName: `${backendOrigin}/api/trackers/name`, // Имена хранятся в backend
-    trackerTarget: `${detectionOrigin}/api/trackers/target`,
+    trackerTarget: `${backendOrigin}/api/trackers/target`,
     detectionsSave: `${backendOrigin}/api/detections/save`, // Сохранение через backend
     detectionsSaved: `${backendOrigin}/api/detections/saved`,
-    models: `${detectionOrigin}/models`,
-    stream: `${detectionOrigin}/video_feed_raw`,
+    models: `${backendOrigin}/api/models`,
+    stream: `${backendOrigin}/api/video_feed_raw`,
   };
 
   function updateStatus(text, variant) {
