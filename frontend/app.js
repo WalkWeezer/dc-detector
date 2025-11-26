@@ -446,6 +446,7 @@
 
   async function loadAutosaveConfig() {
     try {
+      console.log('[Autosave] Загрузка настроек автосохранения...');
       const response = await fetch(`${backendOrigin}/api/config/autosave`, {
         method: "GET",
         headers: { "Content-Type": "application/json" }
@@ -463,6 +464,7 @@
         delay: 2000
       };
 
+      console.log('[Autosave] Настройки загружены:', autoSave);
       updateAutosaveUI(autoSave);
       
       // Обновляем локальный конфиг
@@ -480,6 +482,7 @@
         minHits: 1,
         delay: 2000
       };
+      console.log('[Autosave] Используем настройки по умолчанию:', defaultConfig);
       updateAutosaveUI(defaultConfig);
       return defaultConfig;
     }
@@ -588,13 +591,28 @@
     const enabledEl = document.getElementById('autosave-enabled');
     const settingsGroup = document.getElementById('autosave-settings-group');
     if (enabledEl && settingsGroup) {
-      if (enabledEl.checked) {
+      const isEnabled = enabledEl.checked;
+      console.log('[Autosave UI] Обновление видимости настроек, enabled:', isEnabled);
+      if (isEnabled) {
         settingsGroup.style.opacity = '1';
         settingsGroup.style.pointerEvents = 'auto';
+        // Также включаем все input элементы внутри
+        settingsGroup.querySelectorAll('input[type="range"]').forEach(input => {
+          input.disabled = false;
+        });
       } else {
         settingsGroup.style.opacity = '0.5';
         settingsGroup.style.pointerEvents = 'none';
+        // Отключаем все input элементы внутри
+        settingsGroup.querySelectorAll('input[type="range"]').forEach(input => {
+          input.disabled = true;
+        });
       }
+    } else {
+      console.warn('[Autosave UI] Элементы для обновления видимости не найдены', {
+        enabledEl: !!enabledEl,
+        settingsGroup: !!settingsGroup
+      });
     }
   }
 
