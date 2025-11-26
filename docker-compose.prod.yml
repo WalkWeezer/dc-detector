@@ -1,6 +1,6 @@
 # Production compose файл для Raspberry Pi
-# НЕ объединяется с docker-compose.yml
 # Используйте: docker compose -f docker-compose.prod.yml up -d --build
+# Или через скрипт: ./scripts/start-prod.sh
 
 services:
   init:

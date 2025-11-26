@@ -45,15 +45,12 @@ fi
 # Остановка Docker контейнеров
 echo "🛑 Остановка Docker контейнеров..."
 
-# Определяем compose файл (prod имеет приоритет)
+# Используем docker-compose.prod.yml
 if [ -f docker-compose.prod.yml ]; then
     echo "📋 Используется: docker-compose.prod.yml"
     docker compose -f docker-compose.prod.yml down --remove-orphans
-elif [ -f docker-compose.yml ]; then
-    echo "📋 Используется: docker-compose.yml"
-    docker compose -f docker-compose.yml down --remove-orphans
 else
-    echo "⚠️  Docker Compose файлы не найдены, пытаюсь остановить все контейнеры проекта..."
+    echo "⚠️  docker-compose.prod.yml не найден, пытаюсь остановить все контейнеры проекта..."
     docker ps -a --filter "name=dc-detector" --format "{{.ID}}" | xargs -r docker rm -f 2>/dev/null || true
 fi
 echo "✅ Docker контейнеры остановлены"

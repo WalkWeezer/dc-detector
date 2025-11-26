@@ -5,7 +5,8 @@ import { config } from '../config.js'
 import JPEG from 'jpeg-js'
 import sharp from 'sharp'
 import GIFEncoder from 'gif-encoder-2'
-import { ensureColorsForLabels } from '../config/trackerConfig.js'
+import { ensureColorsForLabels, loadTrackerConfig } from '../config/trackerConfig.js'
+import { callDetectionJson } from '../utils/detectionClient.js'
 
 const baseDir = config.detectionsDataDir
 const savedBaseDir = path.join(baseDir, 'saved')
@@ -192,6 +193,14 @@ export async function upsertDetections(detections = [], meta = {}) {
         cameraIndex: normalized.cameraIndex
       }
       day.detections.push(record)
+      
+      // Автоматическое сохранение нового трекера (асинхронно, не блокирует ответ)
+      autoSaveNewTracker(normalized, meta).catch(err => {
+        console.warn('Failed to auto-save new tracker:', {
+          trackId: normalized.trackId,
+          error: err.message
+        })
+      })
     }
     changed = true
   }
@@ -519,6 +528,86 @@ export async function saveUserDetection({ detection, frames = [], fps = 5 }) {
       framesCount: frames?.length || 0
     })
     throw err
+  }
+}
+
+// Автоматическое сохранение нового трекера
+async function autoSaveNewTracker(normalized, meta) {
+  try {
+    const trackerConfig = await loadTrackerConfig()
+    const autoSaveConfig = trackerConfig.autoSave || {}
+    
+    // Проверяем, включено ли автосохранение
+    if (!autoSaveConfig.enabled) {
+      return
+    }
+    
+    // Проверяем минимальные требования
+    const minConfidence = Number(autoSaveConfig.minConfidence) || 0.3
+    const minHits = Number(autoSaveConfig.minHits) || 1
+    
+    if (normalized.lastConfidence < minConfidence) {
+      return // Недостаточная уверенность
+    }
+    
+    if ((normalized.frames || 0) < minHits) {
+      return // Недостаточно попаданий
+    }
+    
+    // Задержка перед сохранением, чтобы накопились кадры
+    const delay = Number(autoSaveConfig.delay) || 2000
+    await new Promise(resolve => setTimeout(resolve, delay))
+    
+    // Получаем frames из detection service
+    let framesPayload
+    try {
+      framesPayload = await callDetectionJson(`/api/trackers/${normalized.trackId}/frames`, {}, 5000)
+    } catch (err) {
+      console.warn('Failed to get frames for auto-save:', err.message)
+      return
+    }
+    
+    const cachedFrames = Array.isArray(framesPayload.frames) ? framesPayload.frames : []
+    if (cachedFrames.length === 0) {
+      return // Нет кадров для сохранения
+    }
+    
+    // Получаем информацию о трекерах для получения активной модели
+    let trackersPayload
+    try {
+      trackersPayload = await callDetectionJson('/api/trackers')
+    } catch (err) {
+      console.warn('Failed to get trackers info for auto-save:', err.message)
+      trackersPayload = {}
+    }
+    
+    const detectionPayload = {
+      id: normalized.id,
+      trackId: normalized.trackId,
+      label: normalized.label,
+      classId: normalized.classId ?? null,
+      confidence: normalized.lastConfidence,
+      bbox: normalized.bbox,
+      model: trackersPayload.active_model ?? trackersPayload.activeModel ?? meta.model ?? null,
+      capturedAt: normalized.lastSeen,
+      cameraIndex: normalized.cameraIndex ?? null
+    }
+    
+    // Сохраняем
+    const fps = trackerConfig.capture_fps || 8
+    await saveUserDetection({
+      detection: detectionPayload,
+      frames: cachedFrames,
+      fps: Number(fps)
+    })
+    
+    console.log(`Auto-saved new tracker: ${normalized.trackId} (${normalized.label}, confidence: ${normalized.lastConfidence})`)
+  } catch (err) {
+    // Не критичная ошибка, просто логируем
+    console.warn('Auto-save error:', {
+      trackId: normalized?.trackId,
+      error: err.message
+    })
   }
 }
 

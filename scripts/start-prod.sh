@@ -362,17 +362,14 @@ cd "$PROJECT_ROOT"
 echo ""
 echo "🐳 Запуск Backend и Frontend через Docker..."
 
-# Определяем compose файл (prod имеет приоритет)
-if [ -f docker-compose.prod.yml ]; then
-    echo "📋 Используется: docker-compose.prod.yml"
-    docker compose -f docker-compose.prod.yml up -d --build
-elif [ -f docker-compose.yml ]; then
-    echo "📋 Используется: docker-compose.yml"
-    docker compose -f docker-compose.yml up -d --build
-else
-    echo "❌ Docker Compose файлы не найдены"
+# Используем docker-compose.prod.yml
+if [ ! -f docker-compose.prod.yml ]; then
+    echo "❌ docker-compose.prod.yml не найден"
     exit 1
 fi
+
+echo "📋 Используется: docker-compose.prod.yml"
+docker compose -f docker-compose.prod.yml up -d --build
 
 echo "⏳ Ожидание запуска Docker сервисов (8 секунд)..."
 sleep 8

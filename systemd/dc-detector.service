@@ -8,10 +8,10 @@ Wants=network-online.target
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=/opt/dc-detector
-# Используем prod файл если есть, иначе базовый
-ExecStart=/bin/bash -c 'if [ -f /opt/dc-detector/docker-compose.prod.yml ]; then docker compose -f /opt/dc-detector/docker-compose.prod.yml up -d; else docker compose -f /opt/dc-detector/docker-compose.yml up -d; fi'
-ExecStop=/bin/bash -c 'if [ -f /opt/dc-detector/docker-compose.prod.yml ]; then docker compose -f /opt/dc-detector/docker-compose.prod.yml down --remove-orphans; else docker compose -f /opt/dc-detector/docker-compose.yml down --remove-orphans; fi'
-ExecReload=/bin/bash -c 'if [ -f /opt/dc-detector/docker-compose.prod.yml ]; then docker compose -f /opt/dc-detector/docker-compose.prod.yml restart; else docker compose -f /opt/dc-detector/docker-compose.yml restart; fi'
+# Используем docker-compose.prod.yml
+ExecStart=/bin/bash -c 'docker compose -f /opt/dc-detector/docker-compose.prod.yml up -d'
+ExecStop=/bin/bash -c 'docker compose -f /opt/dc-detector/docker-compose.prod.yml down --remove-orphans'
+ExecReload=/bin/bash -c 'docker compose -f /opt/dc-detector/docker-compose.prod.yml restart'
 StandardOutput=journal
 StandardError=journal
 

@@ -26,6 +26,12 @@ function getDefaultConfig() {
       preferHighHits: true,
       preferLargeSize: false,
       preferCenterPosition: false
+    },
+    autoSave: {
+      enabled: false, // Автоматическое сохранение новых трекеров
+      minConfidence: 0.3, // Минимальная уверенность для автосохранения
+      minHits: 1, // Минимальное количество попаданий
+      delay: 2000 // Задержка перед сохранением (мс) - чтобы накопились кадры
     }
   }
 }
@@ -76,6 +82,23 @@ function validateConfig(config) {
     }
     if (typeof auto.updateInterval === 'number' && (auto.updateInterval < 100 || auto.updateInterval > 60000)) {
       errors.push('autoTargetSelection.updateInterval must be between 100 and 60000 ms')
+    }
+  }
+  
+  // Валидация autoSave
+  if (config.autoSave && typeof config.autoSave === 'object') {
+    const autoSave = config.autoSave
+    if (typeof autoSave.enabled !== 'boolean') {
+      errors.push('autoSave.enabled must be a boolean')
+    }
+    if (typeof autoSave.minConfidence === 'number' && (autoSave.minConfidence < 0 || autoSave.minConfidence > 1)) {
+      errors.push('autoSave.minConfidence must be between 0 and 1')
+    }
+    if (typeof autoSave.minHits === 'number' && (autoSave.minHits < 0 || autoSave.minHits > 1000)) {
+      errors.push('autoSave.minHits must be between 0 and 1000')
+    }
+    if (typeof autoSave.delay === 'number' && (autoSave.delay < 0 || autoSave.delay > 60000)) {
+      errors.push('autoSave.delay must be between 0 and 60000 ms')
     }
   }
   
