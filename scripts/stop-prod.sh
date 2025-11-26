@@ -44,7 +44,11 @@ fi
 
 # Остановка Docker контейнеров
 echo "🛑 Остановка Docker контейнеров..."
-if [ -f docker-compose.pi.yml ]; then
+if [ -f docker-compose.pi-standalone.yml ]; then
+    # Используем standalone файл для Raspberry Pi (избегает конфликта network_mode/networks)
+    docker compose -f docker-compose.pi-standalone.yml down
+elif [ -f docker-compose.pi.yml ]; then
+    # Fallback на объединение файлов (может вызвать конфликт network_mode/networks)
     docker compose -f docker-compose.yml -f docker-compose.pi.yml down
 else
     docker compose down

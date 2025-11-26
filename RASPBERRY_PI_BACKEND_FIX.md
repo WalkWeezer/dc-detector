@@ -69,25 +69,45 @@ DETECTION_URL=http://192.168.1.100:8001  # Замените на IP Raspberry Pi
 DETECTION_URL=http://host.docker.internal:8001
 ```
 
+## Важно: Очистка старых контейнеров
+
+Если контейнеры были запущены со старым способом (объединение файлов), их нужно остановить и удалить:
+
+```bash
+# Остановить и удалить все контейнеры
+docker compose -f docker-compose.yml -f docker-compose.pi.yml down
+
+# Или если они уже запущены, принудительно удалить
+docker compose -f docker-compose.yml -f docker-compose.pi.yml down --remove-orphans
+
+# Теперь запустить с новым standalone файлом
+docker compose -f docker-compose.pi-standalone.yml up -d --build
+```
+
 ## Проверка
 
-1. Убедитесь, что detection service запущен:
+1. Убедитесь, что файл `docker-compose.pi-standalone.yml` существует:
+```bash
+ls -la docker-compose.pi-standalone.yml
+```
+
+2. Убедитесь, что detection service запущен:
 ```bash
 curl http://localhost:8001/health
 ```
 
-2. Проверьте, что бэкенд видит правильный URL:
+3. Проверьте, что бэкенд видит правильный URL:
 ```bash
 # В логах бэкенда должно быть:
 # Backend listening on :8080
 # Detection Service URL: http://localhost:8001
 ```
 
-3. Проверьте логи бэкенда:
+4. Проверьте логи бэкенда:
 ```bash
 sudo journalctl -u dc-detector -f
 # или
-docker compose logs backend -f
+docker compose -f docker-compose.pi-standalone.yml logs backend -f
 ```
 
 ## Частые проблемы
