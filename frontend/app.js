@@ -328,9 +328,7 @@
       if (autosaveEnabledInput) autosaveEnabledInput.checked = !!autoSaveEnabled;
       if (autosaveThresholdInput) autosaveThresholdInput.value = autoSaveMinConfidence.toFixed(2);
 
-      // Загрузка настроек автосохранения из конфига
-      // Загружаем настройки автосохранения через отдельный эндпоинт
-      await loadAutosaveConfig();
+      // Настройки автосохранения загружаются через отдельный эндпоинт при открытии вкладки
 
       return config;
     } catch (error) {
