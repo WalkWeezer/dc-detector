@@ -32,7 +32,9 @@ services:
     env_file: .env
     environment:
       - PORT=8080
-      - DETECTION_URL=${DETECTION_URL:-http://localhost:8001}
+      # Backend использует network_mode: host, поэтому detection service доступен на localhost
+      # Явно устанавливаем localhost, игнорируя возможное неправильное значение из .env
+      - DETECTION_URL=http://localhost:8001
     network_mode: host
     build:
       context: .

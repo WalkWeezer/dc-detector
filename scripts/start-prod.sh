@@ -66,6 +66,13 @@ fi
 if [ ! -f .env ]; then
     echo "⚠️  Создаю .env..."
     cp env.example .env 2>/dev/null || echo "DETECTION_URL=http://localhost:8001" > .env
+else
+    # Проверяем и исправляем неправильный DETECTION_URL для Docker деплоя
+    if grep -q "DETECTION_URL=http://detection:8001" .env 2>/dev/null; then
+        echo "⚠️  Исправляю DETECTION_URL в .env (должен быть localhost для network_mode: host)..."
+        sed -i 's|DETECTION_URL=http://detection:8001|DETECTION_URL=http://localhost:8001|g' .env
+        echo "✅ DETECTION_URL исправлен на http://localhost:8001"
+    fi
 fi
 
 # Создание директорий
