@@ -371,26 +371,57 @@ fi
 echo "📋 Используется: docker-compose.prod.yml"
 docker compose -f docker-compose.prod.yml up -d --build
 
-echo "⏳ Ожидание запуска Docker сервисов (8 секунд)..."
-sleep 8
+echo "⏳ Ожидание запуска Docker сервисов (10 секунд)..."
+sleep 10
 
 # ФИНАЛЬНАЯ ПРОВЕРКА
 echo ""
 echo "🔍 Финальная проверка сервисов..."
 
 check_service() {
-    if curl -s --connect-timeout 3 "$1" >/dev/null; then
-        echo "✅ $2"
-        return 0
-    else
-        echo "⚠️  $2"
-        return 1
-    fi
+    local url=$1
+    local name=$2
+    local max_attempts=3
+    local attempt=1
+    
+    while [ $attempt -le $max_attempts ]; do
+        if curl -s --connect-timeout 5 "$url" >/dev/null 2>&1; then
+            echo "✅ $name"
+            return 0
+        fi
+        if [ $attempt -lt $max_attempts ]; then
+            sleep 2
+        fi
+        attempt=$((attempt + 1))
+    done
+    
+    echo "⚠️  $name (не отвечает на $url)"
+    return 1
 }
 
 check_service "http://localhost:8001/health" "Detection Service"
 check_service "http://localhost:8080/health" "Backend" 
-check_service "http://localhost" "Frontend"
+
+# Проверка Frontend с дополнительной диагностикой
+if ! check_service "http://localhost" "Frontend"; then
+    echo ""
+    echo "📋 Диагностика Frontend..."
+    echo "   Проверка контейнера:"
+    docker ps -a --filter "name=frontend" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" || true
+    echo ""
+    echo "   Последние логи Frontend:"
+    docker compose -f docker-compose.prod.yml logs --tail=20 frontend 2>/dev/null || echo "   Не удалось получить логи"
+    echo ""
+    echo "💡 Если Frontend не работает, проверьте:"
+    echo "   • Логи: docker compose -f docker-compose.prod.yml logs frontend"
+    echo "   • Статус: docker compose -f docker-compose.prod.yml ps"
+    echo "   • Порт 80 может быть занят другим процессом"
+fi
+
+# Дополнительная проверка Docker контейнеров
+echo ""
+echo "🔍 Статус всех Docker контейнеров:"
+docker compose -f docker-compose.prod.yml ps 2>/dev/null || docker ps --filter "name=dc-detector" --format "table {{.Names}}\t{{.Status}}" || true
 
 # ИТОГИ
 echo ""
