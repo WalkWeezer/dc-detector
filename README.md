@@ -122,7 +122,9 @@ chmod +x scripts/stop-prod.sh
 
 1. Detection Service:
    ```bash
-   ./scripts/run-detection-direct.sh
+   cd services/detection
+   source ../../venv/bin/activate
+   python detection_server.py
    ```
 
 2. Backend и Frontend через Docker:
@@ -172,7 +174,7 @@ JWT_SECRET=change-me
 
 **Важно:** `DETECTION_URL` должен указывать на адрес, где запущен detection service. Если он запущен на том же хосте - используйте `http://localhost:8001`. Если на другом хосте - укажите его IP адрес.
 
-**Примечание:** Файл `.env` автоматически создается из `env.example` при первом запуске через скрипт `scripts/init.sh`.
+**Примечание:** Файл `.env` автоматически создается из `env.example` при первом запуске через `./scripts/start-prod.sh` или через Docker Compose (init сервис).
 
 ## 🐍 Detection Service
 
@@ -263,7 +265,8 @@ CAMERA_INDEX=0 python detection_server.py
 
 2. Запустите скрипт инициализации для создания необходимых файлов и директорий:
    ```bash
-   ./scripts/init.sh
+   # Инициализация выполняется автоматически при запуске
+   ./scripts/start-prod.sh
    ```
    Скрипт автоматически создаст `.env` из `env.example` (если его нет) и необходимые директории.
 
@@ -284,7 +287,7 @@ CAMERA_INDEX=0 python detection_server.py
    
    Или используйте готовый скрипт:
    ```bash
-   ./scripts/run-detection-direct.sh
+   cd services/detection && source ../../venv/bin/activate && python detection_server.py
    ```
 
 5. **Запустите Backend и Frontend (в Docker):**
@@ -344,7 +347,10 @@ CAMERA_INDEX=0 python detection_server.py
 После деплоя запустите автотесты для проверки всех компонентов:
 
 ```bash
-./scripts/test-deployment.sh
+# Проверка доступности сервисов
+curl http://localhost:8001/health
+curl http://localhost:8080/health
+curl http://localhost
 ```
 
 Скрипт проверит:
@@ -358,7 +364,10 @@ CAMERA_INDEX=0 python detection_server.py
 BACKEND_URL=http://localhost:8080 \
 DETECTION_URL=http://localhost:8001 \
 FRONTEND_URL=http://localhost \
-./scripts/test-deployment.sh
+# Проверка доступности сервисов
+curl http://localhost:8001/health
+curl http://localhost:8080/health
+curl http://localhost
 ```
 
 `docker-compose.prod.yml` включает сборку фронта. Detection Service запускается отдельно и не требует Docker.

@@ -206,17 +206,14 @@ hostname -I | awk '{print $1}'
 
 ## Тестирование деплоя
 
-Используйте скрипт автотестов:
+Проверьте доступность сервисов:
 
 ```bash
-./scripts/test-deployment.sh
+# Проверка всех сервисов
+curl http://localhost:8001/health && echo "✅ Detection Service"
+curl http://localhost:8080/health && echo "✅ Backend"
+curl http://localhost && echo "✅ Frontend"
 ```
-
-Этот скрипт проверит:
-- Доступность всех сервисов
-- Работоспособность API
-- Наличие камеры
-- Видеопотоки
 
 ## Обновление
 

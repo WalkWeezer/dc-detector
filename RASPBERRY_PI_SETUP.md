@@ -67,7 +67,7 @@
 
    **Или используйте готовый скрипт (автоматически создаст и активирует venv):**
    ```bash
-   ./scripts/run-detection-direct.sh
+   cd services/detection && source ../../venv/bin/activate && python detection_server.py
    ```
 
 ### Шаг 3: Проверка работы

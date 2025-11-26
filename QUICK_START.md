@@ -71,7 +71,7 @@ chmod +x scripts/stop-prod.sh
 
 1. **Detection Service:**
    ```bash
-   ./scripts/run-detection-direct.sh
+   cd services/detection && source ../../venv/bin/activate && python detection_server.py
    ```
 
 2. **Backend и Frontend через Docker:**
@@ -93,7 +93,8 @@ chmod +x scripts/stop-prod.sh
 
 3. (Опционально) Запустите скрипт инициализации:
    ```bash
-   ./scripts/init.sh
+   # Инициализация выполняется автоматически при запуске
+   ./scripts/start-prod.sh
    ```
 
 ## 🌐 Доступ к сервисам
@@ -222,7 +223,10 @@ sudo ./scripts/install-systemd.sh
 Запустите автотесты для проверки работоспособности:
 
 ```bash
-./scripts/test-deployment.sh
+# Проверка доступности сервисов
+curl http://localhost:8001/health && echo "✅ Detection Service"
+curl http://localhost:8080/health && echo "✅ Backend"
+curl http://localhost && echo "✅ Frontend"
 ```
 
 Скрипт проверит все эндпоинты, доступность сервисов и работоспособность Pi Camera.
