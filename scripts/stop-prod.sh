@@ -45,17 +45,16 @@ fi
 # Остановка Docker контейнеров
 echo "🛑 Остановка Docker контейнеров..."
 
-# Используем compose-helper для единообразного выбора compose файлов
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/compose-helper.sh"
-
-COMPOSE_ARGS=$(get_compose_files "$PROJECT_ROOT")
-if [ -z "$COMPOSE_ARGS" ]; then
+# Определяем compose файл (prod имеет приоритет)
+if [ -f docker-compose.prod.yml ]; then
+    echo "📋 Используется: docker-compose.prod.yml"
+    docker compose -f docker-compose.prod.yml down --remove-orphans
+elif [ -f docker-compose.yml ]; then
+    echo "📋 Используется: docker-compose.yml"
+    docker compose -f docker-compose.yml down --remove-orphans
+else
     echo "⚠️  Docker Compose файлы не найдены, пытаюсь остановить все контейнеры проекта..."
     docker ps -a --filter "name=dc-detector" --format "{{.ID}}" | xargs -r docker rm -f 2>/dev/null || true
-else
-    echo "📋 Используемые compose файлы: $COMPOSE_ARGS"
-    docker compose $COMPOSE_ARGS down --remove-orphans
 fi
 echo "✅ Docker контейнеры остановлены"
 

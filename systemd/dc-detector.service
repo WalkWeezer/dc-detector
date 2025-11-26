@@ -8,10 +8,10 @@ Wants=network-online.target
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=/opt/dc-detector
-# Используем compose-helper для единообразного выбора compose файлов
-ExecStart=/bin/bash -c 'source /opt/dc-detector/scripts/compose-helper.sh && COMPOSE_ARGS=$(get_compose_files /opt/dc-detector prod) && docker compose $COMPOSE_ARGS up -d'
-ExecStop=/bin/bash -c 'source /opt/dc-detector/scripts/compose-helper.sh && COMPOSE_ARGS=$(get_compose_files /opt/dc-detector prod) && docker compose $COMPOSE_ARGS down --remove-orphans'
-ExecReload=/bin/bash -c 'source /opt/dc-detector/scripts/compose-helper.sh && COMPOSE_ARGS=$(get_compose_files /opt/dc-detector prod) && docker compose $COMPOSE_ARGS restart'
+# Используем prod файл если есть, иначе базовый
+ExecStart=/bin/bash -c 'if [ -f /opt/dc-detector/docker-compose.prod.yml ]; then docker compose -f /opt/dc-detector/docker-compose.prod.yml up -d; else docker compose -f /opt/dc-detector/docker-compose.yml up -d; fi'
+ExecStop=/bin/bash -c 'if [ -f /opt/dc-detector/docker-compose.prod.yml ]; then docker compose -f /opt/dc-detector/docker-compose.prod.yml down --remove-orphans; else docker compose -f /opt/dc-detector/docker-compose.yml down --remove-orphans; fi'
+ExecReload=/bin/bash -c 'if [ -f /opt/dc-detector/docker-compose.prod.yml ]; then docker compose -f /opt/dc-detector/docker-compose.prod.yml restart; else docker compose -f /opt/dc-detector/docker-compose.yml restart; fi'
 StandardOutput=journal
 StandardError=journal
 

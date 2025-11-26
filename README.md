@@ -304,13 +304,17 @@ CAMERA_INDEX=0 python detection_server.py
 
 1. Установите systemd services:
    ```bash
-   sudo ./scripts/install-systemd.sh
+   sudo cp systemd/dc-detection.service /etc/systemd/system/
+   sudo cp systemd/dc-detector.service /etc/systemd/system/
+   sudo sed -i 's|/opt/dc-detector|/home/pi/dc-detector|g' /etc/systemd/system/*.service
+   sudo systemctl daemon-reload
+   sudo systemctl enable dc-detection.service dc-detector.service
    ```
 
 2. (Опционально) Укажите путь к проекту, если он не в стандартной директории:
    ```bash
    export DC_DETECTOR_PATH=/path/to/DC-Detector
-   sudo -E ./scripts/install-systemd.sh
+   # Установите пути вручную перед копированием
    ```
 
 3. Управление сервисами:

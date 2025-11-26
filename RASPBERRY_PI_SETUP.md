@@ -101,7 +101,11 @@ PORT=8080 python3 detection_server.py
 Для автоматического запуска при загрузке Raspberry Pi используйте готовый скрипт:
 
 ```bash
-sudo ./scripts/install-systemd.sh
+sudo cp systemd/dc-detection.service /etc/systemd/system/
+sudo cp systemd/dc-detector.service /etc/systemd/system/
+sudo sed -i 's|/opt/dc-detector|/home/pi/dc-detector|g' /etc/systemd/system/*.service
+sudo systemctl daemon-reload
+sudo systemctl enable dc-detection.service dc-detector.service
 ```
 
 Скрипт установит два systemd сервиса:

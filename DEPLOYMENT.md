@@ -46,29 +46,33 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 
 ### Автоматический выбор файлов
 
-Все скрипты используют `scripts/compose-helper.sh` для автоматического выбора правильного compose файла:
-
-```bash
-source scripts/compose-helper.sh
-COMPOSE_ARGS=$(get_compose_files "$PROJECT_ROOT")
-docker compose $COMPOSE_ARGS up -d
-```
+Скрипты автоматически выбирают правильный compose файл:
+- Если есть `docker-compose.prod.yml` - используется он
+- Иначе используется `docker-compose.yml`
 
 ## Скрипты деплоя
 
-### `scripts/deploy.sh` - Единый скрипт деплоя
+### Управление сервисами
 
 ```bash
-# Синтаксис
-./scripts/deploy.sh [ENV] [ACTION]
+# Запуск
+./scripts/start-prod.sh
 
-# Примеры
-./scripts/deploy.sh prod deploy   # Production деплой
-./scripts/deploy.sh prod start    # Только запуск
-./scripts/deploy.sh prod stop     # Только остановка
-./scripts/deploy.sh prod restart # Перезапуск
-./scripts/deploy.sh prod status   # Статус сервисов
-./scripts/deploy.sh prod logs     # Логи сервисов
+# Остановка
+./scripts/stop-prod.sh
+
+# Перезапуск
+./scripts/stop-prod.sh && ./scripts/start-prod.sh
+
+# Статус
+docker compose -f docker-compose.prod.yml ps
+curl http://localhost:8001/health && echo "✅ Detection Service"
+curl http://localhost:8080/health && echo "✅ Backend"
+curl http://localhost && echo "✅ Frontend"
+
+# Логи
+tail -f .detection.log  # Detection Service
+docker compose -f docker-compose.prod.yml logs -f  # Docker сервисы
 ```
 
 ### `scripts/start-prod.sh` - Запуск production
@@ -86,16 +90,31 @@ docker compose $COMPOSE_ARGS up -d
 1. Остановку Detection Service
 2. Остановку Docker контейнеров
 
-### `scripts/compose-helper.sh` - Утилита выбора compose файлов
+### Выбор compose файла
 
-Используется всеми скриптами для единообразного выбора compose файлов.
+Скрипты автоматически определяют, какой compose файл использовать:
+- Production: `docker-compose.prod.yml` (если существует)
+- Development: `docker-compose.yml` + `docker-compose.dev.yml`
 
 ## Systemd сервисы
 
 ### Установка
 
 ```bash
-sudo ./scripts/install-systemd.sh
+# Копируем service файлы
+sudo cp systemd/dc-detection.service /etc/systemd/system/
+sudo cp systemd/dc-detector.service /etc/systemd/system/
+
+# Обновляем пути в файлах (замените /opt/dc-detector на ваш путь)
+sudo sed -i 's|/opt/dc-detector|/home/pi/dc-detector|g' /etc/systemd/system/dc-detection.service
+sudo sed -i 's|/opt/dc-detector|/home/pi/dc-detector|g' /etc/systemd/system/dc-detector.service
+
+# Перезагружаем systemd
+sudo systemctl daemon-reload
+
+# Включаем автозапуск
+sudo systemctl enable dc-detection.service
+sudo systemctl enable dc-detector.service
 ```
 
 Это установит два сервиса:
@@ -228,7 +247,7 @@ git pull
 ./scripts/start-prod.sh
 
 # Или используйте единый скрипт
-./scripts/deploy.sh prod restart
+./scripts/stop-prod.sh && ./scripts/start-prod.sh
 ```
 
 ## Мониторинг
@@ -251,7 +270,7 @@ sudo journalctl -u dc-detector -f
 
 ```bash
 # Через deploy скрипт
-./scripts/deploy.sh prod status
+docker compose -f docker-compose.prod.yml ps && curl -s http://localhost:8001/health && echo "✅ Detection Service"
 
 # Или вручную
 docker compose -f docker-compose.prod.yml ps
