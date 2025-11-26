@@ -1,6 +1,6 @@
-# Полностью независимый compose файл для Raspberry Pi
+# Production compose файл для Raspberry Pi
 # НЕ объединяется с docker-compose.yml
-# Используйте: docker compose -f docker-compose.pi-standalone.yml up -d --build
+# Используйте: docker compose -f docker-compose.prod.yml up -d --build
 
 services:
   init:
@@ -39,7 +39,11 @@ services:
       dockerfile: docker/backend.Dockerfile
     volumes:
       - ./data:/app/data
-    # При network_mode: host не используем ports, networks и depends_on
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    # При network_mode: host не используем ports и networks
+    # depends_on работает, но init должен завершиться до запуска backend
 
   frontend-build:
     image: node:20-alpine

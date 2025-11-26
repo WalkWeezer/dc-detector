@@ -17,7 +17,7 @@
 │   └── frontend.Dockerfile
 ├── docker-compose.yml            # базовый compose (backend + frontend)
 ├── docker-compose.dev.yml        # Windows dev (Vite hot-reload)
-├── docker-compose.pi.yml         # Raspberry Pi (прод-сборка фронта)
+├── docker-compose.prod.yml      # Production (Raspberry Pi)
 ├── services/
 │   ├── backend/
 │   │   ├── src/
@@ -127,7 +127,7 @@ chmod +x scripts/stop-prod.sh
 
 2. Backend и Frontend через Docker:
    ```bash
-   docker compose -f docker-compose.yml -f docker-compose.pi.yml up -d --build
+   docker compose -f docker-compose.prod.yml up -d --build
    ```
 
 ## 🌐 Доступ по сети (Ethernet)
@@ -292,7 +292,7 @@ CAMERA_INDEX=0 python detection_server.py
    # Убедитесь, что в .env указан правильный DETECTION_URL
    # DETECTION_URL=http://localhost:8001
    
-   docker compose -f docker-compose.yml -f docker-compose.pi.yml up -d --build
+   docker compose -f docker-compose.prod.yml up -d --build
    ```
 
 ### Автозапуск при загрузке системы
@@ -361,7 +361,7 @@ FRONTEND_URL=http://localhost \
 ./scripts/test-deployment.sh
 ```
 
-`docker-compose.pi.yml` включает сборку фронта. Detection Service запускается отдельно и не требует Docker.
+`docker-compose.prod.yml` включает сборку фронта. Detection Service запускается отдельно и не требует Docker.
 
 ### Оптимизация FPS на Raspberry Pi
 

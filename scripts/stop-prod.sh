@@ -44,14 +44,18 @@ fi
 
 # Остановка Docker контейнеров
 echo "🛑 Остановка Docker контейнеров..."
-if [ -f docker-compose.pi-standalone.yml ]; then
-    # Используем standalone файл для Raspberry Pi (избегает конфликта network_mode/networks)
-    docker compose -f docker-compose.pi-standalone.yml down
-elif [ -f docker-compose.pi.yml ]; then
-    # Fallback на объединение файлов (может вызвать конфликт network_mode/networks)
-    docker compose -f docker-compose.yml -f docker-compose.pi.yml down
+
+# Используем compose-helper для единообразного выбора compose файлов
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/compose-helper.sh"
+
+COMPOSE_ARGS=$(get_compose_files "$PROJECT_ROOT")
+if [ -z "$COMPOSE_ARGS" ]; then
+    echo "⚠️  Docker Compose файлы не найдены, пытаюсь остановить все контейнеры проекта..."
+    docker ps -a --filter "name=dc-detector" --format "{{.ID}}" | xargs -r docker rm -f 2>/dev/null || true
 else
-    docker compose down
+    echo "📋 Используемые compose файлы: $COMPOSE_ARGS"
+    docker compose $COMPOSE_ARGS down --remove-orphans
 fi
 echo "✅ Docker контейнеры остановлены"
 

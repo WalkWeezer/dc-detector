@@ -362,15 +362,18 @@ cd "$PROJECT_ROOT"
 echo ""
 echo "🐳 Запуск Backend и Frontend через Docker..."
 
-if [ -f docker-compose.pi-standalone.yml ]; then
-    # Используем standalone файл для Raspberry Pi (избегает конфликта network_mode/networks)
-    docker compose -f docker-compose.pi-standalone.yml up -d --build
-elif [ -f docker-compose.pi.yml ]; then
-    # Fallback на объединение файлов (может вызвать конфликт network_mode/networks)
-    docker compose -f docker-compose.yml -f docker-compose.pi.yml up -d --build
-else
-    docker compose up -d --build
+# Используем compose-helper для единообразного выбора compose файлов
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/compose-helper.sh"
+
+COMPOSE_ARGS=$(get_compose_files "$PROJECT_ROOT")
+if [ -z "$COMPOSE_ARGS" ]; then
+    echo "❌ Docker Compose файлы не найдены"
+    exit 1
 fi
+
+echo "📋 Используемые compose файлы: $COMPOSE_ARGS"
+docker compose $COMPOSE_ARGS up -d --build
 
 echo "⏳ Ожидание запуска Docker сервисов (8 секунд)..."
 sleep 8

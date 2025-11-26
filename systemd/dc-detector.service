@@ -8,9 +8,10 @@ Wants=network-online.target
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=/opt/dc-detector
-ExecStart=/bin/sh -c 'if [ -f docker-compose.pi-standalone.yml ]; then docker compose -f docker-compose.pi-standalone.yml up -d; else docker compose -f docker-compose.yml -f docker-compose.pi.yml up -d; fi'
-ExecStop=/bin/sh -c 'if [ -f docker-compose.pi-standalone.yml ]; then docker compose -f docker-compose.pi-standalone.yml down; else docker compose -f docker-compose.yml -f docker-compose.pi.yml down; fi'
-ExecReload=/bin/sh -c 'if [ -f docker-compose.pi-standalone.yml ]; then docker compose -f docker-compose.pi-standalone.yml restart; else docker compose -f docker-compose.yml -f docker-compose.pi.yml restart; fi'
+# Используем compose-helper для единообразного выбора compose файлов
+ExecStart=/bin/bash -c 'source /opt/dc-detector/scripts/compose-helper.sh && COMPOSE_ARGS=$(get_compose_files /opt/dc-detector prod) && docker compose $COMPOSE_ARGS up -d'
+ExecStop=/bin/bash -c 'source /opt/dc-detector/scripts/compose-helper.sh && COMPOSE_ARGS=$(get_compose_files /opt/dc-detector prod) && docker compose $COMPOSE_ARGS down --remove-orphans'
+ExecReload=/bin/bash -c 'source /opt/dc-detector/scripts/compose-helper.sh && COMPOSE_ARGS=$(get_compose_files /opt/dc-detector prod) && docker compose $COMPOSE_ARGS restart'
 StandardOutput=journal
 StandardError=journal
 

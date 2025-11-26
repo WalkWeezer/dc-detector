@@ -19,11 +19,11 @@ service backend declares mutually exclusive 'network_mode' and 'networks': inval
 
 ### Вариант 1: Использование network_mode: host (Рекомендуется для Raspberry Pi)
 
-**Если возникает ошибка "mutually exclusive network_mode and networks"**, используйте полностью независимый compose файл:
+**Если возникает ошибка "mutually exclusive network_mode and networks"**, используйте production compose файл:
 
 ```bash
-# Используйте standalone файл вместо объединения с docker-compose.yml
-docker compose -f docker-compose.pi-standalone.yml up -d --build
+# Используйте prod файл вместо объединения с docker-compose.yml
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 Этот файл не объединяется с базовым `docker-compose.yml`, поэтому конфликта не будет.
@@ -33,13 +33,11 @@ docker compose -f docker-compose.pi-standalone.yml up -d --build
 DETECTION_URL=http://localhost:8001
 ```
 
-**Альтернатива:** Если хотите использовать объединение файлов, используйте `docker-compose.pi-alt.yml` (см. Вариант 2).
+### Вариант 2: Использование базового docker-compose.yml (если prod не подходит)
 
-### Вариант 2: Использование IP адреса хоста (Альтернатива при конфликте network_mode)
+Если `docker-compose.prod.yml` не подходит, используйте базовый файл с IP адресом:
 
-Если `network_mode: host` вызывает конфликт с `networks`, используйте IP адрес хоста:
-
-1. Узнайте IP адрес хоста из контейнера:
+1. Узнайте IP адрес хоста:
 ```bash
 # IP адрес Docker bridge (обычно 172.17.0.1)
 ip addr show docker0 | grep "inet " | awk '{print $2}' | cut -d/ -f1
@@ -48,9 +46,9 @@ ip addr show docker0 | grep "inet " | awk '{print $2}' | cut -d/ -f1
 hostname -I | awk '{print $1}'
 ```
 
-2. Используйте `docker-compose.pi-alt.yml` вместо `docker-compose.pi.yml`:
+2. Используйте базовый `docker-compose.yml`:
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.pi-alt.yml up -d --build
+docker compose -f docker-compose.yml up -d --build
 ```
 
 3. Установите в `.env`:
@@ -86,9 +84,9 @@ docker compose -f docker-compose.pi-standalone.yml up -d --build
 
 ## Проверка
 
-1. Убедитесь, что файл `docker-compose.pi-standalone.yml` существует:
+1. Убедитесь, что файл `docker-compose.prod.yml` существует:
 ```bash
-ls -la docker-compose.pi-standalone.yml
+ls -la docker-compose.prod.yml
 ```
 
 2. Убедитесь, что detection service запущен:
@@ -107,7 +105,7 @@ curl http://localhost:8001/health
 ```bash
 sudo journalctl -u dc-detector -f
 # или
-docker compose -f docker-compose.pi-standalone.yml logs backend -f
+docker compose -f docker-compose.prod.yml logs backend -f
 ```
 
 ## Частые проблемы

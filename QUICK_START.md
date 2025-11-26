@@ -76,7 +76,7 @@ chmod +x scripts/stop-prod.sh
 
 2. **Backend и Frontend через Docker:**
    ```bash
-   docker compose -f docker-compose.yml -f docker-compose.pi.yml up -d --build
+   docker compose -f docker-compose.prod.yml up -d --build
    ```
 
 ## 📋 Подготовка окружения
@@ -154,7 +154,7 @@ python3 detection_server.py
 
 2. Запустите Backend и Frontend:
    ```bash
-   docker compose -f docker-compose.yml -f docker-compose.pi.yml up -d --build
+   docker compose -f docker-compose.prod.yml up -d --build
    ```
 
 ### Автозапуск при загрузке системы
