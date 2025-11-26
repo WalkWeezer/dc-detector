@@ -3,10 +3,20 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      - DETECTION_URL=${DETECTION_URL:-http://host.docker.internal:8001}
-    network_mode: host
+      - DETECTION_URL=${DETECTION_URL:-http://localhost:8001}
     # Используем network_mode: host для доступа к localhost:8001
-    # Альтернатива: использовать host.docker.internal (работает не на всех системах)
+    # ВАЖНО: network_mode и networks взаимоисключающие
+    # При объединении файлов нужно явно убрать networks
+    network_mode: host
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    volumes:
+      - ./data:/app/data
+    # При network_mode: host ports не нужны (порты доступны напрямую на хосте)
+    ports: []
+    # Явно убираем networks, чтобы избежать конфликта с network_mode
+    networks: []
 
   # Detection service запускается отдельно от Docker
   # Запустите: cd services/detection && python3 detection_server.py
