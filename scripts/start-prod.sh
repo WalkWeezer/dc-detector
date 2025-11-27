@@ -518,89 +518,14 @@ if [ -d "frontend" ] && [ ! -d "frontend/node_modules" ] && [ -f "frontend/packa
     cd "$PROJECT_ROOT"
 fi
 
-# Опциональная сборка фронтенда (для минификации/оптимизации)
-# Всегда пересобираем, если dist существует, но можно принудительно пересобрать
-if [ -d "frontend" ] && [ -f "frontend/package.json" ]; then
-    # Проверяем, нужно ли пересобирать
-    NEED_REBUILD=false
-    
-    if [ "$FORCE_REBUILD_FRONTEND" = true ]; then
-        NEED_REBUILD=true
-        echo "🔄 Принудительная пересборка фронтенда (--rebuild-frontend)"
-    elif [ ! -d "frontend/dist" ]; then
-        NEED_REBUILD=true
-        echo "📦 Директория dist отсутствует, требуется сборка"
-    else
-        # Проверяем, изменились ли исходные файлы относительно собранных
-        # Используем несколько методов проверки для надежности
-        
-        # Метод 1: Проверка времени модификации файлов
-        SOURCE_FILES=("frontend/index.html" "frontend/pi.js" "frontend/styles.css")
-        REBUILD_REASON=""
-        
-        for src_file in "${SOURCE_FILES[@]}"; do
-            if [ -f "$src_file" ]; then
-                dist_file="frontend/dist/$(basename "$src_file")"
-                # Если файл в dist не существует или старше исходного
-                if [ ! -f "$dist_file" ] || [ "$dist_file" -ot "$src_file" ] 2>/dev/null; then
-                    NEED_REBUILD=true
-                    REBUILD_REASON="$src_file (время модификации)"
-                    break
-                fi
-            fi
-        done
-        
-        # Метод 2: Проверка через git (если это git репозиторий)
-        if [ "$NEED_REBUILD" = false ] && command -v git &> /dev/null && [ -d ".git" ]; then
-            # Проверяем, есть ли изменения в frontend/ после последней сборки
-            if [ -f "frontend/dist/.build-timestamp" ]; then
-                LAST_BUILD=$(cat "frontend/dist/.build-timestamp" 2>/dev/null || echo "0")
-                # Проверяем изменения в frontend/ после последней сборки
-                if git diff --quiet "$LAST_BUILD" HEAD -- frontend/ 2>/dev/null; then
-                    # Нет изменений
-                    :
-                else
-                    NEED_REBUILD=true
-                    REBUILD_REASON="git изменения в frontend/"
-                fi
-            else
-                # Нет метки времени сборки - пересобираем
-                NEED_REBUILD=true
-                REBUILD_REASON="нет метки времени сборки"
-            fi
-        fi
-        
-        if [ "$NEED_REBUILD" = true ]; then
-            echo "📦 Файлы фронтенда обновлены ($REBUILD_REASON), требуется пересборка"
-        fi
+# На проде НЕ используем Vite - отдаем исходники напрямую через Backend Express
+# Удаляем старую сборку dist, если есть, чтобы всегда использовались исходники
+if [ -d "frontend" ]; then
+    if [ -d "frontend/dist" ]; then
+        echo "🧹 Удаление старой сборки dist (на проде используем исходники)..."
+        rm -rf frontend/dist
     fi
-    
-    if [ "$NEED_REBUILD" = true ]; then
-        echo "🔨 Сборка Frontend..."
-        cd frontend
-        
-        # Очищаем старую сборку для чистоты
-        if [ -d "dist" ]; then
-            echo "🧹 Очистка старой сборки..."
-            rm -rf dist
-        fi
-        
-        if npm run build 2>&1 | tee "../.frontend-build.log"; then
-            echo "✅ Frontend собран успешно"
-            # Сохраняем метку времени сборки для будущих проверок
-            if [ -d "dist" ]; then
-                git rev-parse HEAD > "dist/.build-timestamp" 2>/dev/null || date +%s > "dist/.build-timestamp" 2>/dev/null || true
-            fi
-        else
-            echo "⚠️  Сборка фронтенда не удалась, используем исходники"
-            echo "📋 Логи сборки:"
-            tail -20 "../.frontend-build.log" 2>/dev/null || true
-        fi
-        cd "$PROJECT_ROOT"
-    else
-        echo "✅ Frontend уже собран, пропускаем сборку"
-        echo "💡 Для принудительной пересборки удалите frontend/dist"
-    fi
+    echo "✅ Frontend будет отдаваться из исходников (без сборки Vite)"
 fi
 
 echo "ℹ️  Frontend будет отдаваться через Backend Express на порту ${BACKEND_PORT:-8080}"

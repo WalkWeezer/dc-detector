@@ -109,17 +109,13 @@ export function createApp() {
   app.use('/files', express.static(dataRoot, { fallthrough: true, index: false }))
 
   // Раздача статики фронтенда (для продакшена)
-  // Проверяем наличие собранного фронтенда (dist) или исходников
-  const frontendDist = path.resolve(process.cwd(), '../../frontend/dist')
+  // На проде всегда используем исходники напрямую, без сборки Vite
   const frontendSrc = path.resolve(process.cwd(), '../../frontend')
-  
-  // Если есть собранный dist - используем его, иначе исходники
-  const frontendPath = fs.existsSync(frontendDist) ? frontendDist : frontendSrc
+  const frontendPath = frontendSrc
   
   // Логирование для отладки
   console.log(`📁 Frontend path: ${frontendPath}`)
-  console.log(`   Dist exists: ${fs.existsSync(frontendDist)}`)
-  console.log(`   Src exists: ${fs.existsSync(frontendSrc)}`)
+  console.log(`   Using source files directly (no Vite build on production)`)
   
   // Статика фронтенда (CSS, JS, изображения) - только для не-API запросов
   app.use((req, res, next) => {
