@@ -43,14 +43,14 @@ chmod +x scripts/start-prod.sh
 ```
 
 **Что делает скрипт:**
-- ✅ Проверяет зависимости (Python, Docker, Docker Compose)
+- ✅ Проверяет зависимости (Python, Node.js, npm)
 - ✅ Создает виртуальное окружение если нужно
 - ✅ Устанавливает недостающие пакеты
 - ✅ Запускает Detection Service в фоне (порт 8001)
-- ✅ Запускает Backend и Frontend через Docker (порты 8080 и 80)
+- ✅ Запускает Backend и Frontend напрямую (порты 8080 и 5173)
 
 **Доступные сервисы после запуска:**
-- Frontend: http://localhost (или IP адрес Raspberry Pi)
+- Frontend: http://localhost:5173 (или IP адрес Raspberry Pi:5173)
 - Backend API: http://localhost:8080
 - Detection Service: http://localhost:8001
 
@@ -63,7 +63,7 @@ chmod +x scripts/stop-prod.sh
 
 **Логи:**
 - Detection Service: `.detection.log`
-- Docker контейнеры: `docker compose logs -f`
+- Backend/Frontend логи: `tail -f .backend.log` / `tail -f .frontend.log`
 
 ## 📋 Требования
 
@@ -74,8 +74,8 @@ chmod +x scripts/stop-prod.sh
 
 ### Для продакшна (Raspberry Pi):
 - Python 3.11+
-- Docker 24+
-- Docker Compose v2
+- Node.js 20+
+- npm
 - (Опционально) picamera2 для работы с камерой Raspberry Pi
 
 ## 🔧 Устранение неполадок
@@ -137,7 +137,7 @@ Get-NetTCPConnection -LocalPort 8001,8080,5173 | ForEach-Object { Stop-Process -
 # Остановить все процессы по портам
 lsof -ti:8001 | xargs kill -9
 lsof -ti:8080 | xargs kill -9
-lsof -ti:80 | xargs kill -9
+lsof -ti:5173 | xargs kill -9
 ```
 
 
