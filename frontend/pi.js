@@ -22,6 +22,13 @@
     savedList: document.getElementById('saved-screen-list'),
     tabButtons: document.querySelectorAll('.tab-button'),
     tabPanels: document.querySelectorAll('.tab-panel'),
+    // Автосохранение
+    autosaveEnabled: document.getElementById('autosave-enabled'),
+    autosaveMinConfidence: document.getElementById('autosave-min-confidence'),
+    autosaveMinHits: document.getElementById('autosave-min-hits'),
+    autosaveDelay: document.getElementById('autosave-delay'),
+    autosaveSaveBtn: document.getElementById('autosave-save-btn'),
+    autosaveSettingsGroup: document.getElementById('autosave-settings-group'),
   };
 
   const state = {
@@ -54,6 +61,7 @@
     detectionsSaved: `${backendOrigin}/api/detections/saved`,
     models: `${backendOrigin}/api/models`,
     stream: `${backendOrigin}/api/video_feed_raw`,
+    autosaveConfig: `${backendOrigin}/api/config/autosave`, // Конфигурация автосохранения
   };
 
   function updateStatus(text, variant) {
@@ -501,17 +509,39 @@
     });
   }
 
-  function openGifModal(item) {
+  async function openGifModal(item) {
     const modal = document.getElementById('gif-modal');
     const img = document.getElementById('gif-modal-image');
     const list = document.getElementById('gif-modal-dl');
     if (!modal || !img || !list) return;
+    
     const gifUrl = item.gifPath ? `${backendOrigin}${item.gifPath}` : '';
     img.src = gifUrl;
     img.alt = item.id || 'gif';
-    setMetaList(list, item);
+    
+    // Показываем модальное окно сразу
     modal.classList.remove('hidden');
     modal.setAttribute('aria-hidden', 'false');
+    
+    // Показываем загрузку данных
+    list.innerHTML = '<dt>Загрузка...</dt><dd>Загрузка данных...</dd>';
+    
+    // Загружаем полные данные из JSON файла
+    try {
+      const jsonUrl = item.jsonPath ? `${backendOrigin}${item.jsonPath}` : null;
+      if (jsonUrl) {
+        const fullData = await fetchJSON(jsonUrl);
+        // Передаем только данные из detection, исключая метаданные
+        setMetaList(list, fullData);
+      } else {
+        // Если нет jsonPath, используем то что есть
+        setMetaList(list, item);
+      }
+    } catch (err) {
+      console.error('Ошибка загрузки данных детекции:', err);
+      list.innerHTML = '<dt>Ошибка</dt><dd>Не удалось загрузить данные</dd>';
+    }
+    
     document.getElementById('gif-modal-close').onclick = closeGifModal;
     document.getElementById('gif-modal-backdrop').onclick = closeGifModal;
     document.addEventListener('keydown', (e) => {
@@ -530,18 +560,343 @@
 
   function setMetaList(container, payload = {}) {
     container.innerHTML = '';
-    const pairs = [
-      ['ID', payload.id || '—'],
-      ['Дата', payload.date || '—'],
-      ['Метка', payload.detection?.label || '—'],
-      ['TrackId', payload.detection?.trackId ?? '—'],
-      ['Уверенность', payload.detection?.confidence ?? '—'],
-    ];
+    
+    // Форматирование даты и времени
+    const formatTimestamp = (timestamp) => {
+      if (timestamp === null || timestamp === undefined) return '—';
+      const date = new Date(typeof timestamp === 'number' ? timestamp * 1000 : timestamp);
+      if (isNaN(date.getTime())) return '—';
+      return date.toLocaleString('ru-RU', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      });
+    };
+    
+    // Форматирование координат bbox
+    const formatBbox = (bbox) => {
+      if (!Array.isArray(bbox) || bbox.length < 4) return '—';
+      const [x1, y1, x2, y2] = bbox.map(v => Math.round(Number(v) || 0));
+      const width = x2 - x1;
+      const height = y2 - y1;
+      return `[${x1}, ${y1}, ${x2}, ${y2}] (${width}×${height}px)`;
+    };
+    
+    // Форматирование уверенности в процентах
+    const formatConfidence = (conf) => {
+      if (conf === null || conf === undefined) return '—';
+      return `${(Number(conf) * 100).toFixed(2)}%`;
+    };
+    
+    // Получаем данные из detection, исключая метаданные (id, date, savedAt, gifPath, jsonPath)
+    const detection = payload.detection || {};
+    
+    // Выводим только данные из detection, которые были сохранены
+    const pairs = [];
+    
+    // Track ID
+    if (detection.trackId !== null && detection.trackId !== undefined) {
+      pairs.push(['Track ID', String(detection.trackId)]);
+    }
+    
+    // ID трекера (если есть)
+    if (detection.id) {
+      pairs.push(['ID трекера', String(detection.id)]);
+    }
+    
+    // Метка (label)
+    if (detection.label) {
+      pairs.push(['Тип объекта', String(detection.label)]);
+    }
+    
+    // Class ID
+    if (detection.classId !== null && detection.classId !== undefined) {
+      pairs.push(['Class ID', String(detection.classId)]);
+    }
+    
+    // Уверенность
+    if (detection.confidence !== null && detection.confidence !== undefined) {
+      pairs.push(['Уверенность', formatConfidence(detection.confidence)]);
+    }
+    
+    // Координаты bbox
+    if (detection.bbox && Array.isArray(detection.bbox) && detection.bbox.length >= 4) {
+      pairs.push(['Координаты (bbox)', formatBbox(detection.bbox)]);
+    }
+    
+    // Время захвата
+    if (detection.capturedAt !== null && detection.capturedAt !== undefined) {
+      pairs.push(['Время захвата', formatTimestamp(detection.capturedAt)]);
+    }
+    
+    // Первый раз замечен
+    if (detection.firstSeen !== null && detection.firstSeen !== undefined) {
+      pairs.push(['Первый раз замечен', formatTimestamp(detection.firstSeen)]);
+    }
+    
+    // Последний раз замечен
+    if (detection.lastSeen !== null && detection.lastSeen !== undefined) {
+      pairs.push(['Последний раз замечен', formatTimestamp(detection.lastSeen)]);
+    }
+    
+    // Количество попаданий
+    if (detection.hits !== null && detection.hits !== undefined) {
+      pairs.push(['Количество попаданий', String(detection.hits)]);
+    } else if (detection.frames !== null && detection.frames !== undefined) {
+      pairs.push(['Количество кадров', String(detection.frames)]);
+    }
+    
+    // Модель
+    if (detection.model) {
+      pairs.push(['Модель', String(detection.model)]);
+    }
+    
+    // Индекс камеры
+    if (detection.cameraIndex !== null && detection.cameraIndex !== undefined) {
+      pairs.push(['Индекс камеры', String(detection.cameraIndex)]);
+    }
+    
+    // Имя (если есть)
+    if (detection.name) {
+      pairs.push(['Имя', String(detection.name)]);
+    }
+    
+    // Если нет данных, показываем сообщение
+    if (pairs.length === 0) {
+      const dte = document.createElement('dt');
+      dte.textContent = 'Нет данных';
+      const dde = document.createElement('dd');
+      dde.textContent = 'Данные детекции отсутствуют';
+      container.append(dte, dde);
+      return;
+    }
+    
+    // Выводим все пары
     pairs.forEach(([dt, dd]) => {
-      const dte = document.createElement('dt'); dte.textContent = dt;
-      const dde = document.createElement('dd'); dde.textContent = dd;
+      const dte = document.createElement('dt');
+      dte.textContent = dt;
+      const dde = document.createElement('dd');
+      dde.textContent = dd;
       container.append(dte, dde);
     });
+  }
+
+  // ========== Функции автосохранения ==========
+  async function loadAutosaveConfig() {
+    try {
+      console.log('[Autosave] Загрузка настроек автосохранения...');
+      const data = await fetchJSON(api.autosaveConfig);
+      
+      const autoSave = data || {
+        enabled: true,
+        minConfidence: 0.3,
+        minHits: 1,
+        delay: 2000
+      };
+
+      console.log('[Autosave] Настройки загружены:', autoSave);
+      updateAutosaveUI(autoSave);
+      
+      return autoSave;
+    } catch (err) {
+      console.error('Ошибка загрузки настроек автосохранения', err);
+      // Используем значения по умолчанию
+      const defaultConfig = {
+        enabled: true,
+        minConfidence: 0.3,
+        minHits: 1,
+        delay: 2000
+      };
+      console.log('[Autosave] Используем настройки по умолчанию:', defaultConfig);
+      updateAutosaveUI(defaultConfig);
+      return defaultConfig;
+    }
+  }
+
+  async function saveAutosaveConfig() {
+    if (!els.autosaveEnabled || !els.autosaveMinConfidence || !els.autosaveMinHits || !els.autosaveDelay) {
+      console.warn('[Autosave] Элементы не найдены');
+      return;
+    }
+
+    const autoSave = {
+      enabled: els.autosaveEnabled.checked,
+      minConfidence: Number(els.autosaveMinConfidence.value) || 0.3,
+      minHits: Number(els.autosaveMinHits.value) || 1,
+      delay: Number(els.autosaveDelay.value) || 2000
+    };
+
+    try {
+      const data = await fetchJSON(api.autosaveConfig, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(autoSave)
+      });
+
+      els.errorMessage.textContent = '';
+      
+      // Обновляем UI после успешного сохранения
+      updateAutosaveUI(data);
+      
+      // Показываем уведомление
+      if (els.autosaveSaveBtn) {
+        const originalText = els.autosaveSaveBtn.textContent;
+        els.autosaveSaveBtn.textContent = '✓ Сохранено';
+        els.autosaveSaveBtn.style.opacity = '0.7';
+        setTimeout(() => {
+          els.autosaveSaveBtn.textContent = originalText;
+          els.autosaveSaveBtn.style.opacity = '1';
+        }, 2000);
+      }
+    } catch (err) {
+      console.error('Ошибка сохранения настроек автосохранения', err);
+      els.errorMessage.textContent = `Не удалось сохранить настройки автосохранения: ${err.message}`;
+    }
+  }
+
+  function updateAutosaveUI(autoSave) {
+    console.log('[Autosave UI] Обновление интерфейса с настройками:', autoSave);
+    
+    if (els.autosaveEnabled) {
+      els.autosaveEnabled.checked = !!autoSave.enabled;
+      console.log('[Autosave UI] Чекбокс установлен:', els.autosaveEnabled.checked);
+      updateAutosaveSettingsVisibility();
+    } else {
+      console.warn('[Autosave UI] Элемент autosave-enabled не найден');
+    }
+    
+    if (els.autosaveMinConfidence) {
+      els.autosaveMinConfidence.value = String(autoSave.minConfidence || 0.3);
+      updateSliderValue('autosave-min-confidence-value', els.autosaveMinConfidence.value);
+      console.log('[Autosave UI] Минимальная уверенность установлена:', els.autosaveMinConfidence.value);
+    } else {
+      console.warn('[Autosave UI] Элемент autosave-min-confidence не найден');
+    }
+    
+    if (els.autosaveMinHits) {
+      els.autosaveMinHits.value = String(autoSave.minHits || 1);
+      updateSliderValue('autosave-min-hits-value', els.autosaveMinHits.value);
+      console.log('[Autosave UI] Минимальное количество попаданий установлено:', els.autosaveMinHits.value);
+    } else {
+      console.warn('[Autosave UI] Элемент autosave-min-hits не найден');
+    }
+    
+    if (els.autosaveDelay) {
+      els.autosaveDelay.value = String(autoSave.delay || 2000);
+      updateSliderValue('autosave-delay-value', els.autosaveDelay.value);
+      console.log('[Autosave UI] Задержка установлена:', els.autosaveDelay.value);
+    } else {
+      console.warn('[Autosave UI] Элемент autosave-delay не найден');
+    }
+  }
+  
+  // Флаг для отслеживания инициализации обработчиков
+  let autosaveHandlersInitialized = false;
+
+  function initAutosaveHandlers() {
+    // Предотвращаем повторную инициализацию
+    if (autosaveHandlersInitialized) {
+      console.log('[Autosave] Обработчики уже инициализированы');
+      return;
+    }
+
+    // Инициализация обработчиков вкладки автосохранения
+    if (els.autosaveSaveBtn) {
+      els.autosaveSaveBtn.addEventListener('click', saveAutosaveConfig);
+    }
+
+    if (els.autosaveEnabled) {
+      els.autosaveEnabled.addEventListener('change', () => {
+        updateAutosaveSettingsVisibility();
+        // Автоматически сохраняем при изменении чекбокса
+        saveAutosaveConfig();
+      });
+      updateAutosaveSettingsVisibility();
+    }
+
+    // Обновление значений ползунков в реальном времени и автоматическое сохранение
+    if (els.autosaveMinConfidence) {
+      let confidenceTimeout;
+      els.autosaveMinConfidence.addEventListener('input', (e) => {
+        updateSliderValue('autosave-min-confidence-value', e.target.value);
+        // Автосохранение с задержкой (debounce) после остановки изменения
+        clearTimeout(confidenceTimeout);
+        confidenceTimeout = setTimeout(() => {
+          saveAutosaveConfig();
+        }, 500);
+      });
+    }
+
+    if (els.autosaveMinHits) {
+      let hitsTimeout;
+      els.autosaveMinHits.addEventListener('input', (e) => {
+        updateSliderValue('autosave-min-hits-value', e.target.value);
+        // Автосохранение с задержкой (debounce) после остановки изменения
+        clearTimeout(hitsTimeout);
+        hitsTimeout = setTimeout(() => {
+          saveAutosaveConfig();
+        }, 500);
+      });
+    }
+
+    if (els.autosaveDelay) {
+      let delayTimeout;
+      els.autosaveDelay.addEventListener('input', (e) => {
+        updateSliderValue('autosave-delay-value', e.target.value);
+        // Автосохранение с задержкой (debounce) после остановки изменения
+        clearTimeout(delayTimeout);
+        delayTimeout = setTimeout(() => {
+          saveAutosaveConfig();
+        }, 500);
+      });
+    }
+
+    autosaveHandlersInitialized = true;
+    console.log('[Autosave] Обработчики инициализированы');
+  }
+
+  function updateAutosaveSettingsVisibility() {
+    if (els.autosaveEnabled && els.autosaveSettingsGroup) {
+      const isEnabled = els.autosaveEnabled.checked;
+      console.log('[Autosave UI] Обновление видимости настроек, enabled:', isEnabled);
+      if (isEnabled) {
+        els.autosaveSettingsGroup.style.opacity = '1';
+        els.autosaveSettingsGroup.style.pointerEvents = 'auto';
+        // Также включаем все input элементы внутри
+        els.autosaveSettingsGroup.querySelectorAll('input[type="range"]').forEach(input => {
+          input.disabled = false;
+        });
+      } else {
+        els.autosaveSettingsGroup.style.opacity = '0.5';
+        els.autosaveSettingsGroup.style.pointerEvents = 'none';
+        // Отключаем все input элементы внутри
+        els.autosaveSettingsGroup.querySelectorAll('input[type="range"]').forEach(input => {
+          input.disabled = true;
+        });
+      }
+    } else {
+      console.warn('[Autosave UI] Элементы для обновления видимости не найдены', {
+        enabledEl: !!els.autosaveEnabled,
+        settingsGroup: !!els.autosaveSettingsGroup
+      });
+    }
+  }
+
+  function updateSliderValue(valueId, value) {
+    const valueEl = document.getElementById(valueId);
+    if (valueEl) {
+      if (valueId.includes('confidence')) {
+        valueEl.textContent = Number(value).toFixed(2);
+      } else if (valueId.includes('delay')) {
+        valueEl.textContent = Number(value).toLocaleString('ru-RU');
+      } else {
+        valueEl.textContent = Number(value);
+      }
+    }
   }
 
   function initTabs() {
@@ -569,6 +924,14 @@
         // Загружаем сохраненные детекции при открытии вкладки "База"
         if (target === 'database') {
           loadSavedDetections();
+        }
+        // Загружаем настройки автосохранения при открытии вкладки "Автосохранение"
+        if (target === 'autosave') {
+          // Сначала инициализируем обработчики, потом загружаем настройки
+          initAutosaveHandlers();
+          loadAutosaveConfig().catch(err => {
+            console.error('Ошибка загрузки настроек автосохранения при открытии вкладки:', err);
+          });
         }
       });
     });

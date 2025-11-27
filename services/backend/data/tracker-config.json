@@ -7,5 +7,22 @@
     "fire": "#ff0000",
     "smoke": "#808080",
     "object": "#40ffbc"
+  },
+  "autoTargetSelection": {
+    "enabled": true,
+    "selectionMode": "priority",
+    "minConfidence": 0.3,
+    "minHits": 1,
+    "updateInterval": 500,
+    "preferHighConfidence": true,
+    "preferHighHits": true,
+    "preferLargeSize": false,
+    "preferCenterPosition": false
+  },
+  "autoSave": {
+    "enabled": true,
+    "minConfidence": 0.8,
+    "minHits": 5,
+    "delay": 1000
   }
 }

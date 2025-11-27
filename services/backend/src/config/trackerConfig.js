@@ -28,7 +28,7 @@ function getDefaultConfig() {
       preferCenterPosition: false
     },
     autoSave: {
-      enabled: true, // Автоматическое сохранение новых трекеров
+      enabled: false, // Автоматическое сохранение новых трекеров
       minConfidence: 0.3, // Минимальная уверенность для автосохранения
       minHits: 1, // Минимальное количество попаданий
       delay: 2000 // Задержка перед сохранением (мс) - чтобы накопились кадры
