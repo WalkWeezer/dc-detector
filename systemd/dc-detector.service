@@ -1,20 +1,25 @@
 [Unit]
 Description=DC-Detector Application
-Requires=docker.service
-After=docker.service network-online.target
+After=network-online.target docker.service
 Wants=network-online.target
+Requires=docker.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+User=pi
+Group=pi
 WorkingDirectory=/opt/dc-detector
-# Используем docker-compose.prod.yml
-ExecStart=/bin/bash -c 'docker compose -f /opt/dc-detector/docker-compose.prod.yml up -d'
-ExecStop=/bin/bash -c 'docker compose -f /opt/dc-detector/docker-compose.prod.yml down --remove-orphans'
-ExecReload=/bin/bash -c 'docker compose -f /opt/dc-detector/docker-compose.prod.yml restart'
+# Устанавливаем переменные окружения для неинтерактивного режима
+Environment="DEBIAN_FRONTEND=noninteractive"
+Environment="SYSTEMD=1"
+# Запускаем скрипт start-prod.sh
+ExecStart=/bin/bash /opt/dc-detector/scripts/start-prod.sh
+ExecStop=/bin/bash /opt/dc-detector/scripts/stop-prod.sh
 StandardOutput=journal
 StandardError=journal
+# Таймаут для запуска (скрипт может долго работать)
+TimeoutStartSec=300
 
 [Install]
 WantedBy=multi-user.target
-

@@ -198,26 +198,61 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 ## 🔄 Автозапуск (systemd)
 
+Самый простой способ — использовать один systemd сервис, который запускает скрипт `start-prod.sh`:
+
 ```bash
-# Копируем service файлы
-sudo cp systemd/dc-detection.service /etc/systemd/system/
+# 1. Копируем service файл
 sudo cp systemd/dc-detector.service /etc/systemd/system/
 
-# Обновляем пути (замените на ваш путь)
-sudo sed -i 's|/opt/dc-detector|/home/pi/dc-detector|g' /etc/systemd/system/*.service
+# 2. Обновляем путь в сервисе (замените на ваш путь к проекту)
+sudo sed -i 's|/opt/dc-detector|/home/pi/dc-detector|g' /etc/systemd/system/dc-detector.service
 
-# Включаем автозапуск
+# 3. Убедитесь, что скрипты исполняемые
+chmod +x scripts/start-prod.sh scripts/stop-prod.sh
+
+# 4. Включаем автозапуск
 sudo systemctl daemon-reload
-sudo systemctl enable dc-detection.service dc-detector.service
-sudo systemctl start dc-detection.service dc-detector.service
+sudo systemctl enable dc-detector.service
+sudo systemctl start dc-detector.service
 ```
 
 **Управление:**
 ```bash
-sudo systemctl start/stop/status dc-detection
-sudo systemctl start/stop/status dc-detector
-sudo journalctl -u dc-detection -f
+# Статус
+sudo systemctl status dc-detector
+
+# Запуск/остановка
+sudo systemctl start dc-detector
+sudo systemctl stop dc-detector
+
+# Логи (важно для отладки!)
 sudo journalctl -u dc-detector -f
+sudo journalctl -u dc-detector -n 100  # Последние 100 строк
+```
+
+**Проверка после перезагрузки:**
+```bash
+# После перезагрузки Raspberry Pi проверьте:
+sudo systemctl status dc-detector
+curl http://localhost:8001/health  # Detection Service
+curl http://localhost:8080/health # Backend
+curl http://localhost             # Frontend
+```
+
+**Если сервис не запускается:**
+```bash
+# 1. Проверьте логи для диагностики
+sudo journalctl -u dc-detector -n 50 --no-pager
+
+# 2. Проверьте, что скрипт работает вручную
+./scripts/start-prod.sh
+
+# 3. Проверьте права доступа
+ls -la scripts/start-prod.sh
+ls -la scripts/stop-prod.sh
+
+# 4. Убедитесь, что Docker запущен
+sudo systemctl status docker
 ```
 
 ## 🐛 Устранение проблем

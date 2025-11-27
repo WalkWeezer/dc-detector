@@ -55,10 +55,17 @@ check_port 80 "Frontend (nginx)" || PORTS_OCCUPIED=1
 if [ $PORTS_OCCUPIED -eq 1 ]; then
     echo ""
     echo "⚠️  Некоторые порты заняты."
-    read -p "Продолжить? (y/n) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
+    # В неинтерактивном режиме (systemd) автоматически продолжаем
+    if [ -t 0 ]; then
+        # Интерактивный режим - спрашиваем пользователя
+        read -p "Продолжить? (y/n) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
+    else
+        # Неинтерактивный режим (systemd) - продолжаем автоматически
+        echo "   Продолжаю автоматически (неинтерактивный режим)..."
     fi
 fi
 
