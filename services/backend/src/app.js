@@ -117,21 +117,64 @@ export function createApp() {
   console.log(`📁 Frontend path: ${frontendPath}`)
   console.log(`   Using source files directly (no Vite build on production)`)
   
+  // Проверяем существование ключевых файлов
+  const indexHtmlPath = path.join(frontendPath, 'index.html')
+  const piJsPath = path.join(frontendPath, 'pi.js')
+  console.log(`   index.html exists: ${fs.existsSync(indexHtmlPath)}`)
+  console.log(`   pi.js exists: ${fs.existsSync(piJsPath)}`)
+  if (fs.existsSync(indexHtmlPath)) {
+    const stats = fs.statSync(indexHtmlPath)
+    console.log(`   index.html modified: ${stats.mtime.toISOString()}`)
+  }
+  if (fs.existsSync(piJsPath)) {
+    const stats = fs.statSync(piJsPath)
+    console.log(`   pi.js modified: ${stats.mtime.toISOString()}`)
+  }
+  
   // Статика фронтенда (CSS, JS, изображения) - только для не-API запросов
   app.use((req, res, next) => {
     // Пропускаем API и внутренние маршруты
     if (req.path.startsWith('/api/') || req.path.startsWith('/internal/') || req.path.startsWith('/files/')) {
       return next()
     }
-    // Для остальных - пробуем найти статический файл
-    express.static(frontendPath, { 
-      maxAge: '1d',
-      etag: true,
-      lastModified: true,
-      fallthrough: true
-    })(req, res, () => {
+    
+    // Для всех статических файлов отключаем кеширование на проде
+    // чтобы изменения были видны сразу после обновления файлов
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0')
+    res.setHeader('Pragma', 'no-cache')
+    res.setHeader('Expires', '0')
+    
+    // Пробуем найти статический файл
+    const staticMiddleware = express.static(frontendPath, { 
+      maxAge: 0, // Без кеширования
+      etag: false, // Отключаем ETag
+      lastModified: false, // Отключаем Last-Modified
+      fallthrough: true,
+      setHeaders: (res, filePath) => {
+        // Добавляем версионирование через заголовок для отладки
+        try {
+          const stats = fs.statSync(filePath)
+          const version = stats.mtime.getTime()
+          res.setHeader('X-File-Version', version.toString())
+        } catch (err) {
+          // Игнорируем ошибки
+        }
+      }
+    })
+    
+    staticMiddleware(req, res, () => {
       // Если файл не найден - отдаем index.html (SPA fallback)
-      res.sendFile(path.join(frontendPath, 'index.html'))
+      const indexPath = path.join(frontendPath, 'index.html')
+      if (!fs.existsSync(indexPath)) {
+        console.error(`❌ Frontend index.html not found at: ${indexPath}`)
+        return res.status(404).send('Frontend not found')
+      }
+      res.sendFile(indexPath, (err) => {
+        if (err) {
+          console.error(`Error serving frontend index.html:`, err)
+          res.status(500).send('Internal Server Error')
+        }
+      })
     })
   })
 
