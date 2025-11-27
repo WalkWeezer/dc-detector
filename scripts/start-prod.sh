@@ -438,16 +438,45 @@ if [ -f ".backend.pid" ]; then
         if kill -0 $OLD_PID 2>/dev/null; then
             echo "   💀 Принудительная остановка..."
             kill -KILL $OLD_PID 2>/dev/null || true
+            sleep 1
         fi
     fi
     rm -f .backend.pid
 fi
 
-# Дополнительная проверка порта 8080
+# Улучшенная остановка процессов на порту 8080
+echo "🛑 Проверка и остановка процессов на порту 8080..."
+for i in {1..5}; do
+    if lsof -ti :8080 >/dev/null 2>&1; then
+        if [ $i -eq 1 ]; then
+            echo "   Найдены процессы на порту 8080, останавливаю..."
+        fi
+        echo "   Попытка $i/5: остановка процессов..."
+        # Сначала мягкая остановка
+        lsof -ti :8080 | xargs kill -TERM 2>/dev/null || true
+        sleep 2
+        # Если все еще занят - принудительная остановка
+        if lsof -ti :8080 >/dev/null 2>&1; then
+            echo "   Принудительная остановка (KILL)..."
+            lsof -ti :8080 | xargs kill -KILL 2>/dev/null || true
+            sleep 1
+        fi
+    else
+        if [ $i -gt 1 ]; then
+            echo "   ✅ Порт 8080 освобожден"
+        fi
+        break
+    fi
+done
+
+# Финальная проверка порта
 if lsof -ti :8080 >/dev/null 2>&1; then
-    echo "🛑 Останавливаю процессы на порту 8080..."
-    lsof -ti :8080 | xargs kill -KILL 2>/dev/null || true
-    sleep 1
+    echo "❌ ОШИБКА: Порт 8080 все еще занят после 5 попыток!"
+    echo "   Запущенные процессы:"
+    lsof -ti :8080 | xargs ps -p 2>/dev/null || lsof -ti :8080
+    echo "   Попробуйте остановить процессы вручную:"
+    echo "   kill -9 \$(lsof -ti :8080)"
+    exit 1
 fi
 
 rm -f .backend.log
@@ -500,23 +529,16 @@ cd "$PROJECT_ROOT"
 echo ""
 echo "🌐 Подготовка Frontend..."
 
-# Очищаем старые файлы
+# Очищаем старые файлы и папку dist если есть
 rm -f .frontend.pid .frontend.log .frontend-build.log
-
-# Frontend теперь отдается через Backend Express
-# Собираем фронтенд только если нужно (опционально, можно использовать исходники)
-cd frontend || {
-    echo "⚠️  Предупреждение: не удалось перейти в frontend, используем исходники"
-    cd "$PROJECT_ROOT"
-}
-
-# Проверяем наличие node_modules (нужны только для сборки)
-if [ -d "frontend" ] && [ ! -d "frontend/node_modules" ] && [ -f "frontend/package.json" ]; then
-    echo "📦 Установка зависимостей Frontend (для сборки)..."
-    cd frontend
-    npm install
-    cd "$PROJECT_ROOT"
+if [ -d "frontend/dist" ]; then
+    echo "🗑️  Удаление старой папки frontend/dist..."
+    rm -rf frontend/dist
 fi
+
+# Frontend теперь отдается через Backend Express напрямую из исходников
+# НЕ используем Vite для продакшена
+echo "✅ Frontend будет отдаваться напрямую из исходников (без сборки)"
 
 # На проде НЕ используем Vite - отдаем исходники напрямую через Backend Express
 # Удаляем старую сборку dist, если есть, чтобы всегда использовались исходники
