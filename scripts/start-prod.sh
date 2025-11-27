@@ -446,19 +446,29 @@ fi
 
 # Улучшенная остановка процессов на порту 8080
 echo "🛑 Проверка и остановка процессов на порту 8080..."
-for i in {1..5}; do
-    if lsof -ti :8080 >/dev/null 2>&1; then
-        if [ $i -eq 1 ]; then
-            echo "   Найдены процессы на порту 8080, останавливаю..."
+PIDS_ON_8080=$(lsof -ti :8080 2>/dev/null || true)
+if [ ! -z "$PIDS_ON_8080" ]; then
+    echo "   Найдены процессы на порту 8080:"
+    echo "$PIDS_ON_8080" | while read pid; do
+        if [ ! -z "$pid" ]; then
+            ps -p $pid -o pid,cmd --no-headers 2>/dev/null || echo "   PID $pid (процесс не найден)"
         fi
+    done
+    echo "   Останавливаю все процессы..."
+fi
+
+for i in {1..5}; do
+    PIDS_ON_8080=$(lsof -ti :8080 2>/dev/null || true)
+    if [ ! -z "$PIDS_ON_8080" ]; then
         echo "   Попытка $i/5: остановка процессов..."
         # Сначала мягкая остановка
-        lsof -ti :8080 | xargs kill -TERM 2>/dev/null || true
+        echo "$PIDS_ON_8080" | xargs kill -TERM 2>/dev/null || true
         sleep 2
         # Если все еще занят - принудительная остановка
-        if lsof -ti :8080 >/dev/null 2>&1; then
+        PIDS_ON_8080=$(lsof -ti :8080 2>/dev/null || true)
+        if [ ! -z "$PIDS_ON_8080" ]; then
             echo "   Принудительная остановка (KILL)..."
-            lsof -ti :8080 | xargs kill -KILL 2>/dev/null || true
+            echo "$PIDS_ON_8080" | xargs kill -KILL 2>/dev/null || true
             sleep 1
         fi
     else
@@ -470,13 +480,29 @@ for i in {1..5}; do
 done
 
 # Финальная проверка порта
-if lsof -ti :8080 >/dev/null 2>&1; then
+PIDS_ON_8080=$(lsof -ti :8080 2>/dev/null || true)
+if [ ! -z "$PIDS_ON_8080" ]; then
     echo "❌ ОШИБКА: Порт 8080 все еще занят после 5 попыток!"
     echo "   Запущенные процессы:"
-    lsof -ti :8080 | xargs ps -p 2>/dev/null || lsof -ti :8080
+    echo "$PIDS_ON_8080" | while read pid; do
+        if [ ! -z "$pid" ]; then
+            ps -p $pid -o pid,cmd --no-headers 2>/dev/null || echo "   PID $pid"
+        fi
+    done
+    echo ""
     echo "   Попробуйте остановить процессы вручную:"
     echo "   kill -9 \$(lsof -ti :8080)"
     exit 1
+fi
+
+# Дополнительная проверка: убеждаемся что нет других Node процессов на 8080
+sleep 1
+PIDS_ON_8080=$(lsof -ti :8080 2>/dev/null || true)
+if [ ! -z "$PIDS_ON_8080" ]; then
+    echo "⚠️  ВНИМАНИЕ: На порту 8080 все еще есть процессы, но продолжаем..."
+    echo "$PIDS_ON_8080" | while read pid; do
+        ps -p $pid -o pid,cmd --no-headers 2>/dev/null || true
+    done
 fi
 
 rm -f .backend.log
@@ -516,12 +542,50 @@ if [ -f "../../.env" ]; then
     set +a
 fi
 
+# Финальная проверка перед запуском - порт должен быть свободен
+FINAL_PIDS=$(lsof -ti :8080 2>/dev/null || true)
+if [ ! -z "$FINAL_PIDS" ]; then
+    echo "❌ КРИТИЧЕСКАЯ ОШИБКА: Порт 8080 все еще занят перед запуском Backend!"
+    echo "   Процессы на порту 8080:"
+    echo "$FINAL_PIDS" | while read pid; do
+        if [ ! -z "$pid" ]; then
+            ps -p $pid -o pid,cmd --no-headers 2>/dev/null || echo "   PID $pid"
+        fi
+    done
+    echo ""
+    echo "   Остановите процессы вручную:"
+    echo "   kill -9 \$(lsof -ti :8080)"
+    exit 1
+fi
+
 # Запускаем Backend
 echo "🚀 Запуск Backend на порту ${PORT:-8080}..."
 nohup npm start > "../../.backend.log" 2>&1 &
 BACKEND_PID=$!
 echo "$BACKEND_PID" > "../../.backend.pid"
 echo "✅ Backend запущен (PID: $BACKEND_PID)"
+
+# Проверяем через 2 секунды, что запустился только один процесс
+sleep 2
+PIDS_ON_8080=$(lsof -ti :8080 2>/dev/null || true)
+if [ ! -z "$PIDS_ON_8080" ]; then
+    PID_COUNT=$(echo "$PIDS_ON_8080" | wc -l)
+    if [ "$PID_COUNT" -gt 1 ]; then
+        echo "⚠️  ВНИМАНИЕ: На порту 8080 обнаружено $PID_COUNT процессов (ожидался 1)!"
+        echo "   Процессы:"
+        echo "$PIDS_ON_8080" | while read pid; do
+            if [ ! -z "$pid" ]; then
+                ps -p $pid -o pid,cmd --no-headers 2>/dev/null || echo "   PID $pid"
+            fi
+        done
+        echo "   Ожидаемый PID Backend: $BACKEND_PID"
+    else
+        ACTUAL_PID=$(echo "$PIDS_ON_8080" | head -1)
+        if [ "$ACTUAL_PID" != "$BACKEND_PID" ]; then
+            echo "⚠️  ВНИМАНИЕ: На порту 8080 процесс с другим PID ($ACTUAL_PID вместо $BACKEND_PID)"
+        fi
+    fi
+fi
 
 cd "$PROJECT_ROOT"
 

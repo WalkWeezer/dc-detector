@@ -47,11 +47,11 @@ chmod +x scripts/start-prod.sh
 - ✅ Создает виртуальное окружение если нужно
 - ✅ Устанавливает недостающие пакеты
 - ✅ Запускает Detection Service в фоне (порт 8001)
-- ✅ Запускает Backend и Frontend напрямую (порты 8080 и 5173)
+- ✅ Запускает Backend на порту 8080 (Frontend отдается через Backend Express)
 
 **Доступные сервисы после запуска:**
-- Frontend: http://localhost:5173 (или IP адрес Raspberry Pi:5173)
-- Backend API: http://localhost:8080
+- Frontend: http://localhost:8080 (отдается через Backend Express)
+- Backend API: http://localhost:8080/api
 - Detection Service: http://localhost:8001
 
 ### Остановка всех сервисов
