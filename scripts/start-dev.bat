@@ -164,7 +164,7 @@ if not exist "detection_server.py" (
     pause >nul
     exit /b 1
 )
-start "DC-Detector Detection Service" /min cmd /c "python detection_server.py > %PROJECT_ROOT%\.detection-output.log 2> %PROJECT_ROOT%\.detection-error.log"
+start "DC-Detector Detection Service" /min cmd /c "python detection_server.py > %PROJECT_ROOT%\.detection-output.log 2>&1"
 timeout /t 2 /nobreak >nul
 
 REM ???????? Detection Service
@@ -184,7 +184,7 @@ if not exist "src\server.js" (
     pause >nul
     exit /b 1
 )
-start "DC-Detector Backend" /min cmd /c "node src\server.js > %PROJECT_ROOT%\.backend-output.log 2> %PROJECT_ROOT%\.backend-error.log"
+start "DC-Detector Backend" /min cmd /c "node src\server.js > %PROJECT_ROOT%\.backend-output.log 2>&1"
 timeout /t 2 /nobreak >nul
 
 REM ???????? Backend
@@ -204,7 +204,7 @@ if not exist "package.json" (
     pause >nul
     exit /b 1
 )
-start "DC-Detector Frontend" /min cmd /c "npx vite > %PROJECT_ROOT%\.frontend-output.log 2> %PROJECT_ROOT%\.frontend-error.log"
+start "DC-Detector Frontend" /min cmd /c "npx vite > %PROJECT_ROOT%\.frontend-output.log 2>&1"
 timeout /t 3 /nobreak >nul
 
 REM ???????? ??????????

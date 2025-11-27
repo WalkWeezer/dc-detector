@@ -3,6 +3,7 @@
 """Detection Service - HTTP server with Flask API"""
 
 import logging
+import os
 import signal
 import sys
 import time
@@ -32,13 +33,19 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
+import collections
+import queue
+
 from services.detection.config.runtime import RuntimeConfig
 from services.detection.service import DetectionService
 from services.detection.streaming.generators import mjpeg_generator_raw
 
-# Настройка логирования
+# Настройка логирования (можно отключить через переменную окружения)
+enable_logging = os.environ.get("ENABLE_LOGGING", "true").lower() in ("true", "1", "yes")
+log_level = logging.WARNING if not enable_logging else logging.INFO
+
 logging.basicConfig(
-    level=logging.INFO,
+    level=log_level,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
@@ -207,6 +214,133 @@ def switch_model():
     except Exception as e:
         logger.error("Ошибка переключения модели: %s", e, exc_info=True)
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/config/performance', methods=['GET'])
+def get_performance_config():
+    """Получить текущие настройки производительности"""
+    if detection_service is None:
+        return jsonify({'error': 'Service not initialized'}), 503
+    
+    config = detection_service.config
+    return jsonify({
+        'infer_fps': config.infer_fps,
+        'confidence_threshold': config.confidence_threshold,
+        'max_infer_queue_size': config.max_infer_queue_size,
+        'jpeg_quality_stream': config.jpeg_quality_stream,
+        'jpeg_quality_save': config.jpeg_quality_save,
+        'input_size': config.input_size,
+        'draw_detections': config.draw_detections,
+        'raw_frames_buffer_size': config.raw_frames_buffer_size,
+    })
+
+
+@app.route('/api/config/performance', methods=['POST'])
+def update_performance_config():
+    """Обновить настройки производительности в runtime"""
+    if detection_service is None:
+        return jsonify({'error': 'Service not initialized'}), 503
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'JSON body required'}), 400
+    
+    config = detection_service.config
+    updated = {}
+    
+    # Обновляем параметры если они переданы
+    if 'infer_fps' in data:
+        new_fps = float(data['infer_fps'])
+        if 0.1 <= new_fps <= 30.0:
+            config.infer_fps = new_fps
+            updated['infer_fps'] = new_fps
+        else:
+            return jsonify({'error': 'infer_fps must be between 0.1 and 30.0'}), 400
+    
+    if 'confidence_threshold' in data:
+        new_conf = float(data['confidence_threshold'])
+        if 0.0 <= new_conf <= 1.0:
+            config.confidence_threshold = new_conf
+            if detection_service.inference_engine:
+                detection_service.inference_engine.confidence_threshold = new_conf
+            updated['confidence_threshold'] = new_conf
+        else:
+            return jsonify({'error': 'confidence_threshold must be between 0.0 and 1.0'}), 400
+    
+    if 'max_infer_queue_size' in data:
+        new_size = int(data['max_infer_queue_size'])
+        if 1 <= new_size <= 10:
+            config.max_infer_queue_size = new_size
+            # Пересоздаем очередь с новым размером
+            old_queue = detection_service.infer_queue
+            detection_service.infer_queue = queue.Queue(maxsize=new_size)
+            # Переносим кадры из старой очереди
+            while not old_queue.empty():
+                try:
+                    item = old_queue.get_nowait()
+                    try:
+                        detection_service.infer_queue.put_nowait(item)
+                    except queue.Full:
+                        break
+                except queue.Empty:
+                    break
+            updated['max_infer_queue_size'] = new_size
+        else:
+            return jsonify({'error': 'max_infer_queue_size must be between 1 and 10'}), 400
+    
+    if 'jpeg_quality_stream' in data:
+        new_quality = int(data['jpeg_quality_stream'])
+        if 10 <= new_quality <= 100:
+            config.jpeg_quality_stream = new_quality
+            updated['jpeg_quality_stream'] = new_quality
+        else:
+            return jsonify({'error': 'jpeg_quality_stream must be between 10 and 100'}), 400
+    
+    if 'jpeg_quality_save' in data:
+        new_quality = int(data['jpeg_quality_save'])
+        if 10 <= new_quality <= 100:
+            config.jpeg_quality_save = new_quality
+            updated['jpeg_quality_save'] = new_quality
+        else:
+            return jsonify({'error': 'jpeg_quality_save must be between 10 and 100'}), 400
+    
+    if 'input_size' in data:
+        new_size = data['input_size']
+        if new_size is None:
+            config.input_size = None
+            updated['input_size'] = None
+        else:
+            new_size = int(new_size)
+            if new_size > 0:
+                config.input_size = new_size
+                if detection_service.inference_engine:
+                    detection_service.inference_engine.input_size = new_size
+                updated['input_size'] = new_size
+            else:
+                return jsonify({'error': 'input_size must be positive integer or null'}), 400
+    
+    if 'draw_detections' in data:
+        new_draw = bool(data['draw_detections'])
+        config.draw_detections = new_draw
+        if detection_service.inference_engine:
+            detection_service.inference_engine.draw_detections = new_draw
+        updated['draw_detections'] = new_draw
+    
+    if 'raw_frames_buffer_size' in data:
+        new_size = int(data['raw_frames_buffer_size'])
+        if 10 <= new_size <= 100:
+            config.raw_frames_buffer_size = new_size
+            # Пересоздаем буфер с новым размером
+            old_buffer = detection_service.raw_frames_buffer
+            detection_service.raw_frames_buffer = collections.deque(maxlen=new_size)
+            # Переносим кадры из старого буфера
+            for frame in old_buffer:
+                detection_service.raw_frames_buffer.append(frame)
+            updated['raw_frames_buffer_size'] = new_size
+        else:
+            return jsonify({'error': 'raw_frames_buffer_size must be between 10 and 100'}), 400
+    
+    return jsonify({'success': True, 'updated': updated})
 
 
 @app.route('/', methods=['GET'])

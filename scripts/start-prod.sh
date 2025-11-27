@@ -28,8 +28,8 @@ check_command() {
 }
 
 check_command python3 "Python 3"
-check_command docker "Docker"
-check_command "docker compose" "Docker Compose"
+check_command node "Node.js"
+check_command npm "npm"
 
 # Проверка портов
 echo ""
@@ -50,7 +50,7 @@ check_port() {
 PORTS_OCCUPIED=0
 check_port 8001 "Detection Service" || PORTS_OCCUPIED=1
 check_port 8080 "Backend" || PORTS_OCCUPIED=1
-check_port 80 "Frontend (nginx)" || PORTS_OCCUPIED=1
+check_port 5173 "Frontend (Vite)" || PORTS_OCCUPIED=1
 
 if [ $PORTS_OCCUPIED -eq 1 ]; then
     echo ""
@@ -73,13 +73,6 @@ fi
 if [ ! -f .env ]; then
     echo "⚠️  Создаю .env..."
     cp env.example .env 2>/dev/null || echo "DETECTION_URL=http://localhost:8001" > .env
-else
-    # Проверяем и исправляем неправильный DETECTION_URL для Docker деплоя
-    if grep -q "DETECTION_URL=http://detection:8001" .env 2>/dev/null; then
-        echo "⚠️  Исправляю DETECTION_URL в .env (должен быть localhost для network_mode: host)..."
-        sed -i 's|DETECTION_URL=http://detection:8001|DETECTION_URL=http://localhost:8001|g' .env
-        echo "✅ DETECTION_URL исправлен на http://localhost:8001"
-    fi
 fi
 
 # Создание директорий
@@ -383,21 +376,95 @@ fi
 
 cd "$PROJECT_ROOT"
 
-# ЗАПУСК DOCKER СЕРВИСОВ
+# ЗАПУСК BACKEND
 echo ""
-echo "🐳 Запуск Backend и Frontend через Docker..."
+echo "🚀 Запуск Backend..."
 
-# Используем docker-compose.prod.yml
-if [ ! -f docker-compose.prod.yml ]; then
-    echo "❌ docker-compose.prod.yml не найден"
-    exit 1
+# Остановка предыдущего процесса Backend
+if [ -f ".backend.pid" ]; then
+    OLD_PID=$(cat .backend.pid)
+    if kill -0 $OLD_PID 2>/dev/null; then
+        echo "🛑 Останавливаю предыдущий Backend..."
+        kill $OLD_PID
+        sleep 2
+    fi
+    rm -f .backend.pid
 fi
 
-echo "📋 Используется: docker-compose.prod.yml"
-docker compose -f docker-compose.prod.yml up -d --build
+rm -f .backend.log
 
-echo "⏳ Ожидание запуска Docker сервисов (10 секунд)..."
-sleep 10
+# Переходим в services/backend
+cd services/backend || {
+    echo "❌ Ошибка: не удалось перейти в services/backend"
+    exit 1
+}
+
+# Проверяем наличие node_modules
+if [ ! -d "node_modules" ]; then
+    echo "📦 Установка зависимостей Backend..."
+    npm install
+fi
+
+# Загружаем переменные окружения
+if [ -f "../../.env" ]; then
+    export $(grep -v '^#' ../../.env | xargs)
+fi
+
+# Запускаем Backend
+echo "🚀 Запуск Backend на порту ${PORT:-8080}..."
+nohup npm start > "../../.backend.log" 2>&1 &
+BACKEND_PID=$!
+echo "$BACKEND_PID" > "../../.backend.pid"
+echo "✅ Backend запущен (PID: $BACKEND_PID)"
+
+cd "$PROJECT_ROOT"
+
+# ЗАПУСК FRONTEND
+echo ""
+echo "🌐 Запуск Frontend..."
+
+# Остановка предыдущего процесса Frontend
+if [ -f ".frontend.pid" ]; then
+    OLD_PID=$(cat .frontend.pid)
+    if kill -0 $OLD_PID 2>/dev/null; then
+        echo "🛑 Останавливаю предыдущий Frontend..."
+        kill $OLD_PID
+        sleep 2
+    fi
+    rm -f .frontend.pid
+fi
+
+rm -f .frontend.log
+
+# Переходим в frontend
+cd frontend || {
+    echo "❌ Ошибка: не удалось перейти в frontend"
+    exit 1
+}
+
+# Проверяем наличие node_modules
+if [ ! -d "node_modules" ]; then
+    echo "📦 Установка зависимостей Frontend..."
+    npm install
+fi
+
+# Собираем Frontend для продакшена
+if [ ! -d "dist" ] || [ "dist/index.html" -ot "index.html" ] || [ "dist/index.html" -ot "app.js" ]; then
+    echo "🔨 Сборка Frontend..."
+    npm run build
+fi
+
+# Запускаем Frontend через Vite preview (или можно использовать простой HTTP сервер)
+echo "🚀 Запуск Frontend на порту 5173..."
+nohup npm run preview -- --host 0.0.0.0 --port 5173 > "../.frontend.log" 2>&1 &
+FRONTEND_PID=$!
+echo "$FRONTEND_PID" > "../.frontend.pid"
+echo "✅ Frontend запущен (PID: $FRONTEND_PID)"
+
+cd "$PROJECT_ROOT"
+
+echo "⏳ Ожидание запуска сервисов (5 секунд)..."
+sleep 5
 
 # ФИНАЛЬНАЯ ПРОВЕРКА
 echo ""
@@ -426,27 +493,7 @@ check_service() {
 
 check_service "http://localhost:8001/health" "Detection Service"
 check_service "http://localhost:8080/health" "Backend" 
-
-# Проверка Frontend с дополнительной диагностикой
-if ! check_service "http://localhost" "Frontend"; then
-    echo ""
-    echo "📋 Диагностика Frontend..."
-    echo "   Проверка контейнера:"
-    docker ps -a --filter "name=frontend" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" || true
-    echo ""
-    echo "   Последние логи Frontend:"
-    docker compose -f docker-compose.prod.yml logs --tail=20 frontend 2>/dev/null || echo "   Не удалось получить логи"
-    echo ""
-    echo "💡 Если Frontend не работает, проверьте:"
-    echo "   • Логи: docker compose -f docker-compose.prod.yml logs frontend"
-    echo "   • Статус: docker compose -f docker-compose.prod.yml ps"
-    echo "   • Порт 80 может быть занят другим процессом"
-fi
-
-# Дополнительная проверка Docker контейнеров
-echo ""
-echo "🔍 Статус всех Docker контейнеров:"
-docker compose -f docker-compose.prod.yml ps 2>/dev/null || docker ps --filter "name=dc-detector" --format "table {{.Names}}\t{{.Status}}" || true
+check_service "http://localhost:5173" "Frontend"
 
 # ИТОГИ
 echo ""
@@ -455,13 +502,14 @@ echo "✨ Система запущена!"
 echo "============================================================"
 echo ""
 echo "📍 Сервисы:"
-echo "   • Frontend:  http://localhost"
+echo "   • Frontend:  http://localhost:5173"
 echo "   • Backend:   http://localhost:8080" 
 echo "   • Detection: http://localhost:8001"
 echo ""
 echo "📋 Полезные команды:"
 echo "   • Логи Detection: tail -f .detection.log"
-echo "   • Логи Docker:    docker compose logs -f"
+echo "   • Логи Backend:   tail -f .backend.log"
+echo "   • Логи Frontend:  tail -f .frontend.log"
 echo "   • Остановка:      ./scripts/stop-prod.sh"
 echo "   • Перезапуск:     ./scripts/stop-prod.sh && ./scripts/start-prod.sh"
 echo ""

@@ -6,22 +6,14 @@
 - `backend` — Node.js REST API: прокси к detection-сервису и файловое хранилище детекций
 - `detection` — Python/YOLO микросервис: захват видеопотока, инференс, трекинг объектов
 
-**Важно:** Detection Service запускается **отдельно от Docker** для лучшей работы с камерой.
-
 ## 📦 Структура
 
 ```
 .
-├── docker/
-│   ├── backend.Dockerfile
-│   └── frontend.Dockerfile
-├── docker-compose.yml            # базовый compose (backend + frontend)
-├── docker-compose.dev.yml        # Windows dev (Vite hot-reload)
-├── docker-compose.prod.yml       # Production (Raspberry Pi)
 ├── services/
-│   ├── backend/
-│   └── detection/
-├── frontend/
+│   ├── backend/                  # Node.js Backend API
+│   └── detection/                # Python Detection Service
+├── frontend/                     # HTML/JS Frontend
 ├── data/detections/              # JSON-файлы с результатами детекции
 └── scripts/
     ├── start-prod.sh             # Запуск production
@@ -30,8 +22,9 @@
 
 ## ⚙️ Требования
 
-- **Detection Service**: Python 3.11+, запускается отдельно от Docker
-- **Backend/Frontend**: Docker 24+ или Node.js 20
+- **Detection Service**: Python 3.11+
+- **Backend**: Node.js 20+
+- **Frontend**: Node.js 20+ (для сборки)
 - **Зависимости**: см. `services/detection/requirements.txt`
 
 ## 🚀 Быстрый старт
@@ -65,7 +58,7 @@ chmod +x scripts/start-prod.sh
 ```
 
 **Доступ:**
-- Frontend: http://localhost (или IP адрес Raspberry Pi)
+- Frontend: http://localhost:5173 (или IP адрес Raspberry Pi:5173)
 - Backend: http://localhost:8080
 - Detection: http://localhost:8001
 
@@ -98,7 +91,75 @@ pip install -r requirements.txt
 - `yolov8n.pt` (базовая модель)
 - `bestfire.pt` (специализированная модель)
 
+#### Оптимизация моделей для Raspberry Pi 4
+
+Для улучшения производительности на Raspberry Pi 4 рекомендуется конвертировать модели в ONNX формат:
+
+```bash
+# Конвертация одной модели
+python3 services/detection/scripts/optimize_models.py services/detection/models/yolov8n.pt --imgsz 640
+
+# Автоматическая конвертация всех моделей
+chmod +x scripts/optimize-models.sh
+./scripts/optimize-models.sh
+```
+
+Поддерживаемые форматы:
+- `.pt` - стандартный PyTorch формат
+- `.onnx` - оптимизированный формат (рекомендуется для Raspberry Pi)
+- `.ptl` - PyTorch Lite (если доступен)
+
 ## 🐍 Detection Service
+
+### Оптимизация для Raspberry Pi 4
+
+Проект оптимизирован для работы на Raspberry Pi 4 с следующими улучшениями:
+
+1. **Оптимизация моделей**: Поддержка ONNX формата для ускорения инференса
+2. **Очередь кадров**: Пропуск старых кадров для предотвращения накопления
+3. **Ресайз перед инференсом**: Обработка кадров в уменьшенном разрешении (640x640)
+4. **Буфер сырых кадров**: Сохранение последних 30 кадров для GIF без пропуска
+5. **Настраиваемый FPS**: Контроль частоты обработки кадров
+6. **Оптимизация памяти**: Копирование кадров только при необходимости
+7. **Упрощенный трекинг**: Матчинг только по текущему bbox без предсказаний
+8. **Отключение отрисовки**: Опция отключения отрисовки детекций на сервере
+9. **Оптимизация логирования**: Возможность отключения логирования в production
+
+#### Настройка производительности через UI
+
+В интерфейсе доступна вкладка "Производительность" с настройками:
+- FPS обработки (0.5 - 30)
+- Порог уверенности (0.1 - 1.0)
+- Качество JPEG для потока (10 - 100)
+- Размер очереди кадров (1 - 10)
+- Размер входного изображения (320, 640, 1280)
+- Отключение отрисовки детекций
+
+#### Переменные окружения для оптимизации
+
+```bash
+# FPS обработки
+INFER_FPS=5.0
+
+# Размер входного изображения для инференса (640 рекомендуется)
+INPUT_SIZE=640
+
+# Качество JPEG для потока и сохранения
+JPEG_QUALITY_STREAM=60  # Для MJPEG потока (ниже = меньше нагрузка)
+JPEG_QUALITY_SAVE=85     # Для сохранения детекций
+
+# Размер очереди кадров
+MAX_INFER_QUEUE_SIZE=2
+
+# Размер буфера сырых кадров для GIF
+RAW_FRAMES_BUFFER_SIZE=30
+
+# Отключение отрисовки детекций на сервере
+DRAW_DETECTIONS=false
+
+# Отключение логирования в production
+ENABLE_LOGGING=false
+```
 
 ### Запуск
 
@@ -180,22 +241,6 @@ sudo raspi-config
 # Interface Options → I2C → Enable
 ```
 
-## 🐳 Docker Compose
-
-### Development
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up
-```
-
-### Production (Raspberry Pi)
-
-```bash
-docker compose -f docker-compose.prod.yml up -d --build
-```
-
-**Важно:** `docker-compose.prod.yml` использует `network_mode: host` для backend, чтобы он мог обращаться к `localhost:8001` (Detection Service).
-
 ## 🔄 Автозапуск (systemd)
 
 Самый простой способ — использовать один systemd сервис, который запускает скрипт `start-prod.sh`:
@@ -236,7 +281,7 @@ sudo journalctl -u dc-detector -n 100  # Последние 100 строк
 sudo systemctl status dc-detector
 curl http://localhost:8001/health  # Detection Service
 curl http://localhost:8080/health # Backend
-curl http://localhost             # Frontend
+curl http://localhost:5173        # Frontend
 ```
 
 **Если сервис не запускается:**
@@ -251,18 +296,12 @@ sudo journalctl -u dc-detector -n 50 --no-pager
 ls -la scripts/start-prod.sh
 ls -la scripts/stop-prod.sh
 
-# 4. Убедитесь, что Docker запущен
-sudo systemctl status docker
+# 4. Проверьте, что Node.js установлен
+node --version
+npm --version
 ```
 
 ## 🐛 Устранение проблем
-
-### Ошибка "mutually exclusive network_mode and networks"
-
-**Решение:** Используйте `docker-compose.prod.yml`:
-```bash
-docker compose -f docker-compose.prod.yml up -d --build
-```
 
 ### Backend не может подключиться к Detection Service
 
@@ -275,11 +314,6 @@ curl http://localhost:8001/health
 ```bash
 grep DETECTION_URL .env
 # Должно быть: DETECTION_URL=http://localhost:8001
-```
-
-3. Для Raspberry Pi с `network_mode: host` используйте:
-```bash
-DETECTION_URL=http://localhost:8001
 ```
 
 ### Ошибка сохранения детекций
@@ -334,23 +368,23 @@ sudo journalctl -u dc-detection -f
 curl http://localhost:8001/api/detection
 ```
 
-**Docker сервисы:**
+**Backend и Frontend:**
 ```bash
-# Логи
-docker compose -f docker-compose.prod.yml logs -f
+# Логи Backend
+tail -f .backend.log
 
-# Статус
-docker compose -f docker-compose.prod.yml ps
+# Логи Frontend
+tail -f .frontend.log
 
-# Перезапуск
-docker compose -f docker-compose.prod.yml restart
+# Статус процессов
+ps aux | grep -E "(node|vite)" | grep -v grep
 ```
 
 **Проверка всех сервисов:**
 ```bash
 curl http://localhost:8001/health && echo "✅ Detection"
 curl http://localhost:8080/health && echo "✅ Backend"
-curl http://localhost && echo "✅ Frontend"
+curl http://localhost:5173 && echo "✅ Frontend"
 ```
 
 ## 📄 Лицензия

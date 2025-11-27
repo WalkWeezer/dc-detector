@@ -42,18 +42,67 @@ else
     fi
 fi
 
-# Остановка Docker контейнеров
-echo "🛑 Остановка Docker контейнеров..."
-
-# Используем docker-compose.prod.yml
-if [ -f docker-compose.prod.yml ]; then
-    echo "📋 Используется: docker-compose.prod.yml"
-    docker compose -f docker-compose.prod.yml down --remove-orphans
+# Остановка Backend
+if [ -f .backend.pid ]; then
+    BACKEND_PID=$(cat .backend.pid)
+    if ps -p $BACKEND_PID > /dev/null 2>&1; then
+        echo "🛑 Остановка Backend (PID: $BACKEND_PID)..."
+        kill $BACKEND_PID 2>/dev/null || true
+        sleep 1
+        if ps -p $BACKEND_PID > /dev/null 2>&1; then
+            kill -9 $BACKEND_PID 2>/dev/null || true
+        fi
+        echo "✅ Backend остановлен"
+    else
+        echo "⚠️  Backend уже не запущен"
+    fi
+    rm -f .backend.pid
 else
-    echo "⚠️  docker-compose.prod.yml не найден, пытаюсь остановить все контейнеры проекта..."
-    docker ps -a --filter "name=dc-detector" --format "{{.ID}}" | xargs -r docker rm -f 2>/dev/null || true
+    # Пытаемся найти процесс по порту
+    if lsof -Pi :8080 -sTCP:LISTEN -t >/dev/null 2>&1; then
+        PID=$(lsof -Pi :8080 -sTCP:LISTEN -t 2>/dev/null | head -1)
+        if [ ! -z "$PID" ]; then
+            echo "🛑 Остановка Backend (PID: $PID)..."
+            kill $PID 2>/dev/null || true
+            sleep 1
+            if ps -p $PID > /dev/null 2>&1; then
+                kill -9 $PID 2>/dev/null || true
+            fi
+            echo "✅ Backend остановлен"
+        fi
+    fi
 fi
-echo "✅ Docker контейнеры остановлены"
+
+# Остановка Frontend
+if [ -f .frontend.pid ]; then
+    FRONTEND_PID=$(cat .frontend.pid)
+    if ps -p $FRONTEND_PID > /dev/null 2>&1; then
+        echo "🛑 Остановка Frontend (PID: $FRONTEND_PID)..."
+        kill $FRONTEND_PID 2>/dev/null || true
+        sleep 1
+        if ps -p $FRONTEND_PID > /dev/null 2>&1; then
+            kill -9 $FRONTEND_PID 2>/dev/null || true
+        fi
+        echo "✅ Frontend остановлен"
+    else
+        echo "⚠️  Frontend уже не запущен"
+    fi
+    rm -f .frontend.pid
+else
+    # Пытаемся найти процесс по порту
+    if lsof -Pi :5173 -sTCP:LISTEN -t >/dev/null 2>&1; then
+        PID=$(lsof -Pi :5173 -sTCP:LISTEN -t 2>/dev/null | head -1)
+        if [ ! -z "$PID" ]; then
+            echo "🛑 Остановка Frontend (PID: $PID)..."
+            kill $PID 2>/dev/null || true
+            sleep 1
+            if ps -p $PID > /dev/null 2>&1; then
+                kill -9 $PID 2>/dev/null || true
+            fi
+            echo "✅ Frontend остановлен"
+        fi
+    fi
+fi
 
 echo ""
 echo "✨ Все сервисы остановлены"

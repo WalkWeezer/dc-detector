@@ -1,7 +1,9 @@
 """Core detection microservice orchestration."""
 from __future__ import annotations
 
+import collections
 import logging
+import queue
 import threading
 import time
 from typing import Optional
@@ -41,6 +43,14 @@ class DetectionService:
         self.inference_engine: Optional[InferenceEngine] = None
         self.detection_thread: Optional[threading.Thread] = None
 
+        # Очередь кадров для инференса (пропуск старых кадров)
+        self.infer_queue: queue.Queue = queue.Queue(maxsize=config.max_infer_queue_size)
+        
+        # Буфер сырых кадров для GIF (collections.deque с maxlen)
+        self.raw_frames_buffer: collections.deque = collections.deque(
+            maxlen=config.raw_frames_buffer_size
+        )
+        
         self.last_raw_frame: Optional[np.ndarray] = None
         self.last_annotated_frame: Optional[bytes] = None
         self.servo = ServoController.from_config(config)
@@ -134,8 +144,13 @@ class DetectionService:
     def get_tracker_crop(self, track_id: int) -> Optional[bytes]:
         if not self.tracker:
             return None
-        with self.frame_lock:
-            frame = self.last_raw_frame.copy() if self.last_raw_frame is not None else None
+        # Используем последний кадр из буфера вместо копирования last_raw_frame
+        if not self.raw_frames_buffer:
+            with self.frame_lock:
+                frame = self.last_raw_frame.copy() if self.last_raw_frame is not None else None
+        else:
+            # Используем последний кадр из буфера (уже скопирован)
+            frame = self.raw_frames_buffer[-1]
         if frame is None:
             return None
         with self.tracker_lock:
@@ -228,6 +243,8 @@ class DetectionService:
                 self.tracker,
                 self.tracker_lock,
                 confidence_threshold=self.config.confidence_threshold,
+                input_size=self.config.input_size,
+                draw_detections=self.config.draw_detections,
             )
             logger.info("Inference engine инициализирован")
         except Exception as exc:
@@ -238,55 +255,104 @@ class DetectionService:
             return
 
         frame_interval = 1.0 / max(self.config.infer_fps, 0.1)
+        last_infer_time = 0.0
+        
         while not self.stop_event.is_set():
             frame = self.camera.capture_raw()
             if frame is None:
                 time.sleep(0.1)
                 continue
 
-            with self.frame_lock:
-                self.last_raw_frame = frame.copy()
-
             timestamp = time.time()
+            
+            # Добавляем сырой кадр в буфер для GIF (без копирования, используем view)
+            # Копируем только если нужно сохранить в last_raw_frame
+            with self.frame_lock:
+                # Копируем только если действительно нужно (для get_tracker_crop)
+                self.last_raw_frame = frame.copy()
+            
+            # Добавляем в буфер сырых кадров (копируем только при необходимости)
+            # Используем view для экономии памяти, копируем только при добавлении в deque
+            self.raw_frames_buffer.append(frame.copy())
+            
+            # Добавляем кадр в очередь для инференса (пропускаем старые)
             try:
-                tracked, annotated, _ = self.inference_engine.infer(frame, timestamp)
-                for track in tracked:
-                    track_id = track.get("trackId")
-                    bbox = track.get("bbox")
-                    if track_id is not None and bbox:
-                        update_tracker_cache(
-                            track_id,
-                            frame,
-                            bbox,
-                            {
-                                "label": track.get("label"),
-                                "confidence": track.get("confidence"),
-                                "timestamp": timestamp,
-                            },
-                        )
+                self.infer_queue.put_nowait((frame, timestamp))
+            except queue.Full:
+                # Удаляем самый старый кадр
+                try:
+                    self.infer_queue.get_nowait()
+                except queue.Empty:
+                    pass
+                try:
+                    self.infer_queue.put_nowait((frame, timestamp))
+                except queue.Full:
+                    # Если очередь все еще полна, пропускаем этот кадр
+                    continue
+            
+            # Обрабатываем инференс только если прошло достаточно времени
+            if timestamp - last_infer_time >= frame_interval:
+                try:
+                    # Берем последний кадр из очереди
+                    infer_frame, infer_timestamp = None, timestamp
+                    while not self.infer_queue.empty():
+                        try:
+                            infer_frame, infer_timestamp = self.infer_queue.get_nowait()
+                        except queue.Empty:
+                            break
+                    
+                    if infer_frame is not None:
+                        tracked, annotated, _ = self.inference_engine.infer(infer_frame, infer_timestamp)
+                        
+                        # Обновляем кэш трекеров используя оригинальный кадр из буфера
+                        # Используем последний кадр из буфера для трекинга
+                        tracker_frame = self.raw_frames_buffer[-1] if self.raw_frames_buffer else infer_frame
+                        
+                        for track in tracked:
+                            track_id = track.get("trackId")
+                            bbox = track.get("bbox")
+                            if track_id is not None and bbox:
+                                update_tracker_cache(
+                                    track_id,
+                                    tracker_frame,  # Используем кадр из буфера
+                                    bbox,
+                                    {
+                                        "label": track.get("label"),
+                                        "confidence": track.get("confidence"),
+                                        "timestamp": infer_timestamp,
+                                    },
+                                )
 
-                self._update_servo_target(tracked, frame.shape)
+                        self._update_servo_target(tracked, infer_frame.shape)
 
-                if annotated is not None:
-                    success, buffer = self._encode_jpeg(annotated)
-                else:
-                    success, buffer = self._encode_jpeg(frame)
-                if success and buffer is not None:
-                    with self.frame_lock:
-                        self.last_annotated_frame = buffer
-            except Exception as exc:
-                logger.error("Ошибка детекции: %s", exc, exc_info=True)
+                        # Кодируем кадр для потока
+                        if annotated is not None:
+                            success, buffer = self._encode_jpeg(annotated, stream=True)
+                        else:
+                            success, buffer = self._encode_jpeg(infer_frame, stream=True)
+                        if success and buffer is not None:
+                            with self.frame_lock:
+                                self.last_annotated_frame = buffer
+                        
+                        last_infer_time = timestamp
+                except Exception as exc:
+                    if self.config.enable_logging:
+                        logger.error("Ошибка детекции: %s", exc, exc_info=True)
 
-            time.sleep(frame_interval)
+            time.sleep(0.01)  # Небольшая задержка для снижения нагрузки
 
-    def _encode_jpeg(self, frame: np.ndarray) -> tuple[bool, Optional[bytes]]:
+    def _encode_jpeg(self, frame: np.ndarray, stream: bool = False) -> tuple[bool, Optional[bytes]]:
+        """Кодирует кадр в JPEG с выбором качества для потока или сохранения"""
         try:
             import cv2
 
+            # Используем разное качество для потока и сохранения
+            quality = self.config.jpeg_quality_stream if stream else self.config.jpeg_quality_save
+            
             success, buffer = cv2.imencode(
                 ".jpg",
                 frame,
-                [cv2.IMWRITE_JPEG_QUALITY, self.config.jpeg_quality],
+                [cv2.IMWRITE_JPEG_QUALITY, quality],
             )
         except Exception:
             return False, None

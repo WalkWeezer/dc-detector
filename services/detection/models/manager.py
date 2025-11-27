@@ -2,15 +2,28 @@
 import glob
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 
-from ultralytics import YOLO
+if TYPE_CHECKING:
+    from ultralytics import YOLO
 
 logger = logging.getLogger(__name__)
+
+# Ленивая загрузка YOLO
+_yolo_module = None
+
+def _get_yolo():
+    """Ленивая загрузка ultralytics.YOLO"""
+    global _yolo_module
+    if _yolo_module is None:
+        from ultralytics import YOLO
+        _yolo_module = YOLO
+    return _yolo_module
 
 
 class ModelManager:
     """Класс для управления моделями YOLO"""
+    __slots__ = ('models_dir', 'base_dir', '_model_lock', 'model', 'model_path', 'model_name', '_available_models')
     
     def __init__(self, models_dir: Path, base_dir: Path):
         self.models_dir = models_dir
@@ -32,23 +45,36 @@ class ModelManager:
         except Exception as exc:
             logger.warning('Не удалось создать каталог моделей %s: %s', self.models_dir, exc)
         
-        models = sorted({Path(path).name for path in glob.glob(str(self.models_dir / '*.pt'))})
-        self._available_models = models
-        return models
+        # Поддержка разных форматов: .pt, .onnx, .ptl
+        patterns = ['*.pt', '*.onnx', '*.ptl']
+        models = set()
+        for pattern in patterns:
+            models.update(Path(path).name for path in glob.glob(str(self.models_dir / pattern)))
+        
+        self._available_models = sorted(models)
+        return self._available_models
     
     def _resolve_model_path(self, model_path: str) -> Optional[Path]:
-        """Разрешает путь к модели"""
+        """Разрешает путь к модели (поддерживает .pt, .onnx, .ptl)"""
         candidate = Path(model_path)
         search_paths = []
         
-        if candidate.is_absolute():
-            search_paths.append(candidate)
+        # Если расширение не указано, ищем все форматы
+        if not candidate.suffix:
+            extensions = ['.pt', '.onnx', '.ptl']
         else:
-            search_paths.extend([
-                self.models_dir / candidate.name,
-                self.models_dir / candidate,
-                self.base_dir / candidate,
-            ])
+            extensions = [candidate.suffix]
+        
+        if candidate.is_absolute():
+            for ext in extensions:
+                search_paths.append(candidate.with_suffix(ext))
+        else:
+            for ext in extensions:
+                search_paths.extend([
+                    self.models_dir / candidate.with_suffix(ext).name,
+                    self.models_dir / candidate.with_suffix(ext),
+                    self.base_dir / candidate.with_suffix(ext),
+                ])
         
         for path in search_paths:
             try:
@@ -60,13 +86,30 @@ class ModelManager:
         return None
     
     def load_model(self, model_path: str):
-        """Загружает модель"""
+        """Загружает модель (поддерживает .pt, .onnx, .ptl)"""
         resolved = self._resolve_model_path(model_path)
         if resolved is None:
             raise FileNotFoundError(f'Не удалось найти модель: {model_path}')
         
-        logger.info('🔍 Загрузка модели YOLO: %s', resolved)
-        model = YOLO(str(resolved))
+        model_ext = resolved.suffix.lower()
+        logger.info('🔍 Загрузка модели: %s (формат: %s)', resolved, model_ext)
+        
+        # Для ONNX используем ONNX Runtime, для остальных - YOLO
+        if model_ext == '.onnx':
+            try:
+                import onnxruntime as ort
+                # ONNX модели загружаются через YOLO, который поддерживает ONNX
+                YOLO = _get_yolo()
+                model = YOLO(str(resolved))
+                logger.info('Модель загружена через ONNX Runtime')
+            except ImportError:
+                logger.warning('ONNX Runtime не установлен, используем стандартный YOLO')
+                YOLO = _get_yolo()
+                model = YOLO(str(resolved))
+        else:
+            # Стандартные .pt и .ptl модели
+            YOLO = _get_yolo()
+            model = YOLO(str(resolved))
         
         if self._model_lock:
             with self._model_lock:
@@ -84,7 +127,35 @@ class ModelManager:
             available.sort()
             self._available_models = available
     
-    def get_model(self) -> Optional[YOLO]:
+    def optimize_model(self, model_path: str, output_path: Optional[str] = None, format: str = 'onnx') -> Optional[Path]:
+        """Конвертирует модель в оптимизированный формат"""
+        resolved = self._resolve_model_path(model_path)
+        if resolved is None:
+            raise FileNotFoundError(f'Не удалось найти модель: {model_path}')
+        
+        if format.lower() == 'onnx':
+            YOLO = _get_yolo()
+            model = YOLO(str(resolved))
+            
+            if output_path is None:
+                output_path = str(resolved.with_suffix('.onnx'))
+            else:
+                output_path = str(Path(output_path))
+            
+            logger.info('Конвертация модели в ONNX: %s -> %s', resolved, output_path)
+            try:
+                # Экспорт в ONNX с оптимизацией для CPU
+                model.export(format='onnx', imgsz=640, optimize=True)
+                logger.info('✅ Модель успешно конвертирована в ONNX')
+                return Path(output_path)
+            except Exception as exc:
+                logger.error('Ошибка конвертации в ONNX: %s', exc)
+                return None
+        else:
+            logger.warning('Неподдерживаемый формат оптимизации: %s', format)
+            return None
+    
+    def get_model(self) -> Optional['YOLO']:
         """Получает текущую модель"""
         if self._model_lock:
             with self._model_lock:

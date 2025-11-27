@@ -29,6 +29,22 @@
     autosaveDelay: document.getElementById('autosave-delay'),
     autosaveSaveBtn: document.getElementById('autosave-save-btn'),
     autosaveSettingsGroup: document.getElementById('autosave-settings-group'),
+    // Производительность
+    performanceInferFps: document.getElementById('performance-infer-fps'),
+    performanceConfidence: document.getElementById('performance-confidence'),
+    performanceJpegStream: document.getElementById('performance-jpeg-stream'),
+    performanceQueueSize: document.getElementById('performance-queue-size'),
+    performanceInputSize: document.getElementById('performance-input-size'),
+    performanceDrawDetections: document.getElementById('performance-draw-detections'),
+    performanceApplyBtn: document.getElementById('performance-apply-btn'),
+    performanceInferFpsValue: document.getElementById('performance-infer-fps-value'),
+    performanceConfidenceValue: document.getElementById('performance-confidence-value'),
+    performanceJpegStreamValue: document.getElementById('performance-jpeg-stream-value'),
+    performanceQueueSizeValue: document.getElementById('performance-queue-size-value'),
+    performanceInputSizeValue: document.getElementById('performance-input-size-value'),
+    metricInferFps: document.getElementById('metric-infer-fps'),
+    metricQueueSize: document.getElementById('metric-queue-size'),
+    metricFrameTime: document.getElementById('metric-frame-time'),
   };
 
   const state = {
@@ -50,8 +66,9 @@
   };
 
   const backendOrigin = computeOrigin(8080);
+  const detectionServiceOrigin = computeOrigin(8001); // Прямой доступ к detection service
 
-  // Все запросы идут через бэкенд
+  // Все запросы идут через бэкенд, кроме видео потока (прямой доступ к detection service)
   const api = {
     detection: `${backendOrigin}/api/detection`,
     trackers: `${backendOrigin}/api/trackers`,
@@ -60,8 +77,9 @@
     detectionsSave: `${backendOrigin}/api/detections/save`, // Сохранение через backend
     detectionsSaved: `${backendOrigin}/api/detections/saved`,
     models: `${backendOrigin}/api/models`,
-    stream: `${backendOrigin}/api/video_feed_raw`,
+    stream: `${detectionServiceOrigin}/video_feed_raw`, // Прямой доступ к detection service
     autosaveConfig: `${backendOrigin}/api/config/autosave`, // Конфигурация автосохранения
+    performanceConfig: `${detectionServiceOrigin}/api/config/performance`, // Настройки производительности
   };
 
   function updateStatus(text, variant) {
@@ -181,6 +199,22 @@
         : '—';
       els.errorMessage.textContent = '';
       updateStatus('Онлайн', 'detected');
+      
+      // Обновляем метрики производительности если вкладка открыта
+      const performancePanel = document.getElementById('panel-tab-performance');
+      if (performancePanel && performancePanel.classList.contains('active')) {
+        try {
+          const perfConfig = await fetchJSON(api.performanceConfig);
+          if (els.metricInferFps) {
+            els.metricInferFps.textContent = `${perfConfig.infer_fps || '—'} FPS`;
+          }
+          if (els.metricQueueSize) {
+            els.metricQueueSize.textContent = `${perfConfig.max_infer_queue_size || '—'}`;
+          }
+        } catch (err) {
+          // Игнорируем ошибки метрик
+        }
+      }
     } catch (err) {
       updateStatus('Нет связи', 'error');
       els.errorMessage.textContent = err.message;
@@ -893,9 +927,115 @@
         valueEl.textContent = Number(value).toFixed(2);
       } else if (valueId.includes('delay')) {
         valueEl.textContent = Number(value).toLocaleString('ru-RU');
+      } else if (valueId.includes('fps')) {
+        valueEl.textContent = Number(value).toFixed(1);
       } else {
         valueEl.textContent = Number(value);
       }
+    }
+  }
+
+  // Функции для работы с настройками производительности
+  async function loadPerformanceConfig() {
+    try {
+      const config = await fetchJSON(api.performanceConfig);
+      updatePerformanceUI(config);
+    } catch (err) {
+      console.error('Ошибка загрузки настроек производительности:', err);
+      updateStatus('Ошибка загрузки настроек производительности', 'error');
+    }
+  }
+
+  function updatePerformanceUI(config) {
+    if (els.performanceInferFps) {
+      els.performanceInferFps.value = config.infer_fps || 5.0;
+      updateSliderValue('performance-infer-fps-value', config.infer_fps || 5.0);
+    }
+    if (els.performanceConfidence) {
+      els.performanceConfidence.value = config.confidence_threshold || 0.5;
+      updateSliderValue('performance-confidence-value', config.confidence_threshold || 0.5);
+    }
+    if (els.performanceJpegStream) {
+      els.performanceJpegStream.value = config.jpeg_quality_stream || 60;
+      updateSliderValue('performance-jpeg-stream-value', config.jpeg_quality_stream || 60);
+    }
+    if (els.performanceQueueSize) {
+      els.performanceQueueSize.value = config.max_infer_queue_size || 2;
+      updateSliderValue('performance-queue-size-value', config.max_infer_queue_size || 2);
+    }
+    if (els.performanceInputSize) {
+      els.performanceInputSize.value = config.input_size || 640;
+      updateSliderValue('performance-input-size-value', config.input_size || 640);
+    }
+    if (els.performanceDrawDetections) {
+      els.performanceDrawDetections.checked = config.draw_detections !== false;
+    }
+  }
+
+  async function savePerformanceConfig() {
+    try {
+      const config = {
+        infer_fps: parseFloat(els.performanceInferFps.value),
+        confidence_threshold: parseFloat(els.performanceConfidence.value),
+        jpeg_quality_stream: parseInt(els.performanceJpegStream.value),
+        max_infer_queue_size: parseInt(els.performanceQueueSize.value),
+        input_size: parseInt(els.performanceInputSize.value),
+        draw_detections: els.performanceDrawDetections.checked,
+      };
+
+      const result = await fetchJSON(api.performanceConfig, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      });
+
+      if (result.success) {
+        updateStatus('Настройки производительности применены', 'detected');
+        // Обновляем метрики
+        await loadPerformanceConfig();
+      }
+    } catch (err) {
+      console.error('Ошибка сохранения настроек производительности:', err);
+      updateStatus(`Ошибка: ${err.message}`, 'error');
+    }
+  }
+
+  function initPerformanceHandlers() {
+    // Обновление значений слайдеров
+    if (els.performanceInferFps) {
+      els.performanceInferFps.addEventListener('input', (e) => {
+        updateSliderValue('performance-infer-fps-value', e.target.value);
+      });
+    }
+    if (els.performanceConfidence) {
+      els.performanceConfidence.addEventListener('input', (e) => {
+        updateSliderValue('performance-confidence-value', e.target.value);
+      });
+    }
+    if (els.performanceJpegStream) {
+      els.performanceJpegStream.addEventListener('input', (e) => {
+        updateSliderValue('performance-jpeg-stream-value', e.target.value);
+      });
+    }
+    if (els.performanceQueueSize) {
+      els.performanceQueueSize.addEventListener('input', (e) => {
+        updateSliderValue('performance-queue-size-value', e.target.value);
+      });
+    }
+    if (els.performanceInputSize) {
+      els.performanceInputSize.addEventListener('input', (e) => {
+        updateSliderValue('performance-input-size-value', e.target.value);
+      });
+    }
+    if (els.performanceApplyBtn) {
+      els.performanceApplyBtn.addEventListener('click', async () => {
+        els.performanceApplyBtn.disabled = true;
+        try {
+          await savePerformanceConfig();
+        } finally {
+          els.performanceApplyBtn.disabled = false;
+        }
+      });
     }
   }
 
@@ -931,6 +1071,13 @@
           initAutosaveHandlers();
           loadAutosaveConfig().catch(err => {
             console.error('Ошибка загрузки настроек автосохранения при открытии вкладки:', err);
+          });
+        }
+        // Загружаем настройки производительности при открытии вкладки "Производительность"
+        if (target === 'performance') {
+          initPerformanceHandlers();
+          loadPerformanceConfig().catch(err => {
+            console.error('Ошибка загрузки настроек производительности:', err);
           });
         }
       });

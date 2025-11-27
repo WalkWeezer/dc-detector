@@ -43,6 +43,7 @@
                 <button class="panel-tab-button active" data-panel-tab="control" role="tab">Управление</button>
                 <button class="panel-tab-button" data-panel-tab="database" role="tab">База</button>
                 <button class="panel-tab-button" data-panel-tab="autosave" role="tab">Автосохранение</button>
+                <button class="panel-tab-button" data-panel-tab="performance" role="tab">Производительность</button>
               </nav>
 
               <div class="panel-tab-container">
@@ -147,6 +148,93 @@
                           <div class="slider-hint">Время ожидания для накопления кадров перед сохранением</div>
                         </label>
                       </div>
+                    </div>
+                  </section>
+                </div>
+
+                <div id="panel-tab-performance" class="panel-tab-panel" role="tabpanel">
+                  <section class="panel-card">
+                    <header>
+                      <h2>Настройки производительности</h2>
+                      <small>Оптимизация для Raspberry Pi 4</small>
+                    </header>
+                    <div class="performance-settings">
+                      <label class="slider-field">
+                        <div class="slider-label">
+                          <span>FPS обработки</span>
+                          <span class="slider-value" id="performance-infer-fps-value">5.0</span>
+                        </div>
+                        <input type="range" id="performance-infer-fps" min="0.5" max="30" step="0.1" value="5.0" />
+                        <div class="slider-hint">Количество кадров в секунду для обработки инференсом (0.5 - 30)</div>
+                      </label>
+
+                      <label class="slider-field">
+                        <div class="slider-label">
+                          <span>Порог уверенности</span>
+                          <span class="slider-value" id="performance-confidence-value">0.50</span>
+                        </div>
+                        <input type="range" id="performance-confidence" min="0.1" max="1.0" step="0.01" value="0.5" />
+                        <div class="slider-hint">Минимальная уверенность для детекции (0.1 - 1.0)</div>
+                      </label>
+
+                      <label class="slider-field">
+                        <div class="slider-label">
+                          <span>Качество JPEG для потока</span>
+                          <span class="slider-value" id="performance-jpeg-stream-value">60</span>
+                        </div>
+                        <input type="range" id="performance-jpeg-stream" min="10" max="100" step="1" value="60" />
+                        <div class="slider-hint">Качество JPEG для MJPEG потока (10 - 100, ниже = меньше нагрузка)</div>
+                      </label>
+
+                      <label class="slider-field">
+                        <div class="slider-label">
+                          <span>Размер очереди кадров</span>
+                          <span class="slider-value" id="performance-queue-size-value">2</span>
+                        </div>
+                        <input type="range" id="performance-queue-size" min="1" max="10" step="1" value="2" />
+                        <div class="slider-hint">Максимальный размер очереди для инференса (1 - 10)</div>
+                      </label>
+
+                      <label class="slider-field">
+                        <div class="slider-label">
+                          <span>Размер входного изображения</span>
+                          <span class="slider-value" id="performance-input-size-value">640</span>
+                        </div>
+                        <input type="range" id="performance-input-size" min="320" max="1280" step="320" value="640" />
+                        <div class="slider-hint">Размер изображения для инференса (320, 640, 1280). Меньше = быстрее</div>
+                      </label>
+
+                      <label class="checkbox-field">
+                        <input type="checkbox" id="performance-draw-detections" checked />
+                        <span>Отрисовка детекций на сервере</span>
+                      </label>
+
+                      <div class="action-buttons" style="margin-top: 16px;">
+                        <button id="performance-apply-btn" type="button" class="accent">Применить настройки</button>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="panel-card">
+                    <header>
+                      <h2>Метрики производительности</h2>
+                    </header>
+                    <div class="performance-metrics">
+                      <div class="status-item">
+                        <span>Текущий FPS обработки</span>
+                        <strong id="metric-infer-fps">—</strong>
+                      </div>
+                      <div class="status-item">
+                        <span>Размер очереди кадров</span>
+                        <strong id="metric-queue-size">—</strong>
+                      </div>
+                      <div class="status-item">
+                        <span>Время обработки кадра (мс)</span>
+                        <strong id="metric-frame-time">—</strong>
+                      </div>
+                    </div>
+                  </section>
+                </div>
 
                       <div class="action-buttons" style="margin-top: 16px;">
                         <button id="autosave-save-btn" type="button" class="accent">Сохранить настройки</button>
