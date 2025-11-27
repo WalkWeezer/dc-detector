@@ -209,10 +209,20 @@
             els.metricInferFps.textContent = `${perfConfig.infer_fps || '—'} FPS`;
           }
           if (els.metricQueueSize) {
-            els.metricQueueSize.textContent = `${perfConfig.max_infer_queue_size || '—'}`;
+            // Показываем реальный размер очереди, а не максимальный
+            els.metricQueueSize.textContent = `${perfConfig.queue_size ?? 0} / ${perfConfig.max_infer_queue_size || '—'}`;
+          }
+          if (els.metricFrameTime) {
+            const frameTime = perfConfig.frame_process_time_ms;
+            if (frameTime !== null && frameTime !== undefined) {
+              els.metricFrameTime.textContent = `${frameTime.toFixed(1)} мс`;
+            } else {
+              els.metricFrameTime.textContent = '—';
+            }
           }
         } catch (err) {
           // Игнорируем ошибки метрик
+          console.debug('Ошибка загрузки метрик производительности:', err);
         }
       }
     } catch (err) {
@@ -1001,6 +1011,8 @@
   }
 
   function initPerformanceHandlers() {
+    // Загружаем метрики при открытии вкладки
+    refreshStatus();
     // Обновление значений слайдеров
     if (els.performanceInferFps) {
       els.performanceInferFps.addEventListener('input', (e) => {

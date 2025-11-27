@@ -218,11 +218,15 @@ def switch_model():
 
 @app.route('/api/config/performance', methods=['GET'])
 def get_performance_config():
-    """Получить текущие настройки производительности"""
+    """Получить текущие настройки производительности и метрики"""
     if detection_service is None:
         return jsonify({'error': 'Service not initialized'}), 503
     
     config = detection_service.config
+    
+    # Получаем реальные метрики из статуса
+    status = detection_service.get_status_payload()
+    
     return jsonify({
         'infer_fps': config.infer_fps,
         'confidence_threshold': config.confidence_threshold,
@@ -232,6 +236,9 @@ def get_performance_config():
         'input_size': config.input_size,
         'draw_detections': config.draw_detections,
         'raw_frames_buffer_size': config.raw_frames_buffer_size,
+        # Реальные метрики
+        'queue_size': status.get('queue_size', 0),
+        'frame_process_time_ms': status.get('frame_process_time_ms'),
     })
 
 

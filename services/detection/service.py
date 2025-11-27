@@ -51,6 +51,10 @@ class DetectionService:
             maxlen=config.raw_frames_buffer_size
         )
         
+        # Метрики производительности
+        self.last_frame_process_time: float = 0.0  # Время обработки последнего кадра в секундах
+        self.frame_process_times: collections.deque = collections.deque(maxlen=10)  # История времени обработки
+        
         self.last_raw_frame: Optional[np.ndarray] = None
         self.last_annotated_frame: Optional[bytes] = None
         self.servo = ServoController.from_config(config)
@@ -102,6 +106,11 @@ class DetectionService:
         tracker_active = self.tracker is not None
         detection_thread_running = self.detection_thread is not None and self.detection_thread.is_alive()
 
+        # Вычисляем среднее время обработки кадра
+        avg_frame_time = 0.0
+        if self.frame_process_times:
+            avg_frame_time = sum(self.frame_process_times) / len(self.frame_process_times)
+
         payload = {
             "status": "ok",
             "detection_enabled": detection_enabled,
@@ -115,6 +124,9 @@ class DetectionService:
             "infer_fps": self.config.infer_fps,
             "target_track_id": self.target_track_id,
             "servo": self.servo.get_state(),
+            # Метрики производительности
+            "queue_size": self.infer_queue.qsize(),
+            "frame_process_time_ms": round(avg_frame_time, 1) if avg_frame_time > 0 else None,
         }
 
         if tracker_active:
@@ -302,7 +314,15 @@ class DetectionService:
                             break
                     
                     if infer_frame is not None:
+                        # Засекаем время обработки кадра
+                        infer_start_time = time.time()
                         tracked, annotated, _ = self.inference_engine.infer(infer_frame, infer_timestamp)
+                        infer_end_time = time.time()
+                        
+                        # Сохраняем время обработки
+                        process_time = (infer_end_time - infer_start_time) * 1000  # в миллисекундах
+                        self.last_frame_process_time = process_time
+                        self.frame_process_times.append(process_time)
                         
                         # Обновляем кэш трекеров используя оригинальный кадр из буфера
                         # Используем последний кадр из буфера для трекинга
