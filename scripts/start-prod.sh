@@ -31,43 +31,50 @@ check_command python3 "Python 3"
 check_command node "Node.js"
 check_command npm "npm"
 
-# Проверка портов
+# Проверка и освобождение портов
 echo ""
 echo "🔍 Проверка портов..."
 
-check_port() {
+kill_port() {
     local port=$1
     local name=$2
-    if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; then
-        echo "⚠️  Порт $port ($name) уже занят!"
-        return 1
+    local pids=$(lsof -ti :$port 2>/dev/null || true)
+    
+    if [ -z "$pids" ]; then
+        echo "✅ Порт $port ($name) свободен"
+        return 0
     else
-        echo "✅ Порт $port свободен"
+        echo "⚠️  Порт $port ($name) занят, останавливаю процессы..."
+        for pid in $pids; do
+            if kill -0 $pid 2>/dev/null; then
+                echo "   🛑 Останавливаю процесс PID: $pid"
+                kill -TERM $pid 2>/dev/null || true
+                sleep 1
+                # Если процесс не остановился, убиваем принудительно
+                if kill -0 $pid 2>/dev/null; then
+                    echo "   💀 Принудительная остановка PID: $pid"
+                    kill -KILL $pid 2>/dev/null || true
+                fi
+            fi
+        done
+        sleep 1
+        # Проверяем еще раз
+        if lsof -ti :$port >/dev/null 2>&1; then
+            echo "   ⚠️  Порт $port все еще занят, повторная попытка..."
+            sleep 2
+            pids=$(lsof -ti :$port 2>/dev/null || true)
+            for pid in $pids; do
+                kill -KILL $pid 2>/dev/null || true
+            done
+        fi
+        echo "   ✅ Порт $port освобожден"
         return 0
     fi
 }
 
-PORTS_OCCUPIED=0
-check_port 8001 "Detection Service" || PORTS_OCCUPIED=1
-check_port 8080 "Backend" || PORTS_OCCUPIED=1
-check_port 5173 "Frontend (Vite)" || PORTS_OCCUPIED=1
-
-if [ $PORTS_OCCUPIED -eq 1 ]; then
-    echo ""
-    echo "⚠️  Некоторые порты заняты."
-    # В неинтерактивном режиме (systemd) автоматически продолжаем
-    if [ -t 0 ]; then
-        # Интерактивный режим - спрашиваем пользователя
-        read -p "Продолжить? (y/n) " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            exit 1
-        fi
-    else
-        # Неинтерактивный режим (systemd) - продолжаем автоматически
-        echo "   Продолжаю автоматически (неинтерактивный режим)..."
-    fi
-fi
+kill_port 8001 "Detection Service"
+kill_port 8080 "Backend"
+kill_port 5173 "Frontend (Vite)"
 
 # Проверка .env
 if [ ! -f .env ]; then
@@ -288,11 +295,23 @@ cd "$PROJECT_ROOT"
 if [ -f ".detection.pid" ]; then
     OLD_PID=$(cat .detection.pid)
     if kill -0 $OLD_PID 2>/dev/null; then
-        echo "🛑 Останавливаю предыдущий Detection Service..."
-        kill $OLD_PID
+        echo "🛑 Останавливаю предыдущий Detection Service (PID: $OLD_PID)..."
+        kill -TERM $OLD_PID 2>/dev/null || true
         sleep 2
+        # Принудительная остановка если не остановился
+        if kill -0 $OLD_PID 2>/dev/null; then
+            echo "   💀 Принудительная остановка..."
+            kill -KILL $OLD_PID 2>/dev/null || true
+        fi
     fi
     rm -f .detection.pid
+fi
+
+# Дополнительная проверка порта 8001
+if lsof -ti :8001 >/dev/null 2>&1; then
+    echo "🛑 Останавливаю процессы на порту 8001..."
+    lsof -ti :8001 | xargs kill -KILL 2>/dev/null || true
+    sleep 1
 fi
 
 rm -f .detection.log
@@ -336,8 +355,26 @@ echo "🚀 Запуск detection_server.py..."
 # Загружаем переменные окружения из .env для detection service
 # ВАЖНО: Detection service должен использовать PORT=8001, не 8080!
 if [ -f "../../.env" ]; then
-    # Экспортируем переменные, но переопределяем PORT на 8001 для detection service
-    export $(grep -v '^#' ../../.env | grep -E '^(CAMERA_INDEX|CONFIDENCE_THRESHOLD|INFER_FPS|ROTATE_ANGLE|FLIP_HORIZONTAL|FLIP_VERTICAL)=' | xargs)
+    # Безопасная загрузка переменных из .env (только нужные для detection service)
+    set -a
+    # Загружаем только нужные переменные для detection service
+    while IFS= read -r line; do
+        # Пропускаем пустые строки и комментарии
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+        # Проверяем что строка содержит = и начинается с нужного ключа
+        [[ "$line" =~ = ]] || continue
+        key="${line%%=*}"
+        value="${line#*=}"
+        # Убираем пробелы из ключа
+        key=$(echo "$key" | xargs)
+        # Проверяем что это нужная переменная
+        [[ "$key" =~ ^(CAMERA_INDEX|CONFIDENCE_THRESHOLD|INFER_FPS|ROTATE_ANGLE|FLIP_HORIZONTAL|FLIP_VERTICAL)$ ]] || continue
+        # Проверяем что ключ валидный
+        [[ "$key" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] || continue
+        # Экспортируем переменную
+        export "$key=$value" 2>/dev/null || true
+    done < <(grep -v '^#' ../../.env | grep -v '^$')
+    set +a
     # Явно устанавливаем PORT=8001 для detection service (не берем из .env, т.к. там может быть 8080 для backend)
     export PORT=8001
 fi
@@ -384,11 +421,23 @@ echo "🚀 Запуск Backend..."
 if [ -f ".backend.pid" ]; then
     OLD_PID=$(cat .backend.pid)
     if kill -0 $OLD_PID 2>/dev/null; then
-        echo "🛑 Останавливаю предыдущий Backend..."
-        kill $OLD_PID
+        echo "🛑 Останавливаю предыдущий Backend (PID: $OLD_PID)..."
+        kill -TERM $OLD_PID 2>/dev/null || true
         sleep 2
+        # Принудительная остановка если не остановился
+        if kill -0 $OLD_PID 2>/dev/null; then
+            echo "   💀 Принудительная остановка..."
+            kill -KILL $OLD_PID 2>/dev/null || true
+        fi
     fi
     rm -f .backend.pid
+fi
+
+# Дополнительная проверка порта 8080
+if lsof -ti :8080 >/dev/null 2>&1; then
+    echo "🛑 Останавливаю процессы на порту 8080..."
+    lsof -ti :8080 | xargs kill -KILL 2>/dev/null || true
+    sleep 1
 fi
 
 rm -f .backend.log
@@ -407,7 +456,25 @@ fi
 
 # Загружаем переменные окружения
 if [ -f "../../.env" ]; then
-    export $(grep -v '^#' ../../.env | xargs)
+    # Безопасная загрузка переменных из .env (игнорируем комментарии и пустые строки)
+    set -a
+    # Фильтруем только валидные строки переменных (KEY=VALUE) и экспортируем их
+    while IFS= read -r line; do
+        # Пропускаем пустые строки и комментарии
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+        # Проверяем что строка содержит =
+        [[ "$line" =~ = ]] || continue
+        # Извлекаем ключ и значение
+        key="${line%%=*}"
+        value="${line#*=}"
+        # Убираем пробелы из ключа
+        key=$(echo "$key" | xargs)
+        # Проверяем что ключ валидный (начинается с буквы или подчеркивания)
+        [[ "$key" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] || continue
+        # Экспортируем переменную
+        export "$key=$value" 2>/dev/null || true
+    done < <(grep -v '^#' ../../.env | grep -v '^$')
+    set +a
 fi
 
 # Запускаем Backend
@@ -427,11 +494,23 @@ echo "🌐 Запуск Frontend..."
 if [ -f ".frontend.pid" ]; then
     OLD_PID=$(cat .frontend.pid)
     if kill -0 $OLD_PID 2>/dev/null; then
-        echo "🛑 Останавливаю предыдущий Frontend..."
-        kill $OLD_PID
+        echo "🛑 Останавливаю предыдущий Frontend (PID: $OLD_PID)..."
+        kill -TERM $OLD_PID 2>/dev/null || true
         sleep 2
+        # Принудительная остановка если не остановился
+        if kill -0 $OLD_PID 2>/dev/null; then
+            echo "   💀 Принудительная остановка..."
+            kill -KILL $OLD_PID 2>/dev/null || true
+        fi
     fi
     rm -f .frontend.pid
+fi
+
+# Дополнительная проверка порта 5173
+if lsof -ti :5173 >/dev/null 2>&1; then
+    echo "🛑 Останавливаю процессы на порту 5173..."
+    lsof -ti :5173 | xargs kill -KILL 2>/dev/null || true
+    sleep 1
 fi
 
 rm -f .frontend.log
