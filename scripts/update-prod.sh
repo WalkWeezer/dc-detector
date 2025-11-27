@@ -26,6 +26,12 @@ echo ""
 echo "📥 Обновление кода из git..."
 git pull
 
+# Удаляем frontend/dist если есть (чтобы гарантировать использование исходников)
+if [ -d "frontend/dist" ]; then
+    echo "🗑️  Удаление frontend/dist..."
+    rm -rf frontend/dist
+fi
+
 # Перезапускаем сервисы
 echo ""
 echo "🚀 Перезапуск сервисов..."
@@ -33,4 +39,7 @@ echo "🚀 Перезапуск сервисов..."
 
 echo ""
 echo "✅ Обновление завершено!"
+echo "💡 Если изменения не видны:"
+echo "   1. Очистите кеш браузера (Ctrl+F5)"
+echo "   2. Проверьте логи backend: tail -f .backend.log"
 

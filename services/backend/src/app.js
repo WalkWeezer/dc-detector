@@ -144,8 +144,8 @@ export function createApp() {
     res.setHeader('Pragma', 'no-cache')
     res.setHeader('Expires', '0')
     
-    // Пробуем найти статический файл
-    const staticMiddleware = express.static(frontendPath, { 
+    // Используем express.static, но с отключенным кешированием
+    express.static(frontendPath, { 
       maxAge: 0, // Без кеширования
       etag: false, // Отключаем ETag
       lastModified: false, // Отключаем Last-Modified
@@ -160,9 +160,7 @@ export function createApp() {
           // Игнорируем ошибки
         }
       }
-    })
-    
-    staticMiddleware(req, res, () => {
+    })(req, res, () => {
       // Если файл не найден - отдаем index.html (SPA fallback)
       const indexPath = path.join(frontendPath, 'index.html')
       if (!fs.existsSync(indexPath)) {
