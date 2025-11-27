@@ -74,7 +74,7 @@ kill_port() {
 
 kill_port 8001 "Detection Service"
 kill_port 8080 "Backend"
-kill_port 5173 "Frontend (Vite)"
+# Frontend больше не использует отдельный порт, отдается через Backend
 
 # Проверка .env
 if [ ! -f .env ]; then
@@ -486,61 +486,46 @@ echo "✅ Backend запущен (PID: $BACKEND_PID)"
 
 cd "$PROJECT_ROOT"
 
-# ЗАПУСК FRONTEND
+# ПОДГОТОВКА FRONTEND (отдается через Backend Express)
 echo ""
-echo "🌐 Запуск Frontend..."
+echo "🌐 Подготовка Frontend..."
 
-# Остановка предыдущего процесса Frontend
-if [ -f ".frontend.pid" ]; then
-    OLD_PID=$(cat .frontend.pid)
-    if kill -0 $OLD_PID 2>/dev/null; then
-        echo "🛑 Останавливаю предыдущий Frontend (PID: $OLD_PID)..."
-        kill -TERM $OLD_PID 2>/dev/null || true
-        sleep 2
-        # Принудительная остановка если не остановился
-        if kill -0 $OLD_PID 2>/dev/null; then
-            echo "   💀 Принудительная остановка..."
-            kill -KILL $OLD_PID 2>/dev/null || true
-        fi
-    fi
-    rm -f .frontend.pid
-fi
+# Очищаем старые файлы
+rm -f .frontend.pid .frontend.log .frontend-build.log
 
-# Дополнительная проверка порта 5173
-if lsof -ti :5173 >/dev/null 2>&1; then
-    echo "🛑 Останавливаю процессы на порту 5173..."
-    lsof -ti :5173 | xargs kill -KILL 2>/dev/null || true
-    sleep 1
-fi
-
-rm -f .frontend.log
-
-# Переходим в frontend
+# Frontend теперь отдается через Backend Express
+# Собираем фронтенд только если нужно (опционально, можно использовать исходники)
 cd frontend || {
-    echo "❌ Ошибка: не удалось перейти в frontend"
-    exit 1
+    echo "⚠️  Предупреждение: не удалось перейти в frontend, используем исходники"
+    cd "$PROJECT_ROOT"
 }
 
-# Проверяем наличие node_modules
-if [ ! -d "node_modules" ]; then
-    echo "📦 Установка зависимостей Frontend..."
+# Проверяем наличие node_modules (нужны только для сборки)
+if [ -d "frontend" ] && [ ! -d "frontend/node_modules" ] && [ -f "frontend/package.json" ]; then
+    echo "📦 Установка зависимостей Frontend (для сборки)..."
+    cd frontend
     npm install
+    cd "$PROJECT_ROOT"
 fi
 
-# Собираем Frontend для продакшена
-if [ ! -d "dist" ] || [ "dist/index.html" -ot "index.html" ] || [ "dist/index.html" -ot "app.js" ]; then
-    echo "🔨 Сборка Frontend..."
-    npm run build
+# Опциональная сборка фронтенда (для минификации/оптимизации)
+# Если dist не существует или устарел - собираем
+if [ -d "frontend" ] && [ -f "frontend/package.json" ]; then
+    if [ ! -d "frontend/dist" ] || [ "frontend/dist/index.html" -ot "frontend/index.html" ] 2>/dev/null; then
+        echo "🔨 Сборка Frontend (опционально, для оптимизации)..."
+        cd frontend
+        if npm run build 2>&1 | tee "../.frontend-build.log"; then
+            echo "✅ Frontend собран успешно"
+        else
+            echo "⚠️  Сборка фронтенда не удалась, используем исходники"
+        fi
+        cd "$PROJECT_ROOT"
+    else
+        echo "✅ Frontend уже собран, пропускаем сборку"
+    fi
 fi
 
-# Запускаем Frontend через Vite preview (или можно использовать простой HTTP сервер)
-echo "🚀 Запуск Frontend на порту 5173..."
-nohup npm run preview -- --host 0.0.0.0 --port 5173 > "../.frontend.log" 2>&1 &
-FRONTEND_PID=$!
-echo "$FRONTEND_PID" > "../.frontend.pid"
-echo "✅ Frontend запущен (PID: $FRONTEND_PID)"
-
-cd "$PROJECT_ROOT"
+echo "ℹ️  Frontend будет отдаваться через Backend Express на порту ${BACKEND_PORT:-8080}"
 
 echo "⏳ Ожидание запуска сервисов (5 секунд)..."
 sleep 5
@@ -571,8 +556,8 @@ check_service() {
 }
 
 check_service "http://localhost:8001/health" "Detection Service"
-check_service "http://localhost:8080/health" "Backend" 
-check_service "http://localhost:5173" "Frontend"
+check_service "http://localhost:8080/health" "Backend"
+# Frontend отдается через Backend, отдельная проверка не нужна
 
 # ИТОГИ
 echo ""
@@ -581,14 +566,14 @@ echo "✨ Система запущена!"
 echo "============================================================"
 echo ""
 echo "📍 Сервисы:"
-echo "   • Frontend:  http://localhost:5173"
-echo "   • Backend:   http://localhost:8080" 
+echo "   • Frontend:  http://localhost:${BACKEND_PORT:-8080} (отдается через Backend)"
+echo "   • Backend:   http://localhost:${BACKEND_PORT:-8080}" 
 echo "   • Detection: http://localhost:8001"
 echo ""
 echo "📋 Полезные команды:"
 echo "   • Логи Detection: tail -f .detection.log"
 echo "   • Логи Backend:   tail -f .backend.log"
-echo "   • Логи Frontend:  tail -f .frontend.log"
+echo "   • Логи Frontend (сборка):  tail -f .frontend-build.log (если была сборка)"
 echo "   • Остановка:      ./scripts/stop-prod.sh"
 echo "   • Перезапуск:     ./scripts/stop-prod.sh && ./scripts/start-prod.sh"
 echo ""

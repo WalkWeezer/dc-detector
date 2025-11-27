@@ -73,36 +73,9 @@ else
     fi
 fi
 
-# Остановка Frontend
-if [ -f .frontend.pid ]; then
-    FRONTEND_PID=$(cat .frontend.pid)
-    if ps -p $FRONTEND_PID > /dev/null 2>&1; then
-        echo "🛑 Остановка Frontend (PID: $FRONTEND_PID)..."
-        kill $FRONTEND_PID 2>/dev/null || true
-        sleep 1
-        if ps -p $FRONTEND_PID > /dev/null 2>&1; then
-            kill -9 $FRONTEND_PID 2>/dev/null || true
-        fi
-        echo "✅ Frontend остановлен"
-    else
-        echo "⚠️  Frontend уже не запущен"
-    fi
-    rm -f .frontend.pid
-else
-    # Пытаемся найти процесс по порту
-    if lsof -Pi :5173 -sTCP:LISTEN -t >/dev/null 2>&1; then
-        PID=$(lsof -Pi :5173 -sTCP:LISTEN -t 2>/dev/null | head -1)
-        if [ ! -z "$PID" ]; then
-            echo "🛑 Остановка Frontend (PID: $PID)..."
-            kill $PID 2>/dev/null || true
-            sleep 1
-            if ps -p $PID > /dev/null 2>&1; then
-                kill -9 $PID 2>/dev/null || true
-            fi
-            echo "✅ Frontend остановлен"
-        fi
-    fi
-fi
+# Frontend больше не запускается отдельно, отдается через Backend
+# Очищаем старые PID файлы если есть
+rm -f .frontend.pid
 
 echo ""
 echo "✨ Все сервисы остановлены"

@@ -3,6 +3,7 @@ import cors from 'cors'
 import morgan from 'morgan'
 import path from 'node:path'
 import { Readable } from 'node:stream'
+import fs from 'node:fs'
 import { config } from './config.js'
 import { detectionsRouter, detectionStatusHandler } from './routes/detections.js'
 import { internalRouter } from './routes/internal.js'
@@ -106,6 +107,32 @@ export function createApp() {
   // Раздача файлов данных (графики, сохраненные гифки и т.д.)
   const dataRoot = path.resolve(process.cwd(), 'data')
   app.use('/files', express.static(dataRoot, { fallthrough: true, index: false }))
+
+  // Раздача статики фронтенда (для продакшена)
+  // Проверяем наличие собранного фронтенда (dist) или исходников
+  const frontendDist = path.resolve(process.cwd(), '../../frontend/dist')
+  const frontendSrc = path.resolve(process.cwd(), '../../frontend')
+  
+  // Если есть собранный dist - используем его, иначе исходники
+  const frontendPath = fs.existsSync(frontendDist) ? frontendDist : frontendSrc
+  
+  // Статика фронтенда (CSS, JS, изображения) - только для не-API запросов
+  app.use((req, res, next) => {
+    // Пропускаем API и внутренние маршруты
+    if (req.path.startsWith('/api/') || req.path.startsWith('/internal/') || req.path.startsWith('/files/')) {
+      return next()
+    }
+    // Для остальных - пробуем найти статический файл
+    express.static(frontendPath, { 
+      maxAge: '1d',
+      etag: true,
+      lastModified: true,
+      fallthrough: true
+    })(req, res, () => {
+      // Если файл не найден - отдаем index.html (SPA fallback)
+      res.sendFile(path.join(frontendPath, 'index.html'))
+    })
+  })
 
   // eslint-disable-next-line no-unused-vars
   app.use((err, _req, res, _next) => {
