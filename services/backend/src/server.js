@@ -4,8 +4,9 @@ import { startAutoTargetSelection } from './utils/autoTargetManager.js'
 import { startAutoSave } from './utils/autoSaveManager.js'
 
 const app = createApp()
-app.listen(config.port, async () => {
-  console.log(`Backend listening on :${config.port}`)
+// Слушаем на всех интерфейсах (0.0.0.0) для доступа извне
+app.listen(config.port, '0.0.0.0', async () => {
+  console.log(`Backend listening on 0.0.0.0:${config.port}`)
   console.log(`Detection Service URL: ${config.detectionServiceUrl}`)
   console.log(`Detections data directory: ${config.detectionsDataDir}`)
   

@@ -116,6 +116,11 @@ export function createApp() {
   // Если есть собранный dist - используем его, иначе исходники
   const frontendPath = fs.existsSync(frontendDist) ? frontendDist : frontendSrc
   
+  // Логирование для отладки
+  console.log(`📁 Frontend path: ${frontendPath}`)
+  console.log(`   Dist exists: ${fs.existsSync(frontendDist)}`)
+  console.log(`   Src exists: ${fs.existsSync(frontendSrc)}`)
+  
   // Статика фронтенда (CSS, JS, изображения) - только для не-API запросов
   app.use((req, res, next) => {
     // Пропускаем API и внутренние маршруты
