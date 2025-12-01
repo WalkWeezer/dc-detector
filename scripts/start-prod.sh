@@ -396,13 +396,19 @@ DETECTION_PID=$!
 echo "$DETECTION_PID" > "../../.detection.pid"
 echo "✅ Detection Service запущен (PID: $DETECTION_PID)"
 
-# Ждем инициализации
-echo "⏳ Ожидание инициализации (12 секунд)..."
-sleep 12
+# Ждем инициализации (значения можно переопределить через переменные окружения)
+DETECTION_START_INITIAL_SLEEP=${DETECTION_START_INITIAL_SLEEP:-12}
+DETECTION_HEALTH_ATTEMPTS=${DETECTION_HEALTH_ATTEMPTS:-8}
+DETECTION_HEALTH_DELAY=${DETECTION_HEALTH_DELAY:-10}
 
-# Проверка работоспособности с повторными попытками — после перезагрузки железо может прогреваться дольше
-MAX_ATTEMPTS=5
-ATTEMPT_DELAY=10
+if [ "$DETECTION_START_INITIAL_SLEEP" -gt 0 ]; then
+    echo "⏳ Ожидание инициализации (${DETECTION_START_INITIAL_SLEEP} секунд)..."
+    sleep "$DETECTION_START_INITIAL_SLEEP"
+fi
+
+# Проверка работоспособности с повторными попытками — после перезагрузки железо и камера могут прогреваться дольше
+MAX_ATTEMPTS=$DETECTION_HEALTH_ATTEMPTS
+ATTEMPT_DELAY=$DETECTION_HEALTH_DELAY
 ATTEMPT=1
 DETECTION_OK=false
 

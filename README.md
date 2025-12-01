@@ -175,14 +175,15 @@ sudo raspi-config
 
 ## 🔄 Автозапуск (systemd)
 
-Самый простой способ — использовать один systemd сервис, который запускает скрипт `start-prod.sh`:
+Самый простой способ — использовать один systemd сервис, который запускает скрипт `start-prod.sh`. Теперь сервис можно настраивать через отдельный `.env`.
 
 ```bash
 # 1. Копируем service файл
 sudo cp systemd/dc-detector.service /etc/systemd/system/
 
-# 2. Обновляем путь в сервисе (замените на ваш путь к проекту)
-sudo sed -i 's|/opt/dc-detector|/home/pi/dc-detector|g' /etc/systemd/system/dc-detector.service
+# 2. (Рекомендуется) создаём /etc/dc-detector.env из примера и указываем путь к репозиторию
+sudo cp systemd/dc-detector.env.example /etc/dc-detector.env
+sudo nano /etc/dc-detector.env   # PROJECT_ROOT=/home/pi/dc-detector и т.д.
 
 # 3. Убедитесь, что скрипты исполняемые
 chmod +x scripts/start-prod.sh scripts/stop-prod.sh
@@ -192,6 +193,10 @@ sudo systemctl daemon-reload
 sudo systemctl enable dc-detector.service
 sudo systemctl start dc-detector.service
 ```
+
+Что делает env-файл:
+- `PROJECT_ROOT` — абсолютный путь до репозитория (если оставить пустым, по умолчанию `/opt/dc-detector`).
+- `DETECTION_START_INITIAL_SLEEP`, `DETECTION_HEALTH_ATTEMPTS`, `DETECTION_HEALTH_DELAY` — управления ожиданием запуска сервиса детекции после перезагрузки (можно увеличить, если камера поднимается долго).
 
 **Управление:**
 ```bash
