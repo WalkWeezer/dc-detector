@@ -14,12 +14,12 @@ Environment=DETECTION_HEALTH_DELAY=10
 Environment="DEBIAN_FRONTEND=noninteractive"
 Environment="SYSTEMD=1"
 EnvironmentFile=-/etc/dc-detector.env
-WorkingDirectory=%E{PROJECT_ROOT}
+WorkingDirectory=/ # путь уточняется в ExecStart через PROJECT_ROOT
 # Даём системе прогреться перед запуском
 ExecStartPre=/bin/sleep 15
-# Запуск и остановка скриптов управления
-ExecStart=/bin/bash %E{PROJECT_ROOT}/scripts/start-prod.sh
-ExecStop=/bin/bash %E{PROJECT_ROOT}/scripts/stop-prod.sh
+# Запуск и остановка скриптов управления через bash, чтобы подставить PROJECT_ROOT
+ExecStart=/bin/bash -c 'ROOT="${PROJECT_ROOT:-/opt/dc-detector}"; cd "$ROOT" && /bin/bash scripts/start-prod.sh'
+ExecStop=/bin/bash -c 'ROOT="${PROJECT_ROOT:-/opt/dc-detector}"; cd "$ROOT" && /bin/bash scripts/stop-prod.sh'
 StandardOutput=journal
 StandardError=journal
 # Перезапускаем, если скрипт завершился с ошибкой (например, камера не успела подняться)
