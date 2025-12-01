@@ -400,9 +400,25 @@ echo "✅ Detection Service запущен (PID: $DETECTION_PID)"
 echo "⏳ Ожидание инициализации (12 секунд)..."
 sleep 12
 
-# Проверка работоспособности
-echo "🔍 Проверка работоспособности..."
-if curl -s --connect-timeout 5 http://localhost:8001/health >/dev/null; then
+# Проверка работоспособности с повторными попытками — после перезагрузки железо может прогреваться дольше
+MAX_ATTEMPTS=5
+ATTEMPT_DELAY=10
+ATTEMPT=1
+DETECTION_OK=false
+
+echo "🔍 Проверка работоспособности (до $MAX_ATTEMPTS попыток)..."
+while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+    if curl -s --connect-timeout 5 http://localhost:8001/health >/dev/null; then
+        DETECTION_OK=true
+        break
+    fi
+
+    echo "   ⚠️  Попытка $ATTEMPT/$MAX_ATTEMPTS: Detection Service ещё не отвечает, ждем $ATTEMPT_DELAY с..."
+    sleep $ATTEMPT_DELAY
+    ATTEMPT=$((ATTEMPT + 1))
+done
+
+if [ "$DETECTION_OK" = true ]; then
     echo "✅ Detection Service работает"
     
     # Проверка камеры
@@ -414,11 +430,12 @@ if curl -s --connect-timeout 5 http://localhost:8001/health >/dev/null; then
         tail -25 "../../.detection.log"
     fi
 else
-    echo "❌ Detection Service не отвечает"
+    echo "❌ Detection Service не отвечает после $MAX_ATTEMPTS попыток"
     echo "📋 Логи:"
     tail -10 "../../.detection.log"
     echo "💡 Попробуйте запустить вручную:"
     echo "   cd services/detection && source ../../venv/bin/activate && python detection_server.py"
+    exit 1
 fi
 
 cd "$PROJECT_ROOT"
