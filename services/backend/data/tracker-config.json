@@ -21,7 +21,7 @@
   },
   "autoSave": {
     "enabled": true,
-    "minConfidence": 0.8,
+    "minConfidence": 0.65,
     "minHits": 5,
     "delay": 1000
   }

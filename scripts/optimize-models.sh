@@ -7,6 +7,29 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 MODELS_DIR="$PROJECT_ROOT/services/detection/models"
 PYTHON_SCRIPT="$PROJECT_ROOT/services/detection/scripts/optimize_models.py"
+PYTHON_CMD=()
+
+PYTHON_CANDIDATES=("python3" "python")
+for candidate in "${PYTHON_CANDIDATES[@]}"; do
+    BIN_PATH="$(command -v "$candidate" 2>/dev/null || true)"
+    if [ -n "$BIN_PATH" ]; then
+        if [[ "$BIN_PATH" == *"Microsoft/WindowsApps/"* ]]; then
+            # Пропускаем ярлык Microsoft Store без реального Python
+            continue
+        fi
+        PYTHON_CMD=("$candidate")
+        break
+    fi
+done
+
+if [ ${#PYTHON_CMD[@]} -eq 0 ] && command -v py >/dev/null 2>&1; then
+    PYTHON_CMD=("py" "-3")
+fi
+
+if [ ${#PYTHON_CMD[@]} -eq 0 ]; then
+    echo "❌ Не найден исполняемый файл Python 3 (python3/python/py)"
+    exit 1
+fi
 
 echo "🔍 Поиск моделей в $MODELS_DIR"
 
@@ -43,7 +66,7 @@ for MODEL in $MODELS; do
     fi
     
     echo "🔄 Конвертация $MODEL_NAME в ONNX..."
-    python3 "$PYTHON_SCRIPT" "$MODEL" --output "$ONNX_PATH" --imgsz 640
+    "${PYTHON_CMD[@]}" "$PYTHON_SCRIPT" "$MODEL" --output "$ONNX_PATH" --imgsz 640
     
     if [ $? -eq 0 ]; then
         echo "✅ $MODEL_NAME успешно конвертирована"
@@ -54,4 +77,5 @@ for MODEL in $MODELS; do
 done
 
 echo "✨ Готово!"
+
 
