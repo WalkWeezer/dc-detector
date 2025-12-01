@@ -393,7 +393,7 @@ async function toRgbaBufferCropped(jpegBuffer, cropRect, targetWidth) {
   return { width: decoded.width, height: decoded.height, data: decoded.data }
 }
 
-export async function saveUserDetection({ detection, frames = [], fps = 5 }) {
+export async function saveUserDetection({ detection, frames = [], fps = 20 }) {
   if (!detection || !Array.isArray(frames) || frames.length === 0) {
     throw new Error('detection and frames are required')
   }

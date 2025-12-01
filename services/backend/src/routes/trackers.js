@@ -8,7 +8,7 @@ export const trackersRouter = express.Router()
 
 trackersRouter.get('/', async (_req, res) => {
   try {
-    const detectionTrackers = await callDetectionJson('/api/trackers')
+    const detectionTrackers = await callDetectionJson('/api/trackers', {}, 10000)
     const trackers = Array.isArray(detectionTrackers.trackers) ? detectionTrackers.trackers : []
     const names = await listTrackerNames()
     const enriched = trackers.map((tracker) => {

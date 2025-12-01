@@ -247,7 +247,7 @@ detectionsRouter.post('/save', async (req, res) => {
     const { detection, frames, fps, trackId, name } = req.body ?? {}
 
     if (detection && Array.isArray(frames) && frames.length > 0) {
-      const payload = await saveUserDetection({ detection, frames, fps: Number(fps) || 5 })
+      const payload = await saveUserDetection({ detection, frames, fps: Number(fps) || 20 })
       return res.status(201).json(payload)
     }
 
@@ -303,7 +303,7 @@ detectionsRouter.post('/save', async (req, res) => {
     const payload = await saveUserDetection({
       detection: detectionPayload,
       frames: cachedFrames,
-      fps: Number(fps) || trackerConfig.capture_fps || 8
+      fps: Number(fps) || trackerConfig.capture_fps || 20
     })
     res.status(201).json(payload)
   } catch (err) {

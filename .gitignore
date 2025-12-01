@@ -35,6 +35,8 @@ Thumbs.db
 archive/
 
 # Runtime data
+data/
+**/data/
 data/detections/saved/*.json
 
 # Node/NPM

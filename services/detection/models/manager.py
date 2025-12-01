@@ -32,7 +32,13 @@ class ModelManager:
         except Exception as exc:
             logger.warning('Не удалось создать каталог моделей %s: %s', self.models_dir, exc)
         
-        models = sorted({Path(path).name for path in glob.glob(str(self.models_dir / '*.pt'))})
+        # Ищем модели в форматах .pt и .onnx (YOLO поддерживает оба)
+        pt_models = {Path(path).name for path in glob.glob(str(self.models_dir / '*.pt'))}
+        onnx_models = {Path(path).name for path in glob.glob(str(self.models_dir / '*.onnx'))}
+        # Исключаем .onnx.data файлы (вспомогательные файлы ONNX)
+        onnx_models = {name for name in onnx_models if not name.endswith('.onnx.data')}
+        
+        models = sorted(pt_models | onnx_models)
         self._available_models = models
         return models
     

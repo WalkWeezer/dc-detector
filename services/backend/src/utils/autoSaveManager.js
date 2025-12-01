@@ -157,7 +157,7 @@ async function autoSaveTracker(trackId, tracker, trackerConfig, autoSaveConfig, 
   }
   
   // Сохраняем
-  const fps = trackerConfig.capture_fps || 8
+  const fps = trackerConfig.capture_fps || 20
   await saveUserDetection({
     detection: detectionPayload,
     frames: cachedFrames,

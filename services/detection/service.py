@@ -183,6 +183,8 @@ class DetectionService:
                 "error": "Model manager not initialized",
             }
         try:
+            # Обновляем список моделей перед возвратом (чтобы подхватить новые ONNX модели)
+            self.model_manager.refresh_available_models()
             available = self.model_manager.get_available_models()
             active = self.model_manager.get_active_model()
             return {"available_models": available, "active_model": active}
@@ -255,8 +257,6 @@ class DetectionService:
                 self.tracker,
                 self.tracker_lock,
                 confidence_threshold=self.config.confidence_threshold,
-                input_size=self.config.input_size,
-                draw_detections=self.config.draw_detections,
             )
             logger.info("Inference engine инициализирован")
         except Exception as exc:

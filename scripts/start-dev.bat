@@ -1,242 +1,315 @@
 @echo off
-chcp 65001 >nul
+chcp 65001 >nul 2>&1
 setlocal enabledelayedexpansion
+goto :main
 
-REM Безопасная инициализация переменных для Windows
-set "ERROR_OCCURRED=0"
+:wait_for_service
+setlocal EnableDelayedExpansion
+set "SERVICE_NAME=%~1"
+set "SERVICE_URL=%~2"
+set "MAX_RETRIES=%~3"
+set "RETRY_DELAY=%~4"
+if not defined SERVICE_NAME set "SERVICE_NAME=Service"
+if not defined SERVICE_URL set "SERVICE_URL=http://localhost"
+if not defined MAX_RETRIES set "MAX_RETRIES=10"
+if not defined RETRY_DELAY set "RETRY_DELAY=2"
+set /a ATTEMPT=1
+:wait_for_service_loop
+powershell -NoProfile -Command "try { Invoke-WebRequest -Uri '%SERVICE_URL%' -UseBasicParsing -TimeoutSec 3 | Out-Null; exit 0 } catch { exit 1 }" >nul 2>&1
+if errorlevel 1 (
+    if !ATTEMPT! geq !MAX_RETRIES! (
+        echo [WARNING] %SERVICE_NAME% is not responding after !MAX_RETRIES! attempts, check logs.
+        endlocal & exit /b 1
+    )
+    timeout /t !RETRY_DELAY! /nobreak >nul
+    set /a ATTEMPT+=1
+    goto :wait_for_service_loop
+) else (
+    echo [OK] %SERVICE_NAME% is responding
+    endlocal & exit /b 0
+)
 
-REM Универсальный старт для разработки на Windows/Wsl2
-REM Запускает Detection Service, Backend, Frontend (Vite)
+:main
 
 set "SCRIPT_DIR=%~dp0"
 set "PROJECT_ROOT=%SCRIPT_DIR%.."
 
 echo.
-echo [START] Запуск DC-Detector для разработки (Windows/Wsl2)
+echo [START] Starting DC-Detector development environment
 echo.
 
-REM Переходим в корень проекта
 cd /d "%PROJECT_ROOT%"
+if errorlevel 1 (
+    echo [ERROR] Failed to change to project root: %PROJECT_ROOT%
+    echo.
+    echo Press any key to exit...
+    pause
+    if errorlevel 1 pause
+    goto :error_exit
+)
 
-REM Проверяем окружение
-echo [CHECK] Проверяем окружение...
+echo [CHECK] Checking environment...
 echo.
 
-REM Проверяем Python
 python --version >nul 2>&1
 if errorlevel 1 (
-    echo [ERROR] Python не найден. Установите Python 3.11+
+    echo [ERROR] Python not found. Install Python 3.11+
     echo.
-    echo Нажмите любую клавишу для выхода...
-    pause >nul
-    exit /b 1
+    echo Press any key to exit...
+    pause
+    if errorlevel 1 pause
+    goto :error_exit
 ) else (
     for /f "tokens=*" %%i in ('python --version 2^>^&1') do echo [OK] Python: %%i
 )
 
-REM Проверяем Node.js
 node --version >nul 2>&1
 if errorlevel 1 (
-    echo [ERROR] Node.js не найден. Установите Node.js 20+
+    echo [ERROR] Node.js not found. Install Node.js 20+
     echo.
-    echo Нажмите любую клавишу для выхода...
-    pause >nul
-    exit /b 1
+    echo Press any key to exit...
+    pause
+    if errorlevel 1 pause
+    goto :error_exit
 ) else (
     for /f "tokens=*" %%i in ('node --version') do echo [OK] Node.js: %%i
 )
 
-REM Проверяем порты
 echo.
-echo [CHECK] Проверяем состояние портов...
+echo [CHECK] Checking ports...
 echo.
 
 set PORTS_IN_USE=0
 netstat -an | findstr ":8001" >nul 2>&1
 if not errorlevel 1 (
-    echo [WARNING] Порт 8001 (Detection Service) занят
+    echo [WARNING] Port 8001 ^(Detection Service^) is in use
     set PORTS_IN_USE=1
 ) else (
-    echo [OK] Порт 8001 свободен
+    echo [OK] Port 8001 is free
 )
 
 netstat -an | findstr ":8080" >nul 2>&1
 if not errorlevel 1 (
-    echo [WARNING] Порт 8080 (Backend) занят
+    echo [WARNING] Port 8080 ^(Backend^) is in use
     set PORTS_IN_USE=1
 ) else (
-    echo [OK] Порт 8080 свободен
+    echo [OK] Port 8080 is free
 )
 
 netstat -an | findstr ":5173" >nul 2>&1
 if not errorlevel 1 (
-    echo [WARNING] Порт 5173 (Frontend) занят
+    echo [WARNING] Port 5173 ^(Frontend^) is in use
     set PORTS_IN_USE=1
 ) else (
-    echo [OK] Порт 5173 свободен
+    echo [OK] Port 5173 is free
 )
 
 if !PORTS_IN_USE!==1 (
     echo.
-    echo [WARNING] Некоторые порты заняты. Остановите процессы или измените порты.
-    set /p CONTINUE="Продолжить запуск? (y/n): "
+    echo [WARNING] Some ports are in use. Stop processes or change ports.
+    set /p CONTINUE="Continue? (y/n): "
     if /i not "!CONTINUE!"=="y" (
         echo.
-        echo Нажмите любую клавишу для выхода...
-        pause >nul
-        exit /b 1
+        echo Press any key to exit...
+        pause
+        if errorlevel 1 pause
+        goto :error_exit
     )
 )
 
-REM Проверяем зависимости Detection Service
 echo.
-echo [CHECK] Проверяем зависимости Detection Service...
+echo [CHECK] Checking Detection Service dependencies...
 set "DETECTION_DIR=%PROJECT_ROOT%\services\detection"
 if not exist "%DETECTION_DIR%" (
-    echo [ERROR] Каталог services\detection не найден
+    echo [ERROR] Directory services\detection not found
     echo.
-    echo Нажмите любую клавишу для выхода...
-    pause >nul
-    exit /b 1
+    echo Press any key to exit...
+    pause
+    if errorlevel 1 pause
+    goto :error_exit
 )
 
 cd /d "%DETECTION_DIR%"
 python -c "import flask" >nul 2>&1
 if errorlevel 1 (
-    echo [WARN] Flask не установлен. Устанавливаем...
+    echo [WARN] Flask not installed. Installing...
     pip install -q flask
 ) else (
-    echo [OK] Flask установлен
+    echo [OK] Flask is installed
 )
 
-REM Проверяем зависимости Backend
 echo.
-echo [CHECK] Проверяем зависимости Backend...
+echo [CHECK] Checking Backend dependencies...
 set "BACKEND_DIR=%PROJECT_ROOT%\services\backend"
 if not exist "%BACKEND_DIR%" (
-    echo [ERROR] Каталог services\backend не найден
+    echo [ERROR] Directory services\backend not found
     echo.
-    echo Нажмите любую клавишу для выхода...
-    pause >nul
-    exit /b 1
+    echo Press any key to exit...
+    pause
+    if errorlevel 1 pause
+    goto :error_exit
 )
 
 cd /d "%BACKEND_DIR%"
 if not exist "node_modules" (
-    echo [WARN] node_modules отсутствует. Устанавливаем зависимости...
+    echo [WARN] node_modules missing. Installing dependencies...
     call npm install
 ) else (
-    echo [OK] Зависимости Backend установлены
+    echo [OK] Backend dependencies installed
 )
 
-REM Проверяем зависимости Frontend
 echo.
-echo [CHECK] Проверяем зависимости Frontend...
+echo [CHECK] Checking Frontend dependencies...
 set "FRONTEND_DIR=%PROJECT_ROOT%\frontend"
 if not exist "%FRONTEND_DIR%" (
-    echo [ERROR] Каталог frontend не найден
+    echo [ERROR] Directory frontend not found
     echo.
-    echo Нажмите любую клавишу для выхода...
-    pause >nul
-    exit /b 1
+    echo Press any key to exit...
+    pause
+    if errorlevel 1 pause
+    goto :error_exit
 )
 
 cd /d "%FRONTEND_DIR%"
 if not exist "node_modules" (
-    echo [WARN] node_modules отсутствует. Устанавливаем зависимости...
+    echo [WARN] node_modules missing. Installing dependencies...
     call npm install
 ) else (
-    echo [OK] Зависимости Frontend установлены
+    echo [OK] Frontend dependencies installed
 )
 
-REM Создаём файл для хранения PID процессов
 set "PIDS_FILE=%PROJECT_ROOT%\.dev-pids.txt"
 if exist "%PIDS_FILE%" del /f /q "%PIDS_FILE%"
 
-REM Запускаем Detection Service
 echo.
-echo [START] Запускаем Detection Service...
+echo [START] Starting Detection Service...
 cd /d "%DETECTION_DIR%"
 if not exist "detection_server.py" (
-    echo [ERROR] Файл detection_server.py не найден в %DETECTION_DIR%
+    echo [ERROR] File detection_server.py not found in %DETECTION_DIR%
     echo.
-    echo Нажмите любую клавишу для выхода...
-    pause >nul
-    exit /b 1
+    echo Press any key to exit...
+    pause
+    if errorlevel 1 pause
+    goto :error_exit
 )
-start "DC-Detector Detection Service" /min cmd /c "python detection_server.py > %PROJECT_ROOT%\.detection-output.log 2>&1"
-timeout /t 2 /nobreak >nul
-
-REM Проверяем Detection Service
-powershell -NoProfile -Command "try { $response = Invoke-WebRequest -Uri 'http://localhost:8001/health' -UseBasicParsing -TimeoutSec 2; Write-Host 'OK Detection Service работает' -ForegroundColor Green } catch { Write-Host 'WARNING Detection Service не отвечает, проверьте логи' -ForegroundColor Yellow }" 2>nul
+start "DC-Detector Detection Service" /min cmd /c "cd /d \"%DETECTION_DIR%\" && python detection_server.py > \"%PROJECT_ROOT%\.detection-output.log\" 2>&1"
 if errorlevel 1 (
-    echo WARNING Detection Service не отвечает, проверьте логи
+    echo [ERROR] Failed to start Detection Service
+    echo Check logs: %PROJECT_ROOT%\.detection-output.log
+    echo.
+    echo Press any key to exit...
+    pause
+    if errorlevel 1 pause
+    goto :error_exit
+)
+timeout /t 3 /nobreak >nul
+call :wait_for_service "Detection service" "http://localhost:8001/health" 15 3
+if errorlevel 1 (
+    echo [WARNING] Detection service still not responding, check logs: .detection-output.log
 )
 
-REM Запускаем Backend
 echo.
-echo [START] Запускаем Backend...
+echo [START] Starting Backend...
 cd /d "%BACKEND_DIR%"
 if not exist "src\server.js" (
-    echo [ERROR] Файл src\server.js не найден в %BACKEND_DIR%
+    echo [ERROR] File src\server.js not found in %BACKEND_DIR%
     echo.
-    echo Нажмите любую клавишу для выхода...
-    pause >nul
-    exit /b 1
+    echo Press any key to exit...
+    pause
+    if errorlevel 1 pause
+    goto :error_exit
 )
-start "DC-Detector Backend" /min cmd /c "node src\server.js > %PROJECT_ROOT%\.backend-output.log 2>&1"
-timeout /t 2 /nobreak >nul
-
-REM Проверяем Backend
-powershell -NoProfile -Command "try { $response = Invoke-WebRequest -Uri 'http://localhost:8080/health' -UseBasicParsing -TimeoutSec 2; Write-Host 'OK Backend работает' -ForegroundColor Green } catch { Write-Host 'WARNING Backend не отвечает, проверьте логи' -ForegroundColor Yellow }" 2>nul
+start "DC-Detector Backend" /min cmd /c "cd /d \"%BACKEND_DIR%\" && node src\server.js > \"%PROJECT_ROOT%\.backend-output.log\" 2>&1"
 if errorlevel 1 (
-    echo WARNING Backend не отвечает, проверьте логи
+    echo [ERROR] Failed to start Backend
+    echo Check logs: %PROJECT_ROOT%\.backend-output.log
+    echo.
+    echo Press any key to exit...
+    pause
+    if errorlevel 1 pause
+    goto :error_exit
+)
+timeout /t 3 /nobreak >nul
+call :wait_for_service "Backend API" "http://localhost:8080/health" 10 2
+if errorlevel 1 (
+    echo [WARNING] Backend API still not responding, check logs: .backend-output.log
 )
 
-REM Запускаем Frontend (Vite)
 echo.
-echo [START] Запускаем Frontend (Vite)...
+echo [START] Starting Frontend (Vite)...
 cd /d "%FRONTEND_DIR%"
 if not exist "package.json" (
-    echo [ERROR] Файл package.json не найден в %FRONTEND_DIR%
+    echo [ERROR] File package.json not found in %FRONTEND_DIR%
     echo.
-    echo Нажмите любую клавишу для выхода...
-    pause >nul
-    exit /b 1
+    echo Press any key to exit...
+    pause
+    if errorlevel 1 pause
+    goto :error_exit
 )
-start "DC-Detector Frontend" /min cmd /c "npx vite > %PROJECT_ROOT%\.frontend-output.log 2>&1"
-timeout /t 3 /nobreak >nul
+start "DC-Detector Frontend" /min cmd /c "cd /d \"%FRONTEND_DIR%\" && npx vite > \"%PROJECT_ROOT%\.frontend-output.log\" 2>&1"
+if errorlevel 1 (
+    echo [ERROR] Failed to start Frontend
+    echo Check logs: %PROJECT_ROOT%\.frontend-output.log
+    echo.
+    echo Press any key to exit...
+    pause
+    if errorlevel 1 pause
+    goto :error_exit
+)
+timeout /t 4 /nobreak >nul
+call :wait_for_service "Frontend dev server" "http://localhost:5173" 10 2
+if errorlevel 1 (
+    echo [WARNING] Frontend dev server still not responding, check logs: .frontend-output.log
+)
 
-REM Результаты запуска
 echo.
 echo ============================================================
-echo [SUCCESS] Все сервисы запущены!
+echo [SUCCESS] All services started!
 echo ============================================================
 echo.
-echo [INFO] Точки входа:
+echo [INFO] Entry points:
 echo    - Frontend (Vite):    http://localhost:5173
 echo    - Backend API:        http://localhost:8080
 echo    - Detection Service:  http://localhost:8001
 echo.
-echo [INFO] Полезные ссылки:
+echo [INFO] Useful links:
 echo    - Health Check (Backend):     http://localhost:8080/health
 echo    - Health Check (Detection):   http://localhost:8001/health
 echo    - API Status:                 http://localhost:8080/api/detections/status
 echo    - Video Stream:               http://localhost:8001/video_feed_raw
 echo.
-echo [STOP] Чтобы остановить все процессы:
-echo    Выполните: .\scripts\stop-dev.bat
+echo [STOP] To stop all processes:
+echo    Run: .\scripts\stop-dev.bat
 echo.
-echo [LOGS] Логи сервисов:
+echo [LOGS] Service logs:
 echo    - Detection: .detection-output.log
 echo    - Backend:   .backend-output.log
 echo    - Frontend:  .frontend-output.log
 echo.
-echo Все процессы запущены в отдельных окнах.
+echo All processes are running in separate windows.
 echo.
-echo [WARNING] Внимание: не закрывайте это окно! Для корректной остановки используйте stop-dev.bat.
+echo [WARNING] Do not close this window^! Use stop-dev.bat to stop services.
 echo.
-echo Нажмите любую клавишу для завершения (окна сервисов останутся открыты)...
-timeout /t 2 /nobreak >nul
+echo ============================================================
+echo Press any key to finish (service windows will remain open)...
+echo ============================================================
+echo.
 pause
+if errorlevel 1 pause
+exit /b 0
 
+:error_exit
+echo.
+echo ============================================================
+echo [ERROR] Script execution failed
+echo ============================================================
+echo.
+echo Check error messages above.
+echo.
+echo Press any key to exit (window will stay open)...
+pause
+if errorlevel 1 pause
+echo.
+echo Window will stay open. Type 'exit' to close.
+cmd /k
+exit /b 1
