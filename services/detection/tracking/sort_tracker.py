@@ -30,7 +30,7 @@ def iou(box_a: np.ndarray, box_b: np.ndarray) -> float:
     return intersection / union
 
 
-@dataclass(slots=True)
+@dataclass
 class Track:
     track_id: int
     bbox: np.ndarray
@@ -77,8 +77,6 @@ class Track:
 
 
 class SortTracker:
-    __slots__ = ('iou_threshold', 'max_age', 'min_hits', 'tracks', '_next_id')
-    
     def __init__(self, iou_threshold: float = 0.3, max_age: int = 5, min_hits: int = 1):
         self.iou_threshold = iou_threshold
         self.max_age = max_age
@@ -101,7 +99,6 @@ class SortTracker:
         return self._next_id
 
     def _match_tracks(self, detections: List[dict]) -> tuple[list[tuple[int, int]], set[int], set[int]]:
-        """Упрощенный матчинг: только текущий bbox, без предсказаний"""
         unmatched_tracks = set(range(len(self.tracks)))
         unmatched_detections = set(range(len(detections)))
         matches: list[tuple[int, int]] = []
@@ -109,11 +106,6 @@ class SortTracker:
         if not detections or not self.tracks:
             return matches, unmatched_tracks, unmatched_detections
 
-        # Используем numpy операции для векторизации вычислений IOU
-        detections_bboxes = np.array([det['bbox'] for det in detections], dtype=float)
-        tracks_bboxes = np.array([track.bbox for track in self.tracks], dtype=float)
-        
-        # Вычисляем IOU матрицу (упрощенная версия, только для текущих bbox)
         for det_index, det in enumerate(detections):
             bbox_det = np.asarray(det['bbox'], dtype=float)
             best_iou = 0.0
@@ -121,8 +113,27 @@ class SortTracker:
 
             for track_index in list(unmatched_tracks):
                 current_track = self.tracks[track_index]
-                # Только IOU с текущим bbox трека (без предсказаний)
-                score = iou(current_track.bbox, bbox_det)
+
+                # 1) IOU с текущим bbox трека
+                score_current = iou(current_track.bbox, bbox_det)
+
+                # 2) IOU с предсказанной позицией (простая линейная модель скорости)
+                score_predicted = 0.0
+                if len(current_track.history) >= 2:
+                    prev = current_track.history[-2]
+                    curr = current_track.history[-1]
+                    velocity = curr - prev
+                    predicted = current_track.bbox + velocity
+                    score_predicted = iou(predicted, bbox_det) * 0.85  # слегка меньший вес
+
+                # 3) IOU со средним bbox последних точек
+                score_avg = 0.0
+                if len(current_track.history) >= 3:
+                    recent = current_track.history[-3:]
+                    avg_bbox = np.mean(recent, axis=0)
+                    score_avg = iou(avg_bbox, bbox_det) * 0.8
+
+                score = max(score_current, score_predicted, score_avg)
 
                 if score > best_iou:
                     best_iou = score

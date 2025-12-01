@@ -10,21 +10,15 @@ from ..tracking.sort_tracker import SortTracker
 
 logger = logging.getLogger(__name__)
 
-# Дефолтный порог уверенности
-DEFAULT_CONFIDENCE_THRESHOLD = 0.5
-
 
 class InferenceEngine:
     """Класс для инференса детекций"""
-    __slots__ = ('model_manager', 'tracker', 'tracker_lock', 'confidence_threshold', 'input_size', 'draw_detections')
     
-    def __init__(self, model_manager, tracker: SortTracker, tracker_lock, confidence_threshold: Optional[float] = None, input_size: Optional[int] = None, draw_detections: bool = True):
+    def __init__(self, model_manager, tracker: SortTracker, tracker_lock, confidence_threshold: Optional[float] = None):
         self.model_manager = model_manager
         self.tracker = tracker
         self.tracker_lock = tracker_lock
-        self.confidence_threshold = confidence_threshold or DEFAULT_CONFIDENCE_THRESHOLD
-        self.input_size = input_size  # Размер для ресайза перед инференсом (None = без ресайза)
-        self.draw_detections = draw_detections  # Отключать отрисовку для оптимизации
+        self.confidence_threshold = confidence_threshold or CONFIDENCE_THRESHOLD
     
     def _label_for_class(self, class_id: Optional[int], model) -> str:
         """Получает метку класса"""
@@ -36,49 +30,19 @@ class InferenceEngine:
         return 'object'
     
     def infer(self, frame: np.ndarray, timestamp: float) -> Tuple[List[dict], np.ndarray, List[dict]]:
-        """Выполняет инференс на кадре с опциональным ресайзом"""
+        """Выполняет инференс на кадре"""
         model = self.model_manager.get_model()
         if model is None:
             raise RuntimeError('Модель не загружена')
         
-        # Ресайз кадра перед инференсом для оптимизации
-        original_shape = frame.shape[:2]  # (height, width)
-        infer_frame = frame
-        scale_x, scale_y = 1.0, 1.0
-        
-        if self.input_size and self.input_size > 0:
-            h, w = original_shape
-            # Ресайз с сохранением пропорций
-            if w > h:
-                new_w = self.input_size
-                new_h = int(h * (self.input_size / w))
-            else:
-                new_h = self.input_size
-                new_w = int(w * (self.input_size / h))
-            
-            infer_frame = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-            scale_x = w / new_w
-            scale_y = h / new_h
-        
-        # Инференс на ресайзнутом кадре
-        results = model(infer_frame, conf=self.confidence_threshold, verbose=False)
-        
-        # Копируем оригинальный кадр только если нужна отрисовка
-        annotated = frame.copy() if self.draw_detections else None
+        results = model(frame, conf=self.confidence_threshold, verbose=False)
+        annotated = frame.copy()
         raw_detections: List[dict] = []
         
         for result in results:
             boxes = result.boxes
             for box in boxes:
                 x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                
-                # Масштабируем bbox обратно к оригинальному размеру
-                if self.input_size and self.input_size > 0:
-                    x1 = x1 * scale_x
-                    y1 = y1 * scale_y
-                    x2 = x2 * scale_x
-                    y2 = y2 * scale_y
-                
                 confidence = float(box.conf[0].cpu().numpy())
                 class_id = None
                 if hasattr(box, 'cls') and box.cls is not None:
@@ -97,14 +61,13 @@ class InferenceEngine:
             tracked = self.tracker.update(raw_detections, timestamp=timestamp)
             stable_tracks = self._collect_stable_tracks_locked()
         
-        # Draw detections только если включено
-        if self.draw_detections and annotated is not None:
-            for track in tracked:
-                x1, y1, x2, y2 = map(int, track['bbox'])
-                track_label = track.get('label') or 'object'
-                caption = f"{track_label}#{track['trackId']} {track.get('confidence', 0.0):.2f}"
-                cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 200, 70), 2)
-                cv2.putText(annotated, caption, (x1, max(y1 - 10, 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 200, 70), 2)
+        # Draw detections
+        for track in tracked:
+            x1, y1, x2, y2 = map(int, track['bbox'])
+            track_label = track.get('label') or 'object'
+            caption = f"{track_label}#{track['trackId']} {track.get('confidence', 0.0):.2f}"
+            cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 200, 70), 2)
+            cv2.putText(annotated, caption, (x1, max(y1 - 10, 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 200, 70), 2)
         
         return tracked, annotated, stable_tracks
 
