@@ -72,6 +72,17 @@ class ModelManager:
             raise FileNotFoundError(f'Не удалось найти модель: {model_path}')
         
         logger.info('🔍 Загрузка модели YOLO: %s', resolved)
+
+        suffix = resolved.suffix.lower()
+        if suffix == '.onnx':
+            try:
+                __import__('onnxruntime')
+            except ModuleNotFoundError as exc:
+                raise RuntimeError(
+                    'Для ONNX моделей требуется установленный пакет onnxruntime. '
+                    'Установите его (pip install onnxruntime) и повторите переключение.'
+                ) from exc
+
         model = YOLO(str(resolved))
         
         if self._model_lock:

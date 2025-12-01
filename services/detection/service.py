@@ -13,6 +13,14 @@ import numpy as np
 from .camera.manager import CameraInitializationError, CameraManager
 from .camera.servo_controller import ServoController
 from .config.runtime import RuntimeConfig
+from .config.user_settings import (
+    apply_performance_overrides,
+    get_saved_active_model,
+    get_settings_file_path,
+    load_user_settings,
+    persist_active_model,
+    persist_performance_config,
+)
 from .detection.inference import InferenceEngine
 from .models.manager import ModelManager
 from .tracking.sort_tracker import SortTracker
@@ -32,7 +40,12 @@ class DetectionService:
 
     def __init__(self, config: RuntimeConfig):
         self.config = config
-        self.camera = CameraManager(config)
+        self._settings_state = load_user_settings()
+        overrides = self._settings_state.get("performance") if isinstance(self._settings_state, dict) else None
+        if apply_performance_overrides(self.config, overrides):
+            logger.info("Применены сохранённые настройки производительности (%s)", get_settings_file_path())
+
+        self.camera = CameraManager(self.config)
         self.model_lock = threading.RLock()
         self.tracker_lock = threading.RLock()
         self.frame_lock = threading.Lock()
@@ -44,11 +57,11 @@ class DetectionService:
         self.detection_thread: Optional[threading.Thread] = None
 
         # Очередь кадров для инференса (пропуск старых кадров)
-        self.infer_queue: queue.Queue = queue.Queue(maxsize=config.max_infer_queue_size)
+        self.infer_queue: queue.Queue = queue.Queue(maxsize=self.config.max_infer_queue_size)
         
         # Буфер сырых кадров для GIF (collections.deque с maxlen)
         self.raw_frames_buffer: collections.deque = collections.deque(
-            maxlen=config.raw_frames_buffer_size
+            maxlen=self.config.raw_frames_buffer_size
         )
         
         # Метрики производительности
@@ -198,6 +211,7 @@ class DetectionService:
         with self.model_lock:
             previous = self.model_manager.get_active_model()
             new_model = self.model_manager.switch_model(model_name)
+            self._remember_active_model(new_model)
             if new_model != previous and self.tracker:
                 self.inference_engine = InferenceEngine(
                     self.model_manager,
@@ -226,20 +240,36 @@ class DetectionService:
             self.model_manager = ModelManager(models_dir, base_dir)
             self.model_manager.set_lock(self.model_lock)
 
+            preferred_model = get_saved_active_model(self._settings_state)
+            if preferred_model:
+                try:
+                    self.model_manager.load_model(preferred_model)
+                    logger.info("Загружена ранее выбранная модель: %s", preferred_model)
+                except FileNotFoundError:
+                    logger.warning("Сохранённая модель %s не найдена, пробуем дефолтные", preferred_model)
+                except Exception as exc:  # pragma: no cover - defensive
+                    logger.error("Не удалось загрузить сохранённую модель %s: %s", preferred_model, exc)
+
             candidate_paths = [
                 models_dir / "yolov8n.pt",
                 models_dir / "bestfire.pt",
                 base_dir.parent / "models" / "yolov8n.pt",
             ]
 
-            for path in candidate_paths:
-                if path.exists():
-                    self.model_manager.load_model(str(path))
-                    break
+            if self.model_manager.get_model() is None:
+                for path in candidate_paths:
+                    if path.exists():
+                        try:
+                            self.model_manager.load_model(str(path))
+                            break
+                        except Exception as exc:
+                            logger.warning("Не удалось загрузить модель %s: %s", path, exc)
 
             if self.model_manager.get_model() is None:
                 logger.warning("Модель не найдена, детекция отключена")
                 return
+            else:
+                self._remember_active_model(self.model_manager.get_active_model())
 
             self.tracker = SortTracker(
                 iou_threshold=self.config.tracker_iou_threshold,
@@ -356,7 +386,7 @@ class DetectionService:
                         
                         last_infer_time = timestamp
                 except Exception as exc:
-                    if self.config.enable_logging:
+                    if getattr(self.config, 'enable_logging', True):
                         logger.error("Ошибка детекции: %s", exc, exc_info=True)
 
             time.sleep(0.01)  # Небольшая задержка для снижения нагрузки
@@ -384,6 +414,14 @@ class DetectionService:
         from pathlib import Path
 
         return Path(__file__).resolve().parent
+
+    def _remember_active_model(self, model_name: Optional[str]) -> None:
+        if not model_name:
+            return
+        self._settings_state = persist_active_model(model_name, self._settings_state)
+
+    def persist_performance_snapshot(self) -> None:
+        self._settings_state = persist_performance_config(self.config, self._settings_state)
 
     def _update_servo_target(self, tracked: list[dict], frame_shape: tuple[int, ...]) -> None:
         if not self.target_track_id or not tracked:

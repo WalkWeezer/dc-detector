@@ -347,6 +347,9 @@ def update_performance_config():
         else:
             return jsonify({'error': 'raw_frames_buffer_size must be between 10 and 100'}), 400
     
+    if updated and detection_service:
+        detection_service.persist_performance_snapshot()
+
     return jsonify({'success': True, 'updated': updated})
 
 
