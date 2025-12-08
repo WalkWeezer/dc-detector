@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -14,6 +15,10 @@ class HardwareServoController:
         self.pan_pin = pan_pin
         self.tilt_pin = tilt_pin
         self._initialized = False
+        # Добавляем тайминги
+        self._last_pan_angle = None
+        self._last_tilt_angle = None
+        self._min_angle_change = 0.5  # Минимальное изменение угла для отправки команды
 
     def initialize(self) -> bool:
         """Initialize hardware. Returns True if successful."""
@@ -30,6 +35,22 @@ class HardwareServoController:
     def is_available(self) -> bool:
         """Check if hardware is available."""
         return self._initialized
+    
+    def should_update_angle(self, servo: str, new_angle: float) -> bool:
+        """Проверяет, нужно ли отправлять новую команду на серво."""
+        last_angle = self._last_pan_angle if servo == "pan" else self._last_tilt_angle
+        if last_angle is None:
+            return True
+        if abs(new_angle - last_angle) < self._min_angle_change:
+            return False
+        return True
+    
+    def _update_last_angle(self, servo: str, angle: float) -> None:
+        """Обновляет последний известный угол."""
+        if servo == "pan":
+            self._last_pan_angle = angle
+        elif servo == "tilt":
+            self._last_tilt_angle = angle
 
 
 class GPIOServoController(HardwareServoController):
@@ -51,6 +72,10 @@ class GPIOServoController(HardwareServoController):
         self.pan_pwm = None
         self.tilt_pwm = None
         self._gpio = None
+        # Защита от слишком частых команд
+        self._last_pan_command = 0.0
+        self._last_tilt_command = 0.0
+        self._min_command_interval = 0.1  # 100ms между командами
 
     def initialize(self) -> bool:
         """Initialize GPIO and PWM."""
@@ -89,6 +114,8 @@ class GPIOServoController(HardwareServoController):
                 self.pan_pwm = GPIO.PWM(self.pan_pin, self.frequency)
                 # Запускаем с нейтральной позицией (7.5% = 90 градусов) вместо 0
                 self.pan_pwm.start(7.5)
+                # Сразу даем время стабилизироваться
+                time.sleep(0.1)
                 logger.info("✅ Pan серво инициализирован (начальная позиция: 90°)")
 
             # Setup tilt servo
@@ -98,9 +125,13 @@ class GPIOServoController(HardwareServoController):
                 self.tilt_pwm = GPIO.PWM(self.tilt_pin, self.frequency)
                 # Запускаем с нейтральной позицией (7.5% = 90 градусов) вместо 0
                 self.tilt_pwm.start(7.5)
+                # Сразу даем время стабилизироваться
+                time.sleep(0.1)
                 logger.info("✅ Tilt серво инициализирован (начальная позиция: 90°)")
 
             self._initialized = True
+            self._last_pan_angle = 90.0
+            self._last_tilt_angle = 90.0
             print(f"✅ [SERVO-GPIO] GPIO сервоприводы успешно инициализированы")
             print(f"   [SERVO-GPIO] Pan: GPIO {self.pan_pin}, Tilt: GPIO {self.tilt_pin}, Частота: {self.frequency} Hz")
             logger.info("✅ GPIO сервоприводы успешно инициализированы")
@@ -128,7 +159,26 @@ class GPIOServoController(HardwareServoController):
 
     def set_angle(self, servo: str, angle: float) -> None:
         """Set servo angle. angle: 0-180 degrees."""
-        print(f"🔧 [GPIO-SERVO] set_angle вызван: servo={servo}, angle={angle:.1f}°", flush=True)
+        current_time = time.time()
+        
+        # Проверяем интервал между командами
+        if servo == "pan":
+            if current_time - self._last_pan_command < self._min_command_interval:
+                print(f"   [GPIO-SERVO] Пропуск Pan команды: слишком часто (интервал {self._min_command_interval}с)", flush=True)
+                return
+            self._last_pan_command = current_time
+        elif servo == "tilt":
+            if current_time - self._last_tilt_command < self._min_command_interval:
+                print(f"   [GPIO-SERVO] Пропуск Tilt команды: слишком часто (интервал {self._min_command_interval}с)", flush=True)
+                return
+            self._last_tilt_command = current_time
+        
+        # Проверяем, нужно ли обновлять угол
+        if not self.should_update_angle(servo, angle):
+            print(f"   [GPIO-SERVO] {servo}: пропуск (изменение меньше {self._min_angle_change}°)", flush=True)
+            return
+        
+        print(f"🔧 [GPIO-SERVO] set_angle: servo={servo}, angle={angle:.1f}°, last={getattr(self, f'_last_{servo}_angle')}", flush=True)
         
         if not self._initialized:
             print(f"❌ [GPIO-SERVO] Контроллер не инициализирован!", flush=True)
@@ -146,22 +196,49 @@ class GPIOServoController(HardwareServoController):
         try:
             if servo == "pan" and self.pan_pwm:
                 print(f"⏳ [GPIO-SERVO] Установка Pan на GPIO {self.pan_pin}: duty_cycle={duty_cycle:.2f}%", flush=True)
-                # Обновляем duty cycle - это важно для удержания позиции
+                
+                # Важно: Сначала отключаем PWM, если он уже работает
+                # Это предотвращает наложение сигналов
+                self.pan_pwm.ChangeDutyCycle(0)
+                time.sleep(0.005)  # 5ms пауза
+                
+                # Устанавливаем новый duty cycle
                 self.pan_pwm.ChangeDutyCycle(duty_cycle)
-                # Небольшая задержка для стабилизации сигнала
-                import time
-                time.sleep(0.01)  # 10ms задержка
-                print(f"✅ [GPIO-SERVO] Pan установлен на {angle:.1f}° (duty_cycle={duty_cycle:.2f}%)", flush=True)
+                
+                # Даем серво время достичь позиции
+                time.sleep(0.05)  # 50ms - время на движение серво
+                
+                # ВАЖНО: Останавливаем PWM после достижения позиции
+                # Это предотвращает "дергание" серво
+                self.pan_pwm.ChangeDutyCycle(0)
+                
+                # Обновляем последний угол
+                self._update_last_angle(servo, angle)
+                
+                print(f"✅ [GPIO-SERVO] Pan установлен на {angle:.1f}° (PWM остановлен)", flush=True)
+                
             elif servo == "tilt" and self.tilt_pwm:
                 print(f"⏳ [GPIO-SERVO] Установка Tilt на GPIO {self.tilt_pin}: duty_cycle={duty_cycle:.2f}%", flush=True)
-                # Обновляем duty cycle - это важно для удержания позиции
+                
+                # Важно: Сначала отключаем PWM, если он уже работает
+                self.tilt_pwm.ChangeDutyCycle(0)
+                time.sleep(0.005)  # 5ms пауза
+                
+                # Устанавливаем новый duty cycle
                 self.tilt_pwm.ChangeDutyCycle(duty_cycle)
-                # Небольшая задержка для стабилизации сигнала
-                import time
-                time.sleep(0.01)  # 10ms задержка
-                print(f"✅ [GPIO-SERVO] Tilt установлен на {angle:.1f}° (duty_cycle={duty_cycle:.2f}%)", flush=True)
+                
+                # Даем серво время достичь позиции
+                time.sleep(0.05)  # 50ms - время на движение серво
+                
+                # ВАЖНО: Останавливаем PWM после достижения позиции
+                self.tilt_pwm.ChangeDutyCycle(0)
+                
+                # Обновляем последний угол
+                self._update_last_angle(servo, angle)
+                
+                print(f"✅ [GPIO-SERVO] Tilt установлен на {angle:.1f}° (PWM остановлен)", flush=True)
             else:
-                print(f"⚠️  [GPIO-SERVO] Неизвестный серво или PWM не инициализирован: servo={servo}, pan_pwm={self.pan_pwm is not None}, tilt_pwm={self.tilt_pwm is not None}", flush=True)
+                print(f"⚠️  [GPIO-SERVO] Неизвестный серво или PWM не инициализирован: servo={servo}", flush=True)
                 logger.warning(f"Unknown servo '{servo}' or PWM not initialized")
         except Exception as exc:
             print(f"❌ [GPIO-SERVO] Ошибка установки {servo} серво: {exc}", flush=True)
@@ -173,156 +250,48 @@ class GPIOServoController(HardwareServoController):
             return
 
         try:
+            print(f"🧹 [GPIO-SERVO] Очистка GPIO ресурсов...", flush=True)
+            
+            # Сначала останавливаем PWM
             if self.pan_pwm:
+                print(f"   [GPIO-SERVO] Остановка Pan PWM...", flush=True)
+                self.pan_pwm.ChangeDutyCycle(0)
+                time.sleep(0.01)
                 self.pan_pwm.stop()
+                
             if self.tilt_pwm:
+                print(f"   [GPIO-SERVO] Остановка Tilt PWM...", flush=True)
+                self.tilt_pwm.ChangeDutyCycle(0)
+                time.sleep(0.01)
                 self.tilt_pwm.stop()
+                
+            # Затем очищаем GPIO
             if self._gpio:
+                print(f"   [GPIO-SERVO] Очистка GPIO...", flush=True)
                 self._gpio.cleanup()
+                
             self._initialized = False
+            print(f"✅ [GPIO-SERVO] GPIO ресурсы очищены", flush=True)
             logger.info("GPIO servos cleaned up")
         except Exception as exc:
+            print(f"❌ [GPIO-SERVO] Ошибка очистки GPIO: {exc}", flush=True)
             logger.error(f"Error cleaning up GPIO servos: {exc}")
-
-
-class PCA9685ServoController(HardwareServoController):
-    """Servo controller using PCA9685 I2C PWM controller.
-    
-    Requires: pip install adafruit-circuitpython-servokit
-    Suitable for: Multiple servos via I2C (more stable, no GPIO conflicts)
-    """
-
-    def __init__(
-        self,
-        pan_channel: int = 0,
-        tilt_channel: int = 1,
-        address: int = 0x40,
-        frequency: int = 50,
-    ):
-        """
-        Args:
-            pan_channel: PCA9685 channel for pan servo (0-15, default: 0)
-            tilt_channel: PCA9685 channel for tilt servo (0-15, default: 1)
-            address: I2C address of PCA9685 (default: 0x40)
-            frequency: PWM frequency in Hz (default: 50 for standard servos)
-        """
-        super().__init__(pan_channel, tilt_channel)
-        self.pan_channel = pan_channel
-        self.tilt_channel = tilt_channel
-        self.address = address
-        self.frequency = frequency
-        self._servo_kit = None
-
-    def initialize(self) -> bool:
-        """Initialize PCA9685."""
-        print(f"🔌 [SERVO-PCA9685] Инициализация PCA9685 сервоприводов...")
-        print(f"   [SERVO-PCA9685] Pan channel: {self.pan_channel}")
-        print(f"   [SERVO-PCA9685] Tilt channel: {self.tilt_channel}")
-        print(f"   [SERVO-PCA9685] I2C address: 0x{self.address:02x}")
-        print(f"   [SERVO-PCA9685] Frequency: {self.frequency} Hz")
-        logger.info("🔌 Инициализация PCA9685 сервоприводов...")
-        logger.info("   Pan channel: %d", self.pan_channel)
-        logger.info("   Tilt channel: %d", self.tilt_channel)
-        logger.info("   I2C address: 0x%02x", self.address)
-        logger.info("   Frequency: %d Hz", self.frequency)
-        
-        try:
-            from adafruit_servokit import ServoKit
-            print("✅ [SERVO-PCA9685] adafruit-circuitpython-servokit модуль доступен")
-            logger.info("✅ adafruit-circuitpython-servokit модуль доступен")
-        except ImportError:
-            print("❌ [SERVO-PCA9685] adafruit-circuitpython-servokit не установлен")
-            print("   [SERVO-PCA9685] Установите: pip install adafruit-circuitpython-servokit")
-            logger.error("❌ adafruit-circuitpython-servokit не установлен")
-            logger.error("   Установите: pip install adafruit-circuitpython-servokit")
-            return False
-
-        try:
-            # Проверяем доступность I2C
-            try:
-                import board
-                import busio
-                logger.info("⏳ Проверка доступности I2C...")
-                i2c = busio.I2C(board.SCL, board.SDA)
-                logger.info("✅ I2C доступен")
-            except Exception as i2c_exc:
-                logger.error("❌ I2C недоступен: %s", i2c_exc)
-                logger.error("   Проверьте:")
-                logger.error("   1. I2C включен: sudo raspi-config → Interface Options → I2C → Enable")
-                logger.error("   2. PCA9685 подключен к I2C шине")
-                logger.error("   3. Правильный адрес I2C: 0x%02x", self.address)
-                return False
-
-            logger.info("⏳ Создание ServoKit (channels=16, address=0x%02x)...", self.address)
-            self._servo_kit = ServoKit(channels=16, address=self.address, frequency=self.frequency)
-            self._initialized = True
-            print(f"✅ [SERVO-PCA9685] PCA9685 сервоприводы успешно инициализированы")
-            print(f"   [SERVO-PCA9685] Pan: канал {self.pan_channel}, Tilt: канал {self.tilt_channel}, Адрес: 0x{self.address:02x}, Частота: {self.frequency} Hz")
-            logger.info("✅ PCA9685 сервоприводы успешно инициализированы")
-            logger.info("   Pan: канал %d, Tilt: канал %d, Адрес: 0x%02x, Частота: %d Hz",
-                       self.pan_channel, self.tilt_channel, self.address, self.frequency)
-            return True
-        except ValueError as exc:
-            print(f"❌ [SERVO-PCA9685] Ошибка инициализации PCA9685: {exc}")
-            print(f"   [SERVO-PCA9685] Возможные причины:")
-            print(f"   1. Неправильный I2C адрес (проверьте перемычки на PCA9685)")
-            print(f"   2. PCA9685 не подключен к I2C шине")
-            print(f"   3. Недостаточно питания для PCA9685")
-            logger.error("❌ Ошибка инициализации PCA9685: %s", exc)
-            logger.error("   Возможные причины:")
-            logger.error("   1. Неправильный I2C адрес (проверьте перемычки на PCA9685)")
-            logger.error("   2. PCA9685 не подключен к I2C шине")
-            logger.error("   3. Недостаточно питания для PCA9685")
-            return False
-        except Exception as exc:
-            print(f"❌ [SERVO-PCA9685] Не удалось инициализировать PCA9685 сервоприводы: {exc}")
-            print(f"   [SERVO-PCA9685] Тип ошибки: {type(exc).__name__}")
-            logger.error("❌ Не удалось инициализировать PCA9685 сервоприводы: %s", exc, exc_info=True)
-            logger.error("   Тип ошибки: %s", type(exc).__name__)
-            return False
-
-    def set_angle(self, servo: str, angle: float) -> None:
-        """Set servo angle. angle: 0-180 degrees."""
-        if not self._initialized or not self._servo_kit:
-            return
-
-        # Clamp angle to valid range
-        angle = max(0.0, min(180.0, angle))
-
-        try:
-            if servo == "pan":
-                self._servo_kit.servo[self.pan_channel].angle = angle
-            elif servo == "tilt":
-                self._servo_kit.servo[self.tilt_channel].angle = angle
-        except Exception as exc:
-            logger.error(f"Failed to set {servo} servo angle: {exc}")
-
-    def cleanup(self) -> None:
-        """Cleanup PCA9685 resources."""
-        if self._initialized:
-            # PCA9685 doesn't need explicit cleanup
-            self._initialized = False
-            logger.info("PCA9685 servos cleaned up")
 
 
 def create_servo_controller(
     hardware_type: str = "none",
     pan_pin: Optional[int] = None,
     tilt_pin: Optional[int] = None,
-    pan_channel: Optional[int] = None,
-    tilt_channel: Optional[int] = None,
     **kwargs,
 ) -> HardwareServoController:
     """
     Factory function to create appropriate servo controller.
     
     Args:
-        hardware_type: "gpio", "pca9685", or "none" (software-only)
+        hardware_type: "gpio", or "none" (software-only)
         pan_pin: GPIO pin for pan servo (for GPIO mode)
         tilt_pin: GPIO pin for tilt servo (for GPIO mode)
-        pan_channel: PCA9685 channel for pan servo (for PCA9685 mode)
-        tilt_channel: PCA9685 channel for tilt servo (for PCA9685 mode)
-        **kwargs: Additional arguments (address, frequency, etc.)
+        **kwargs: Additional arguments (frequency, etc.)
     
     Returns:
         HardwareServoController instance
@@ -332,15 +301,6 @@ def create_servo_controller(
         tilt = tilt_pin if tilt_pin is not None else 19
         freq = kwargs.get("frequency", 50)
         return GPIOServoController(pan_pin=pan, tilt_pin=tilt, frequency=freq)
-    elif hardware_type == "pca9685":
-        pan_ch = pan_channel if pan_channel is not None else 0
-        tilt_ch = tilt_channel if tilt_channel is not None else 1
-        address = kwargs.get("address", 0x40)
-        freq = kwargs.get("frequency", 50)
-        return PCA9685ServoController(
-            pan_channel=pan_ch, tilt_channel=tilt_ch, address=address, frequency=freq
-        )
     else:
         # Return None for software-only mode
         return None
-

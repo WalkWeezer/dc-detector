@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import time
 from typing import Optional, Sequence, Tuple
 
 from .servo_hardware import create_servo_controller, HardwareServoController
@@ -40,24 +41,19 @@ class ServoController:
         self._last_pan = None
         self._last_tilt = None
         # Минимальное изменение угла для отправки на серво (чтобы не перегружать)
-        self._min_change = 0.1  # Уменьшено с 0.5 до 0.1 для более точного управления
+        self._min_change = 0.1  # Уменьшено с 0.5 до 0.1 градуса
         # Флаг ручного управления - блокирует автоследование на некоторое время
         self._manual_control_until = 0.0  # Timestamp до которого автоследование заблокировано
         # Флаг полной блокировки автоследования (устанавливается извне)
         self._auto_tracking_disabled = False
-        # Счетчики для отладки
-        self._track_bbox_calls = 0
-        self._set_angles_calls = 0
-        self._apply_to_hardware_calls = 0
-        # Защита от слишком частых команд на железо
-        self._last_hardware_update = 0.0
-        self._min_update_interval = 0.1  # Минимум 100 мс между командами на железо
-        # Дебаунс для слайдеров
-        self._last_slider_update = {}
+        
+        # Новые параметры для управления частотой обновлений
+        self._last_hardware_update = 0.0  # Время последнего обновления железа
+        self._min_update_interval = 0.1  # Минимум 100 мс между аппаратными командами
+        self._last_slider_update = {}  # Для дебаунса слайдеров
         self._slider_debounce = 0.3  # 300 мс дебаунс для слайдеров
-        # Защита от частых автообновлений
-        self._last_auto_update = 0.0
-        self._min_auto_update_interval = 0.2  # 200 мс между автообновлениями
+        self._last_auto_update = 0.0  # Время последнего автообновления
+        self._auto_update_interval = 0.2  # 200 мс между автообновлениями
 
         # Инициализируем железо, если оно предоставлено
         if self._hardware:
@@ -73,6 +69,10 @@ class ServoController:
                 self._hardware.set_angle("tilt", self._tilt)
                 print("✅ [SERVO] Начальная позиция установлена")
                 logger.info("✅ Начальная позиция установлена")
+                # Инициализируем последние значения
+                self._last_pan = self._pan
+                self._last_tilt = self._tilt
+                self._last_hardware_update = time.time()
             else:
                 print("⚠️  [SERVO] Инициализация аппаратных сервоприводов не удалась, используется программный режим")
                 print("   [SERVO] Сервоприводы будут работать, но без управления реальным железом")
@@ -170,30 +170,20 @@ class ServoController:
 
     def track_bbox(self, bbox: Sequence[float], frame_shape: Tuple[int, int]) -> None:
         """Adjust servo angles trying to keep bbox center near frame center."""
-        import time
-        import traceback
-        self._track_bbox_calls += 1
-        
         # ПОЛНАЯ БЛОКИРОВКА автоследования, если оно отключено
         if self._auto_tracking_disabled:
-            if self._track_bbox_calls <= 3:  # Логируем только первые 3 вызова
-                print(f"🚫 [SERVO] track_bbox заблокирован (автоследование отключено) - вызов #{self._track_bbox_calls}", flush=True)
-            return  # Автоследование полностью отключено, игнорируем вызов
+            return
         
-        # Также проверяем временную блокировку от ручного управления
+        # Проверяем временную блокировку от ручного управления
         current_time = time.time()
         if current_time < self._manual_control_until:
-            if self._track_bbox_calls <= 3:  # Логируем только первые 3 вызова
-                print(f"🚫 [SERVO] track_bbox заблокирован (временная блокировка) - вызов #{self._track_bbox_calls}", flush=True)
-            return  # Автоследование временно заблокировано ручным управлением
+            return
         
-        # Проверяем интервал от последнего автообновления (защита от слишком частых команд)
-        if current_time - self._last_auto_update < self._min_auto_update_interval:
-            return  # Слишком часто, пропускаем
+        # Проверяем интервал от последнего автообновления
+        if current_time - self._last_auto_update < self._auto_update_interval:
+            return
         
         self._last_auto_update = current_time
-        
-        print(f"⚠️  [SERVO] track_bbox вызван (автоследование) - вызов #{self._track_bbox_calls} - это не должно происходить если автоследование отключено!", flush=True)
         
         if not bbox or len(bbox) < 4:
             return
@@ -216,13 +206,17 @@ class ServoController:
             new_tilt = clamp(self._tilt - delta_tilt, 0.0, 180.0)
             
             # Обновляем только если изменение значительное
-            if abs(new_pan - self._pan) >= self._min_change:
+            pan_changed = abs(new_pan - self._pan) >= self._min_change
+            tilt_changed = abs(new_tilt - self._tilt) >= self._min_change
+            
+            if pan_changed:
                 self._pan = new_pan
-            if abs(new_tilt - self._tilt) >= self._min_change:
+            if tilt_changed:
                 self._tilt = new_tilt
 
-        # Отправляем на железо (НЕ принудительно, чтобы не конфликтовать с ручным управлением)
-        self._apply_to_hardware(force=False)
+        # Отправляем на железо только если были изменения
+        if pan_changed or tilt_changed:
+            self._apply_to_hardware(force=False)
 
     def _apply_to_hardware(self, force: bool = False) -> None:
         """Send angles to hardware servos if available.
@@ -230,29 +224,18 @@ class ServoController:
         Args:
             force: Если True, отправляет команду принудительно, игнорируя проверку минимального изменения
         """
-        import time
-        import traceback
-        self._apply_to_hardware_calls += 1
-        
         current_time = time.time()
         
-        # Проверяем интервал между обновлениями (защита от слишком частых команд)
+        # Проверяем интервал между обновлениями (если не принудительно)
         if not force and current_time - self._last_hardware_update < self._min_update_interval:
-            if self._apply_to_hardware_calls <= 3:  # Логируем только первые несколько
-                print(f"   [SERVO] Пропуск обновления: слишком часто (интервал {self._min_update_interval}с, прошло {current_time - self._last_hardware_update:.3f}с)", flush=True)
+            print(f"   [SERVO] Пропуск обновления: слишком часто (интервал {self._min_update_interval}с)", flush=True)
             return
         
         with self._lock:
             pan = self._pan
             tilt = self._tilt
         
-        print(f"🔧 [SERVO] _apply_to_hardware: pan={pan:.1f}°, tilt={tilt:.1f}°, force={force}, вызов #{self._apply_to_hardware_calls}", flush=True)
-        
-        # Логируем stack trace для первых нескольких вызовов, чтобы понять откуда идут вызовы
-        if self._apply_to_hardware_calls <= 5:
-            print(f"   [SERVO] Stack trace для вызова #{self._apply_to_hardware_calls}:", flush=True)
-            for line in traceback.format_stack()[-4:-1]:
-                print(f"   {line}", end="", flush=True)
+        print(f"🔧 [SERVO] _apply_to_hardware: pan={pan:.1f}°, tilt={tilt:.1f}°, force={force}", flush=True)
         print(f"   [SERVO] Hardware доступен: {self._hardware is not None and (self._hardware.is_available() if self._hardware else False)}", flush=True)
         
         # Отправляем только если угол изменился достаточно (или принудительно)
@@ -271,13 +254,15 @@ class ServoController:
             print(f"   [SERVO] Pan изменился: {pan_changed} (last={self._last_pan}, current={pan:.1f}, diff={pan_diff_str})", flush=True)
             print(f"   [SERVO] Tilt изменился: {tilt_changed} (last={self._last_tilt}, current={tilt:.1f}, diff={tilt_diff_str})", flush=True)
             
+            if pan_changed or tilt_changed:
+                self._last_hardware_update = current_time
+            
             if pan_changed:
                 print(f"⏳ [SERVO] Отправка Pan={pan:.1f}° на железо...", flush=True)
                 try:
                     self._hardware.set_angle("pan", pan)
                     with self._lock:
                         self._last_pan = pan
-                    self._last_hardware_update = current_time  # Обновляем время последней команды
                     print(f"✅ [SERVO] Pan={pan:.1f}° отправлен на железо", flush=True)
                 except Exception as exc:
                     print(f"❌ [SERVO] Ошибка отправки Pan: {exc}", flush=True)
@@ -289,7 +274,6 @@ class ServoController:
                     self._hardware.set_angle("tilt", tilt)
                     with self._lock:
                         self._last_tilt = tilt
-                    self._last_hardware_update = current_time  # Обновляем время последней команды
                     print(f"✅ [SERVO] Tilt={tilt:.1f}° отправлен на железо", flush=True)
                 except Exception as exc:
                     print(f"❌ [SERVO] Ошибка отправки Tilt: {exc}", flush=True)
@@ -300,14 +284,16 @@ class ServoController:
             logger.debug("Servo target pan=%.1f tilt=%.1f", pan, tilt)
 
     def get_state(self) -> dict:
-        import time
         with self._lock:
+            current_time = time.time()
             state = {
                 "pan": round(self._pan, 2),
                 "tilt": round(self._tilt, 2),
                 "hardware_enabled": self._hardware is not None and self._hardware.is_available(),
-                "manual_lock": time.time() < self._manual_control_until,
+                "manual_lock": current_time < self._manual_control_until,
                 "auto_tracking_disabled": self._auto_tracking_disabled,
+                "last_update": self._last_hardware_update,
+                "time_since_last_update": round(current_time - self._last_hardware_update, 3),
             }
         return state
 
@@ -321,6 +307,7 @@ class ServoController:
         import os
         
         hardware_type = os.environ.get("SERVO_HARDWARE", "none").lower()
+        current_time = time.time()
         
         status = {
             "configured": hardware_type != "none",
@@ -328,6 +315,15 @@ class ServoController:
             "hardware_enabled": self._hardware is not None and self._hardware.is_available() if self._hardware else False,
             "pan": round(self._pan, 2),
             "tilt": round(self._tilt, 2),
+            "manual_lock": current_time < self._manual_control_until,
+            "time_until_manual_unlock": max(0, round(self._manual_control_until - current_time, 1)),
+            "auto_tracking_disabled": self._auto_tracking_disabled,
+            "update_params": {
+                "min_change": self._min_change,
+                "min_update_interval": self._min_update_interval,
+                "slider_debounce": self._slider_debounce,
+                "auto_update_interval": self._auto_update_interval,
+            }
         }
         
         # Добавляем информацию о конфигурации
@@ -391,18 +387,15 @@ class ServoController:
 
     def set_angles(self, pan: Optional[float] = None, tilt: Optional[float] = None) -> None:
         """Устанавливает углы сервоприводов вручную с дебаунсом."""
-        import time
+        print(f"🔧 [SERVO] set_angles вызван: pan={pan}, tilt={tilt}", flush=True)
         
         current_time = time.time()
         
-        print(f"🔧 [SERVO] set_angles вызван: pan={pan}, tilt={tilt}", flush=True)
-        print(f"   [SERVO] Автоследование отключено: {self._auto_tracking_disabled}", flush=True)
-        
-        # Дебаунс для слайдеров (защита от слишком частых обновлений)
+        # Дебаунс для слайдеров
         if pan is not None:
             last_pan_update = self._last_slider_update.get('pan', 0)
             if current_time - last_pan_update < self._slider_debounce:
-                print(f"   [SERVO] Дебаунс Pan: пропуск частого обновления (прошло {current_time - last_pan_update:.3f}с)", flush=True)
+                print(f"   [SERVO] Дебаунс Pan: пропуск частого обновления", flush=True)
                 pan = None  # Игнорируем это обновление
             else:
                 self._last_slider_update['pan'] = current_time
@@ -410,51 +403,56 @@ class ServoController:
         if tilt is not None:
             last_tilt_update = self._last_slider_update.get('tilt', 0)
             if current_time - last_tilt_update < self._slider_debounce:
-                print(f"   [SERVO] Дебаунс Tilt: пропуск частого обновления (прошло {current_time - last_tilt_update:.3f}с)", flush=True)
+                print(f"   [SERVO] Дебаунс Tilt: пропуск частого обновления", flush=True)
                 tilt = None
             else:
                 self._last_slider_update['tilt'] = current_time
         
         # Если оба None после дебаунса - выходим
         if pan is None and tilt is None:
-            print(f"   [SERVO] Все обновления отфильтрованы дебаунсом, выход", flush=True)
+            print(f"   [SERVO] Все обновления отфильтрованы дебаунсом", flush=True)
             return
         
         with self._lock:
             old_pan = self._pan
             old_tilt = self._tilt
             
+            pan_changed = False
+            tilt_changed = False
+            
             if pan is not None:
                 new_pan = clamp(pan, 0.0, 180.0)
-                # Проверяем минимальное изменение (0.1 градуса)
-                if abs(new_pan - self._pan) >= 0.1:
+                pan_changed = abs(new_pan - self._pan) >= self._min_change
+                if pan_changed:
                     self._pan = new_pan
-                    # Вместо сброса в None, устанавливаем старое значение для отслеживания изменения
+                    # Устанавливаем старое значение для сравнения
                     self._last_pan = old_pan
                     print(f"   [SERVO] Pan изменен: {old_pan:.1f}° -> {self._pan:.1f}°", flush=True)
                 else:
-                    print(f"   [SERVO] Pan не изменился достаточно: {self._pan:.1f}° (разница {abs(new_pan - self._pan):.2f}°)", flush=True)
+                    print(f"   [SERVO] Pan не изменился достаточно: {self._pan:.1f}°", flush=True)
                     pan = None  # Не отправлять на железо
                     
             if tilt is not None:
                 new_tilt = clamp(tilt, 0.0, 180.0)
-                # Проверяем минимальное изменение (0.1 градуса)
-                if abs(new_tilt - self._tilt) >= 0.1:
+                tilt_changed = abs(new_tilt - self._tilt) >= self._min_change
+                if tilt_changed:
                     self._tilt = new_tilt
-                    # Вместо сброса в None, устанавливаем старое значение для отслеживания изменения
                     self._last_tilt = old_tilt
                     print(f"   [SERVO] Tilt изменен: {old_tilt:.1f}° -> {self._tilt:.1f}°", flush=True)
                 else:
-                    print(f"   [SERVO] Tilt не изменился достаточно: {self._tilt:.1f}° (разница {abs(new_tilt - self._tilt):.2f}°)", flush=True)
-                    tilt = None  # Не отправлять на железо
+                    print(f"   [SERVO] Tilt не изменился достаточно: {self._tilt:.1f}°", flush=True)
+                    tilt = None
             
             # Блокируем автоследование на 3 секунды после ручной команды
             self._manual_control_until = current_time + 3.0
-            print(f"   [SERVO] Автоследование заблокировано до {self._manual_control_until:.1f} (3 сек)", flush=True)
+            print(f"   [SERVO] Автоследование заблокировано до {self._manual_control_until:.1f}", flush=True)
         
         # Отправляем только если были реальные изменения
-        if pan is not None or tilt is not None:
+        if (pan is not None and pan_changed) or (tilt is not None and tilt_changed):
+            print(f"   [SERVO] Отправка изменений на железо...", flush=True)
             self._apply_to_hardware(force=True)
+        else:
+            print(f"   [SERVO] Нет изменений для отправки на железо", flush=True)
 
     def reset(self) -> None:
         """Reset servos to center position (90 degrees)."""
@@ -473,5 +471,16 @@ class ServoController:
         if self._hardware:
             self._hardware.cleanup()
             self._hardware = None
-
-
+    
+    def disable_auto_tracking(self, disabled: bool = True) -> None:
+        """Включает/выключает автоследование.
+        
+        Args:
+            disabled: Если True, автоследование отключено
+        """
+        self._auto_tracking_disabled = disabled
+        print(f"🔧 [SERVO] Автоследование {'отключено' if disabled else 'включено'}", flush=True)
+    
+    def enable_auto_tracking(self) -> None:
+        """Включает автоследование (синоним для disable_auto_tracking(False))."""
+        self.disable_auto_tracking(False)
