@@ -87,16 +87,18 @@ class GPIOServoController(HardwareServoController):
                 logger.info("⏳ Настройка Pan серво на GPIO %d...", self.pan_pin)
                 GPIO.setup(self.pan_pin, GPIO.OUT)
                 self.pan_pwm = GPIO.PWM(self.pan_pin, self.frequency)
-                self.pan_pwm.start(0)
-                logger.info("✅ Pan серво инициализирован")
+                # Запускаем с нейтральной позицией (7.5% = 90 градусов) вместо 0
+                self.pan_pwm.start(7.5)
+                logger.info("✅ Pan серво инициализирован (начальная позиция: 90°)")
 
             # Setup tilt servo
             if self.tilt_pin:
                 logger.info("⏳ Настройка Tilt серво на GPIO %d...", self.tilt_pin)
                 GPIO.setup(self.tilt_pin, GPIO.OUT)
                 self.tilt_pwm = GPIO.PWM(self.tilt_pin, self.frequency)
-                self.tilt_pwm.start(0)
-                logger.info("✅ Tilt серво инициализирован")
+                # Запускаем с нейтральной позицией (7.5% = 90 градусов) вместо 0
+                self.tilt_pwm.start(7.5)
+                logger.info("✅ Tilt серво инициализирован (начальная позиция: 90°)")
 
             self._initialized = True
             print(f"✅ [SERVO-GPIO] GPIO сервоприводы успешно инициализированы")
@@ -144,11 +146,19 @@ class GPIOServoController(HardwareServoController):
         try:
             if servo == "pan" and self.pan_pwm:
                 print(f"⏳ [GPIO-SERVO] Установка Pan на GPIO {self.pan_pin}: duty_cycle={duty_cycle:.2f}%", flush=True)
+                # Обновляем duty cycle - это важно для удержания позиции
                 self.pan_pwm.ChangeDutyCycle(duty_cycle)
+                # Небольшая задержка для стабилизации сигнала
+                import time
+                time.sleep(0.01)  # 10ms задержка
                 print(f"✅ [GPIO-SERVO] Pan установлен на {angle:.1f}° (duty_cycle={duty_cycle:.2f}%)", flush=True)
             elif servo == "tilt" and self.tilt_pwm:
                 print(f"⏳ [GPIO-SERVO] Установка Tilt на GPIO {self.tilt_pin}: duty_cycle={duty_cycle:.2f}%", flush=True)
+                # Обновляем duty cycle - это важно для удержания позиции
                 self.tilt_pwm.ChangeDutyCycle(duty_cycle)
+                # Небольшая задержка для стабилизации сигнала
+                import time
+                time.sleep(0.01)  # 10ms задержка
                 print(f"✅ [GPIO-SERVO] Tilt установлен на {angle:.1f}° (duty_cycle={duty_cycle:.2f}%)", flush=True)
             else:
                 print(f"⚠️  [GPIO-SERVO] Неизвестный серво или PWM не инициализирован: servo={servo}, pan_pwm={self.pan_pwm is not None}, tilt_pwm={self.tilt_pwm is not None}", flush=True)

@@ -81,6 +81,13 @@ class DetectionService:
         
         self.target_track_id: Optional[int] = None
         
+        # Флаг автоследования сервоприводов (можно отключить через переменную окружения)
+        import os
+        self.servo_auto_tracking_enabled = os.environ.get("SERVO_AUTO_TRACKING", "true").lower() in ("true", "1", "yes")
+        if not self.servo_auto_tracking_enabled:
+            print("ℹ️  [SERVICE] Автоследование сервоприводов ОТКЛЮЧЕНО", flush=True)
+            logger.info("ℹ️  Автоследование сервоприводов отключено (SERVO_AUTO_TRACKING=false)")
+        
         # MavLink GPS reader
         self.mavlink_gps: Optional[MavLinkGPSReader] = None
         if config.mavlink_port:
@@ -493,6 +500,11 @@ class DetectionService:
         self._settings_state = persist_performance_config(self.config, self._settings_state)
 
     def _update_servo_target(self, tracked: list[dict], frame_shape: tuple[int, ...]) -> None:
+        """Обновляет позицию сервоприводов для отслеживания цели."""
+        # Полностью отключаем автоследование, если оно отключено в настройках
+        if not self.servo_auto_tracking_enabled:
+            return  # Автоследование отключено
+        
         if not self.target_track_id or not tracked:
             return
         try:

@@ -41,6 +41,8 @@ class ServoController:
         self._last_tilt = None
         # Минимальное изменение угла для отправки на серво (чтобы не перегружать)
         self._min_change = 0.5
+        # Флаг ручного управления - блокирует автоследование на некоторое время
+        self._manual_control_until = 0.0  # Timestamp до которого автоследование заблокировано
 
         # Инициализируем железо, если оно предоставлено
         if self._hardware:
@@ -314,6 +316,8 @@ class ServoController:
 
     def set_angles(self, pan: Optional[float] = None, tilt: Optional[float] = None) -> None:
         """Устанавливает углы сервоприводов вручную."""
+        import time
+        
         print(f"🔧 [SERVO] set_angles вызван: pan={pan}, tilt={tilt}", flush=True)
         
         with self._lock:
@@ -326,6 +330,10 @@ class ServoController:
             if tilt is not None:
                 self._tilt = clamp(tilt, 0.0, 180.0)
                 print(f"   [SERVO] Tilt изменен: {old_tilt:.1f}° -> {self._tilt:.1f}°", flush=True)
+            
+            # Блокируем автоследование на 5 секунд после ручной команды
+            self._manual_control_until = time.time() + 5.0
+            print(f"   [SERVO] Автоследование заблокировано до {self._manual_control_until:.1f}", flush=True)
         
         # Отправляем на железо
         self._apply_to_hardware()
