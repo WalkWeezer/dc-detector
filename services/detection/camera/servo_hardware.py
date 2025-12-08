@@ -200,66 +200,40 @@ class GPIOServoController(HardwareServoController):
                 logger.info("⏳ [GPIO-SERVO] Установка Pan на GPIO %d: угол=%.1f°, duty_cycle=%.2f%%", 
                            self.pan_pin, angle, duty_cycle)
                 
-                # Важно: Сначала отключаем PWM, если он уже работает
-                # Это предотвращает наложение сигналов
-                print(f"   [GPIO-SERVO] Шаг 1/4: Отключение PWM (duty_cycle=0)", flush=True)
-                self.pan_pwm.ChangeDutyCycle(0)
-                time.sleep(0.005)  # 5ms пауза
-                
-                # Устанавливаем новый duty cycle
-                print(f"   [GPIO-SERVO] Шаг 2/4: Установка duty_cycle={duty_cycle:.2f}% на GPIO {self.pan_pin}", flush=True)
+                # Устанавливаем новый duty cycle напрямую
+                # PWM должен работать постоянно для удержания позиции сервопривода
+                print(f"   [GPIO-SERVO] Отправка команды на GPIO {self.pan_pin}: ChangeDutyCycle({duty_cycle:.2f}%)", flush=True)
                 logger.info("   [GPIO-SERVO] Отправка команды на GPIO %d: ChangeDutyCycle(%.2f%%)", 
                            self.pan_pin, duty_cycle)
                 self.pan_pwm.ChangeDutyCycle(duty_cycle)
                 print(f"   [GPIO-SERVO] ✅ Команда отправлена на GPIO {self.pan_pin}", flush=True)
                 
-                # Даем серво время достичь позиции
-                print(f"   [GPIO-SERVO] Шаг 3/4: Ожидание движения серво (50ms)...", flush=True)
-                time.sleep(0.05)  # 50ms - время на движение серво
-                
-                # ВАЖНО: Останавливаем PWM после достижения позиции
-                # Это предотвращает "дергание" серво
-                print(f"   [GPIO-SERVO] Шаг 4/4: Остановка PWM (duty_cycle=0) для предотвращения дергания", flush=True)
-                self.pan_pwm.ChangeDutyCycle(0)
-                
                 # Обновляем последний угол
                 self._update_last_angle(servo, angle)
                 
-                print(f"✅ [GPIO-SERVO] Pan установлен на {angle:.1f}° (PWM остановлен)", flush=True)
-                logger.info("✅ [GPIO-SERVO] Pan установлен на %.1f° на GPIO %d (PWM остановлен)", 
-                           angle, self.pan_pin)
+                print(f"✅ [GPIO-SERVO] Pan установлен на {angle:.1f}° (PWM активен, duty_cycle={duty_cycle:.2f}%)", flush=True)
+                logger.info("✅ [GPIO-SERVO] Pan установлен на %.1f° на GPIO %d (PWM активен, duty_cycle=%.2f%%)", 
+                           angle, self.pan_pin, duty_cycle)
                 
             elif servo == "tilt" and self.tilt_pwm:
                 print(f"⏳ [GPIO-SERVO] Установка Tilt на GPIO {self.tilt_pin}: duty_cycle={duty_cycle:.2f}%", flush=True)
                 logger.info("⏳ [GPIO-SERVO] Установка Tilt на GPIO %d: угол=%.1f°, duty_cycle=%.2f%%", 
                            self.tilt_pin, angle, duty_cycle)
                 
-                # Важно: Сначала отключаем PWM, если он уже работает
-                print(f"   [GPIO-SERVO] Шаг 1/4: Отключение PWM (duty_cycle=0)", flush=True)
-                self.tilt_pwm.ChangeDutyCycle(0)
-                time.sleep(0.005)  # 5ms пауза
-                
-                # Устанавливаем новый duty cycle
-                print(f"   [GPIO-SERVO] Шаг 2/4: Установка duty_cycle={duty_cycle:.2f}% на GPIO {self.tilt_pin}", flush=True)
+                # Устанавливаем новый duty cycle напрямую
+                # PWM должен работать постоянно для удержания позиции сервопривода
+                print(f"   [GPIO-SERVO] Отправка команды на GPIO {self.tilt_pin}: ChangeDutyCycle({duty_cycle:.2f}%)", flush=True)
                 logger.info("   [GPIO-SERVO] Отправка команды на GPIO %d: ChangeDutyCycle(%.2f%%)", 
                            self.tilt_pin, duty_cycle)
                 self.tilt_pwm.ChangeDutyCycle(duty_cycle)
                 print(f"   [GPIO-SERVO] ✅ Команда отправлена на GPIO {self.tilt_pin}", flush=True)
                 
-                # Даем серво время достичь позиции
-                print(f"   [GPIO-SERVO] Шаг 3/4: Ожидание движения серво (50ms)...", flush=True)
-                time.sleep(0.05)  # 50ms - время на движение серво
-                
-                # ВАЖНО: Останавливаем PWM после достижения позиции
-                print(f"   [GPIO-SERVO] Шаг 4/4: Остановка PWM (duty_cycle=0) для предотвращения дергания", flush=True)
-                self.tilt_pwm.ChangeDutyCycle(0)
-                
                 # Обновляем последний угол
                 self._update_last_angle(servo, angle)
                 
-                print(f"✅ [GPIO-SERVO] Tilt установлен на {angle:.1f}° (PWM остановлен)", flush=True)
-                logger.info("✅ [GPIO-SERVO] Tilt установлен на %.1f° на GPIO %d (PWM остановлен)", 
-                           angle, self.tilt_pin)
+                print(f"✅ [GPIO-SERVO] Tilt установлен на {angle:.1f}° (PWM активен, duty_cycle={duty_cycle:.2f}%)", flush=True)
+                logger.info("✅ [GPIO-SERVO] Tilt установлен на %.1f° на GPIO %d (PWM активен, duty_cycle=%.2f%%)", 
+                           angle, self.tilt_pin, duty_cycle)
             else:
                 print(f"⚠️  [GPIO-SERVO] Неизвестный серво или PWM не инициализирован: servo={servo}", flush=True)
                 logger.warning(f"Unknown servo '{servo}' or PWM not initialized")
