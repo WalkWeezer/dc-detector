@@ -13,6 +13,7 @@ import numpy as np
 from .camera.manager import CameraInitializationError, CameraManager
 from .camera.servo_controller import ServoController
 from .config.runtime import RuntimeConfig
+from .mavlink.gps_reader import MavLinkGPSReader
 from .config.user_settings import (
     apply_performance_overrides,
     get_saved_active_model,
@@ -72,6 +73,14 @@ class DetectionService:
         self.last_annotated_frame: Optional[bytes] = None
         self.servo = ServoController.from_config(config)
         self.target_track_id: Optional[int] = None
+        
+        # MavLink GPS reader
+        self.mavlink_gps: Optional[MavLinkGPSReader] = None
+        if config.mavlink_port:
+            try:
+                self.mavlink_gps = MavLinkGPSReader(config.mavlink_port, config.mavlink_baudrate)
+            except Exception as exc:
+                logger.warning("Не удалось инициализировать MavLink GPS reader: %s", exc)
 
     # Lifecycle -----------------------------------------------------------------------
 
@@ -82,6 +91,13 @@ class DetectionService:
             logger.info("Камера инициализирована: %s", self.camera.camera_type)
         except CameraInitializationError:
             logger.warning("Камера не инициализирована. Видео поток будет недоступен.")
+
+        # Запускаем MavLink GPS reader если настроен
+        if self.mavlink_gps:
+            if self.mavlink_gps.start():
+                logger.info("MavLink GPS reader запущен")
+            else:
+                logger.warning("Не удалось запустить MavLink GPS reader")
 
         self._init_models()
         if self.inference_engine:
@@ -97,6 +113,9 @@ class DetectionService:
         # Cleanup servo hardware
         if self.servo:
             self.servo.cleanup()
+        # Останавливаем MavLink GPS reader
+        if self.mavlink_gps:
+            self.mavlink_gps.stop()
 
     # Properties ----------------------------------------------------------------------
 
@@ -141,6 +160,11 @@ class DetectionService:
             "queue_size": self.infer_queue.qsize(),
             "frame_process_time_ms": round(avg_frame_time, 1) if avg_frame_time > 0 else None,
         }
+        
+        # Добавляем GPS координаты если доступны
+        if self.mavlink_gps:
+            gps_status = self.mavlink_gps.get_gps_with_status()
+            payload["gps"] = gps_status
 
         if tracker_active:
             try:
@@ -230,6 +254,32 @@ class DetectionService:
             raise ValueError("track_id must be int")
         self.target_track_id = track_id
         return {"target_track_id": track_id, "servo": self.servo.get_state()}
+    
+    def get_gps(self) -> Optional[dict]:
+        """
+        Возвращает текущие GPS координаты.
+        
+        Returns:
+            Dict с полями: latitude, longitude, altitude, fix_type, last_update, available
+            или None если GPS не настроен
+        """
+        if not self.mavlink_gps:
+            return None
+        return self.mavlink_gps.get_gps_with_status()
+    
+    def set_servo_angles(self, pan: Optional[float] = None, tilt: Optional[float] = None) -> dict:
+        """
+        Устанавливает углы сервоприводов вручную.
+        
+        Args:
+            pan: Угол pan (0-180 градусов), None чтобы не изменять
+            tilt: Угол tilt (0-180 градусов), None чтобы не изменять
+        
+        Returns:
+            Dict с текущим состоянием сервоприводов
+        """
+        self.servo.set_angles(pan, tilt)
+        return self.servo.get_state()
 
     # Internal logic ------------------------------------------------------------------
 

@@ -173,6 +173,182 @@ sudo raspi-config
 # Interface Options → I2C → Enable
 ```
 
+## 📡 MavLink GPS (UART на GPIO)
+
+### Подключение к автопилоту через UART
+
+#### Вариант 1: Аппаратный UART (рекомендуется)
+
+**Физическое подключение (Raspberry Pi):**
+- **TX (GPIO 14, пин 8)** → RX автопилота
+- **RX (GPIO 15, пин 10)** → TX автопилота
+- **GND (пин 6)** → GND автопилота
+
+#### Вариант 2: Software UART (если аппаратный занят)
+
+**Рекомендуемые GPIO пины для Software UART:**
+
+| Назначение | GPIO | Физический пин | Примечание |
+|------------|------|----------------|------------|
+| **Вариант 1 (рекомендуется):** | | | |
+| TX (передача) | GPIO 4 | Пин 7 | Часто свободен, не конфликтует с I2C |
+| RX (прием) | GPIO 17 | Пин 11 | Часто свободен |
+| **Вариант 2:** | | | |
+| TX | GPIO 22 | Пин 15 | Часто свободен |
+| RX | GPIO 23 | Пин 16 | Часто свободен |
+| **Вариант 3:** | | | |
+| TX | GPIO 24 | Пин 18 | Часто свободен |
+| RX | GPIO 25 | Пин 22 | Часто свободен |
+
+**Схема подключения (пример для GPIO 4/17):**
+```
+Raspberry Pi          Автопилот
+───────────           ──────────
+GPIO 4 (пин 7)  ────> RX автопилота
+GPIO 17 (пин 11) <─── TX автопилота
+GND (пин 6)     ────> GND автопилота
+```
+
+**Физическое подключение для Software UART:**
+- **TX (выбранный GPIO, например GPIO 4, пин 7)** → RX автопилота
+- **RX (выбранный GPIO, например GPIO 17, пин 11)** → TX автопилота
+- **GND (любой GND, например пин 6)** → GND автопилота
+
+**Настройка Software UART (простой способ через config.txt):**
+
+Для Raspberry Pi 4/5 можно использовать дополнительные аппаратные UART на любых GPIO:
+```bash
+sudo nano /boot/config.txt
+# Добавьте в конец файла:
+# Software UART на GPIO 4 (TX) и GPIO 17 (RX)
+dtoverlay=uart3,txd3_pin=4,rxd3_pin=17
+# Или используйте GPIO 22/23:
+# dtoverlay=uart4,txd4_pin=22,rxd4_pin=23
+```
+
+После перезагрузки появится `/dev/ttyAMA2` (для uart3) или `/dev/ttyAMA3` (для uart4).
+
+**Альтернативный способ через pigpio (если config.txt не подходит):**
+
+1. Установите pigpio и socat:
+```bash
+sudo apt-get update
+sudo apt-get install pigpio socat
+sudo systemctl enable pigpiod
+sudo systemctl start pigpiod
+```
+
+2. Создайте скрипт для software UART:
+```bash
+sudo nano /usr/local/bin/softuart-mavlink.sh
+```
+
+Содержимое скрипта:
+```bash
+#!/bin/bash
+# Software UART на GPIO 4 (TX) и GPIO 17 (RX) для MavLink
+# Использует pigpio для bit-bang UART
+sudo pigpiod
+# Создаем виртуальный последовательный порт
+socat -d -d pty,raw,echo=0,link=/dev/ttySOFT0,wait-slave EXEC:"python3 -c \"
+import pigpio
+import time
+pi = pigpio.pi()
+# Настройка GPIO 4 как TX, GPIO 17 как RX
+# Здесь нужна реализация bit-bang UART через pigpio
+\""
+```
+
+**Примечание:** Для простоты рекомендуется использовать метод через `config.txt` с `dtoverlay=uart3` или `uart4`.
+
+**Настройка Software UART через config.txt (альтернативный метод):**
+
+Для Raspberry Pi 4 можно использовать дополнительные аппаратные UART:
+```bash
+sudo nano /boot/config.txt
+# Добавьте для UART на GPIO 4/17:
+dtoverlay=uart3
+# Или для других пинов:
+dtoverlay=uart4,txd4_pin=4,rxd4_pin=17
+```
+
+После этого появится `/dev/ttyAMA2` или `/dev/ttyAMA3`.
+
+**Настройка UART на Raspberry Pi:**
+
+1. Включите UART через `raspi-config`:
+```bash
+sudo raspi-config
+# Interface Options → Serial Port → Enable
+# (Отключите login shell через serial, если предложат)
+```
+
+2. Или вручную через `/boot/config.txt`:
+```bash
+sudo nano /boot/config.txt
+# Добавьте или раскомментируйте:
+enable_uart=1
+```
+
+3. Проверьте доступные UART порты:
+```bash
+ls -l /dev/ttyAMA* /dev/serial*
+# Обычно: /dev/ttyAMA0 (основной UART) или /dev/serial0 (симлинк)
+```
+
+4. Настройте в `.env`:
+```bash
+# Для основного аппаратного UART на GPIO 14/15:
+MAVLINK_PORT=/dev/ttyAMA0
+# или используйте симлинк
+MAVLINK_PORT=/dev/serial0
+
+# Для Software UART (если настроен через pigpio/socat):
+MAVLINK_PORT=/dev/ttySOFT0
+
+# Для дополнительного аппаратного UART (если настроен в config.txt):
+MAVLINK_PORT=/dev/ttyAMA2  # или /dev/ttyAMA3
+
+# Скорость для MavLink (обычно 57600 или 115200)
+MAVLINK_BAUDRATE=57600
+```
+
+**Примечание:** Если основной UART (GPIO 14/15) занят Bluetooth или другим устройством, используйте Software UART на других GPIO пинах.
+
+5. Установите зависимости:
+```bash
+pip install pymavlink
+```
+
+**Проверка подключения:**
+```bash
+# Проверьте, что порт доступен
+ls -l /dev/ttyAMA0
+
+# Проверьте права доступа (может потребоваться добавить пользователя в группу dialout)
+sudo usermod -a -G dialout $USER
+# Перелогиньтесь после этого
+```
+
+**Альтернативные варианты подключения:**
+
+- **USB последовательный порт:**
+  ```bash
+  MAVLINK_PORT=/dev/ttyUSB0
+  ```
+
+- **UDP (например, через QGroundControl):**
+  ```bash
+  MAVLINK_PORT=udp:127.0.0.1:14550
+  ```
+
+- **TCP:**
+  ```bash
+  MAVLINK_PORT=tcp:192.168.1.100:5760
+  ```
+
+**Примечание:** GPS координаты автоматически сохраняются в метаданных при сохранении GIF файлов.
+
 ## 🔄 Автозапуск (systemd)
 
 Самый простой способ — использовать один systemd сервис, который запускает скрипт `start-prod.sh`. Теперь сервис можно настраивать через отдельный `.env`.

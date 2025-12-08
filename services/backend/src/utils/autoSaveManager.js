@@ -156,6 +156,23 @@ async function autoSaveTracker(trackId, tracker, trackerConfig, autoSaveConfig, 
     cameraIndex: currentTracker.cameraIndex ?? null
   }
   
+  // Получаем GPS координаты если доступны
+  try {
+    const gpsPayload = await callDetectionJson('/api/gps', {}, 2000).catch(() => null)
+    if (gpsPayload && gpsPayload.available && gpsPayload.latitude != null && gpsPayload.longitude != null) {
+      detectionPayload.gps = {
+        latitude: gpsPayload.latitude,
+        longitude: gpsPayload.longitude,
+        altitude: gpsPayload.altitude ?? null,
+        fix_type: gpsPayload.fix_type ?? null,
+        captured_at: gpsPayload.last_update ?? Date.now() / 1000
+      }
+    }
+  } catch (err) {
+    // GPS опционально, продолжаем без него
+    console.debug(`[Auto-save] GPS not available for tracker ${trackId}:`, err.message)
+  }
+  
   // Сохраняем
   const fps = trackerConfig.capture_fps || 20
   await saveUserDetection({

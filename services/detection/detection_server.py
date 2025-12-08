@@ -216,6 +216,69 @@ def switch_model():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/gps', methods=['GET'])
+def get_gps():
+    """Получить текущие GPS координаты"""
+    if detection_service is None:
+        return jsonify({'error': 'Service not initialized'}), 503
+    
+    gps = detection_service.get_gps()
+    if gps is None:
+        return jsonify({
+            'available': False,
+            'error': 'GPS not configured or unavailable'
+        })
+    
+    return jsonify(gps)
+
+
+@app.route('/api/servo', methods=['GET'])
+def get_servo():
+    """Получить текущее состояние сервоприводов"""
+    if detection_service is None:
+        return jsonify({'error': 'Service not initialized'}), 503
+    
+    return jsonify(detection_service.servo.get_state())
+
+
+@app.route('/api/servo', methods=['POST'])
+def set_servo():
+    """Установить углы сервоприводов"""
+    if detection_service is None:
+        return jsonify({'error': 'Service not initialized'}), 503
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'JSON body required'}), 400
+    
+    pan = data.get('pan')
+    tilt = data.get('tilt')
+    
+    # Валидация
+    if pan is not None:
+        try:
+            pan = float(pan)
+            if not (0.0 <= pan <= 180.0):
+                return jsonify({'error': 'pan must be between 0.0 and 180.0'}), 400
+        except (TypeError, ValueError):
+            return jsonify({'error': 'pan must be a number'}), 400
+    
+    if tilt is not None:
+        try:
+            tilt = float(tilt)
+            if not (0.0 <= tilt <= 180.0):
+                return jsonify({'error': 'tilt must be between 0.0 and 180.0'}), 400
+        except (TypeError, ValueError):
+            return jsonify({'error': 'tilt must be a number'}), 400
+    
+    try:
+        result = detection_service.set_servo_angles(pan, tilt)
+        return jsonify(result)
+    except Exception as exc:
+        logger.error("Не удалось установить углы сервоприводов: %s", exc, exc_info=True)
+        return jsonify({'error': str(exc)}), 500
+
+
 @app.route('/api/config/performance', methods=['GET'])
 def get_performance_config():
     """Получить текущие настройки производительности и метрики"""

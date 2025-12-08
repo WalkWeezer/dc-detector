@@ -247,6 +247,24 @@ detectionsRouter.post('/save', async (req, res) => {
     const { detection, frames, fps, trackId, name } = req.body ?? {}
 
     if (detection && Array.isArray(frames) && frames.length > 0) {
+      // Пытаемся получить GPS координаты если они не переданы в detection
+      if (!detection.gps) {
+        try {
+          const gpsPayload = await callDetectionJson('/api/gps', {}, 2000).catch(() => null)
+          if (gpsPayload && gpsPayload.available && gpsPayload.latitude != null && gpsPayload.longitude != null) {
+            detection.gps = {
+              latitude: gpsPayload.latitude,
+              longitude: gpsPayload.longitude,
+              altitude: gpsPayload.altitude ?? null,
+              fix_type: gpsPayload.fix_type ?? null,
+              captured_at: gpsPayload.last_update ?? Date.now() / 1000
+            }
+          }
+        } catch (err) {
+          // GPS опционально, продолжаем без него
+          console.debug('GPS not available:', err.message)
+        }
+      }
       const payload = await saveUserDetection({ detection, frames, fps: Number(fps) || 20 })
       return res.status(201).json(payload)
     }
@@ -257,11 +275,12 @@ detectionsRouter.post('/save', async (req, res) => {
     }
 
     // Проверяем доступность detection service перед запросами
-    let trackersPayload, framesPayload
+    let trackersPayload, framesPayload, gpsPayload
     try {
-      [trackersPayload, framesPayload] = await Promise.all([
+      [trackersPayload, framesPayload, gpsPayload] = await Promise.all([
         callDetectionJson('/api/trackers'),
-        callDetectionJson(`/api/trackers/${numericTrackId}/frames`, {}, 5000)
+        callDetectionJson(`/api/trackers/${numericTrackId}/frames`, {}, 5000),
+        callDetectionJson('/api/gps', {}, 2000).catch(() => null) // GPS опционально, не блокируем сохранение
       ])
     } catch (err) {
       console.error('Detection service connection error:', {
@@ -298,6 +317,17 @@ detectionsRouter.post('/save', async (req, res) => {
       capturedAt: target.lastSeen ?? Date.now() / 1000,
       cameraIndex: target.cameraIndex ?? null,
       name: name ?? target.name ?? null
+    }
+    
+    // Добавляем GPS координаты если доступны
+    if (gpsPayload && gpsPayload.available && gpsPayload.latitude != null && gpsPayload.longitude != null) {
+      detectionPayload.gps = {
+        latitude: gpsPayload.latitude,
+        longitude: gpsPayload.longitude,
+        altitude: gpsPayload.altitude ?? null,
+        fix_type: gpsPayload.fix_type ?? null,
+        captured_at: gpsPayload.last_update ?? Date.now() / 1000
+      }
     }
 
     const payload = await saveUserDetection({

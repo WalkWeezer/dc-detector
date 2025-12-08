@@ -7,6 +7,8 @@
     activeModel: document.getElementById('active-model'),
     detectionCount: document.getElementById('detection-count'),
     detectionConfidence: document.getElementById('detection-confidence'),
+    mavlinkStatus: document.getElementById('mavlink-status'),
+    gpsStatus: document.getElementById('gps-status'),
     errorMessage: document.getElementById('error-message'),
     modelForm: document.getElementById('model-form'),
     modelSelect: document.getElementById('model-select'),
@@ -45,6 +47,13 @@
     metricInferFps: document.getElementById('metric-infer-fps'),
     metricQueueSize: document.getElementById('metric-queue-size'),
     metricFrameTime: document.getElementById('metric-frame-time'),
+    // Сервоприводы
+    servoPan: document.getElementById('servo-pan'),
+    servoPanValue: document.getElementById('servo-pan-value'),
+    servoTilt: document.getElementById('servo-tilt'),
+    servoTiltValue: document.getElementById('servo-tilt-value'),
+    servoResetBtn: document.getElementById('servo-reset-btn'),
+    servoStatus: document.getElementById('servo-status'),
   };
 
   const state = {
@@ -80,6 +89,8 @@
     stream: `${detectionServiceOrigin}/video_feed_raw`, // Прямой доступ к detection service
     autosaveConfig: `${backendOrigin}/api/config/autosave`, // Конфигурация автосохранения
     performanceConfig: `${detectionServiceOrigin}/api/config/performance`, // Настройки производительности
+    servo: `${detectionServiceOrigin}/api/servo`, // Управление сервоприводами
+    gps: `${detectionServiceOrigin}/api/gps`, // GPS координаты
   };
 
   function updateStatus(text, variant) {
@@ -200,6 +211,11 @@
       els.errorMessage.textContent = '';
       updateStatus('Онлайн', 'detected');
       
+      // Обновляем статус сервоприводов
+      if (data.servo) {
+        updateServoStatus(data.servo);
+      }
+      
       // Обновляем метрики производительности если вкладка открыта
       const performancePanel = document.getElementById('panel-tab-performance');
       if (performancePanel && performancePanel.classList.contains('active')) {
@@ -230,6 +246,87 @@
       els.errorMessage.textContent = err.message;
     } finally {
       setTimeout(refreshStatus, 2000);
+    }
+  }
+
+  async function refreshMavLinkAndGPS() {
+    try {
+      const gpsData = await fetchJSON(api.gps);
+      
+      // Обновляем статус MavLink
+      if (gpsData.available) {
+        els.mavlinkStatus.textContent = 'Подключен';
+        els.mavlinkStatus.style.color = '#40ffbc';
+        
+        // Обновляем GPS координаты
+        if (gpsData.latitude != null && gpsData.longitude != null) {
+          const lat = Number(gpsData.latitude).toFixed(6);
+          const lon = Number(gpsData.longitude).toFixed(6);
+          const alt = gpsData.altitude != null ? `, ${Number(gpsData.altitude).toFixed(1)}м` : '';
+          const fixType = gpsData.fix_type || 0;
+          const fixText = fixType >= 3 ? '3D' : fixType >= 2 ? '2D' : 'нет фикса';
+          els.gpsStatus.textContent = `${lat}, ${lon}${alt} (${fixText})`;
+          els.gpsStatus.style.color = fixType >= 2 ? '#40ffbc' : '#ff6b6b';
+        } else {
+          els.gpsStatus.textContent = 'Нет координат';
+          els.gpsStatus.style.color = '#ff6b6b';
+        }
+      } else {
+        els.mavlinkStatus.textContent = 'Не подключен';
+        els.mavlinkStatus.style.color = '#ff6b6b';
+        els.gpsStatus.textContent = gpsData.error || 'GPS не настроен';
+        els.gpsStatus.style.color = '#ffa500';
+      }
+    } catch (err) {
+      els.mavlinkStatus.textContent = 'Ошибка';
+      els.mavlinkStatus.style.color = '#ff6b6b';
+      els.gpsStatus.textContent = 'Недоступен';
+      els.gpsStatus.style.color = '#ff6b6b';
+    }
+  }
+
+  async function updateServoStatus(servoState) {
+    if (!servoState) return;
+    
+    if (els.servoStatus) {
+      const hardwareStatus = servoState.hardware_enabled ? 'Аппаратный' : 'Программный';
+      els.servoStatus.textContent = hardwareStatus;
+    }
+    
+    // Обновляем ползунки только если они не в фокусе (чтобы не мешать пользователю)
+    if (els.servoPan && document.activeElement !== els.servoPan) {
+      els.servoPan.value = Math.round(servoState.pan || 90);
+      if (els.servoPanValue) {
+        els.servoPanValue.textContent = `${Math.round(servoState.pan || 90)}°`;
+      }
+    }
+    
+    if (els.servoTilt && document.activeElement !== els.servoTilt) {
+      els.servoTilt.value = Math.round(servoState.tilt || 90);
+      if (els.servoTiltValue) {
+        els.servoTiltValue.textContent = `${Math.round(servoState.tilt || 90)}°`;
+      }
+    }
+  }
+
+  async function setServoAngles(pan, tilt) {
+    try {
+      const payload = {};
+      if (pan != null) payload.pan = Number(pan);
+      if (tilt != null) payload.tilt = Number(tilt);
+      
+      const result = await fetchJSON(api.servo, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      
+      updateServoStatus(result);
+    } catch (err) {
+      console.error('Ошибка установки углов сервоприводов:', err);
+      if (els.errorMessage) {
+        els.errorMessage.textContent = `Ошибка сервоприводов: ${err.message}`;
+      }
     }
   }
 
@@ -1139,6 +1236,49 @@
     els.applyTargetBtn.addEventListener('click', handleTargetAssign);
     els.saveDetectionBtn.addEventListener('click', handleSaveDetection);
     els.savedRefresh.addEventListener('click', loadSavedDetections);
+    
+    // Обработчики для сервоприводов
+    if (els.servoPan) {
+      els.servoPan.addEventListener('input', (e) => {
+        const value = Number(e.target.value);
+        if (els.servoPanValue) {
+          els.servoPanValue.textContent = `${value}°`;
+        }
+        // Отправляем изменение с небольшой задержкой (debounce)
+        clearTimeout(els.servoPan._timeout);
+        els.servoPan._timeout = setTimeout(() => {
+          setServoAngles(value, null);
+        }, 100);
+      });
+    }
+    
+    if (els.servoTilt) {
+      els.servoTilt.addEventListener('input', (e) => {
+        const value = Number(e.target.value);
+        if (els.servoTiltValue) {
+          els.servoTiltValue.textContent = `${value}°`;
+        }
+        // Отправляем изменение с небольшой задержкой (debounce)
+        clearTimeout(els.servoTilt._timeout);
+        els.servoTilt._timeout = setTimeout(() => {
+          setServoAngles(null, value);
+        }, 100);
+      });
+    }
+    
+    if (els.servoResetBtn) {
+      els.servoResetBtn.addEventListener('click', () => {
+        setServoAngles(90, 90);
+        if (els.servoPan) {
+          els.servoPan.value = 90;
+          if (els.servoPanValue) els.servoPanValue.textContent = '90°';
+        }
+        if (els.servoTilt) {
+          els.servoTilt.value = 90;
+          if (els.servoTiltValue) els.servoTiltValue.textContent = '90°';
+        }
+      });
+    }
     if (els.savedClear) {
       els.savedClear.addEventListener('click', () => {
         els.savedDate.value = '';
@@ -1158,6 +1298,9 @@
     refreshStatus();
     refreshModels();
     refreshTrackers();
+    // Обновляем статус MavLink и GPS каждые 3 секунды
+    refreshMavLinkAndGPS();
+    setInterval(refreshMavLinkAndGPS, 3000);
   }
 
   init();

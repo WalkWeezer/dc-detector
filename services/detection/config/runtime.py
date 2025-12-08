@@ -45,6 +45,9 @@ class RuntimeConfig:
     # Inference settings
     input_size: int | None = field(default=None)  # None = use model default
     draw_detections: bool = field(default=True)
+    # MavLink GPS settings
+    mavlink_port: str | None = field(default=None)  # None = отключено. Примеры: '/dev/ttyAMA0' (GPIO UART), '/dev/ttyUSB0', 'udp:127.0.0.1:14550'
+    mavlink_baudrate: int = field(default=57600)  # Скорость для последовательного порта (обычно 57600 или 115200)
 
     @classmethod
     def from_env(cls) -> "RuntimeConfig":
@@ -67,6 +70,8 @@ class RuntimeConfig:
             raw_frames_buffer_size=int(os.environ.get("RAW_FRAMES_BUFFER_SIZE", defaults.raw_frames_buffer_size)),
             input_size=int(os.environ.get("INPUT_SIZE", defaults.input_size)) if os.environ.get("INPUT_SIZE") else defaults.input_size,
             draw_detections=os.environ.get("DRAW_DETECTIONS", str(defaults.draw_detections)).lower() in ("true", "1", "yes"),
+            mavlink_port=os.environ.get("MAVLINK_PORT") if os.environ.get("MAVLINK_PORT") else defaults.mavlink_port,
+            mavlink_baudrate=int(os.environ.get("MAVLINK_BAUDRATE", defaults.mavlink_baudrate)),
         )
 
 

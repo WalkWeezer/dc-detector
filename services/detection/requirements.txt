@@ -25,4 +25,7 @@ pytest-cov==4.1.0
 # Для PCA9685 I2C контроллера (рекомендуется для множества сервоприводов):
 # adafruit-circuitpython-servokit
 
+# MavLink support for GPS coordinates
+pymavlink==2.4.40
+
 

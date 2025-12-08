@@ -143,6 +143,17 @@ class ServoController:
             }
         return state
 
+    def set_angles(self, pan: Optional[float] = None, tilt: Optional[float] = None) -> None:
+        """Устанавливает углы сервоприводов вручную."""
+        with self._lock:
+            if pan is not None:
+                self._pan = clamp(pan, 0.0, 180.0)
+            if tilt is not None:
+                self._tilt = clamp(tilt, 0.0, 180.0)
+        
+        # Отправляем на железо
+        self._apply_to_hardware()
+
     def reset(self) -> None:
         """Reset servos to center position (90 degrees)."""
         with self._lock:
