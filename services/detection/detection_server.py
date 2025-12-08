@@ -33,6 +33,32 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
+# Загружаем переменные окружения из .env файла
+try:
+    from dotenv import load_dotenv
+    # Ищем .env файл в корне проекта
+    env_path = PROJECT_ROOT / '.env'
+    if env_path.exists():
+        load_dotenv(env_path, override=False)  # override=False - не перезаписываем существующие переменные
+        print(f"✅ [ENV] Загружен .env файл: {env_path}", flush=True)
+        # Показываем важные переменные для отладки
+        servo_hw = os.environ.get("SERVO_HARDWARE", "не установлено")
+        print(f"   [ENV] SERVO_HARDWARE = '{servo_hw}'", flush=True)
+        if servo_hw and servo_hw.lower() not in ("none", "gpio", "pca9685"):
+            print(f"⚠️  [ENV] ВНИМАНИЕ: SERVO_HARDWARE='{servo_hw}' - возможно опечатка?", flush=True)
+            print(f"   [ENV] Ожидаемые значения: 'gpio', 'pca9685' или 'none'", flush=True)
+    else:
+        # Пробуем найти .env в текущей директории
+        load_dotenv(override=False)
+        print(f"ℹ️  [ENV] .env файл не найден в {env_path}, используем системные переменные окружения", flush=True)
+        servo_hw = os.environ.get("SERVO_HARDWARE", "не установлено")
+        print(f"   [ENV] SERVO_HARDWARE = '{servo_hw}' (из системных переменных)", flush=True)
+except ImportError:
+    print("⚠️  [ENV] python-dotenv не установлен. Установите: pip install python-dotenv", flush=True)
+    print("   [ENV] Используются только системные переменные окружения", flush=True)
+    servo_hw = os.environ.get("SERVO_HARDWARE", "не установлено")
+    print(f"   [ENV] SERVO_HARDWARE = '{servo_hw}' (из системных переменных)", flush=True)
+
 import collections
 import queue
 

@@ -73,8 +73,10 @@ class DetectionService:
         self.last_annotated_frame: Optional[bytes] = None
         
         # Инициализация сервоприводов
+        print("🔧 [SERVICE] Инициализация сервоприводов...")
         logger.info("🔧 Инициализация сервоприводов...")
         self.servo = ServoController.from_config(config)
+        print("✅ [SERVICE] Сервоприводы инициализированы")
         logger.info("✅ Сервоприводы инициализированы")
         
         self.target_track_id: Optional[int] = None

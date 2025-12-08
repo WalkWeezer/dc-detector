@@ -27,6 +27,10 @@ class ServoController:
         tilt: float = 90.0,
         hardware_controller: Optional[HardwareServoController] = None,
     ):
+        print(f"🔧 [SERVO-CTRL] Инициализация ServoController...")
+        print(f"   [SERVO-CTRL] Начальные углы: Pan={pan}°, Tilt={tilt}°")
+        print(f"   [SERVO-CTRL] Hardware controller: {'есть' if hardware_controller else 'нет (программный режим)'}")
+        
         self._pan = pan
         self._tilt = tilt
         self._lock = threading.Lock()
@@ -65,19 +69,36 @@ class ServoController:
     @classmethod
     def from_config(cls, config=None) -> "ServoController":
         """Create ServoController from configuration."""
+        # Принудительно сбрасываем буфер вывода для немедленного отображения
+        import sys
+        sys.stdout.flush()
+        sys.stderr.flush()
+        
         # Читаем настройки из переменных окружения
-        hardware_type = os.environ.get("SERVO_HARDWARE", "none").lower()
+        hardware_type_raw = os.environ.get("SERVO_HARDWARE", "none")
+        hardware_type = hardware_type_raw.lower() if hardware_type_raw else "none"
         
         # Явное логирование - всегда выводим
-        print(f"🔧 [SERVO] Настройка сервоприводов...")
-        print(f"   [SERVO] Тип железа: {hardware_type}")
+        print("=" * 60, flush=True)
+        print("🔧 [SERVO] Настройка сервоприводов...", flush=True)
+        print(f"   [SERVO] SERVO_HARDWARE из env: '{hardware_type_raw}'", flush=True)
+        print(f"   [SERVO] Тип железа (обработанный): {hardware_type}", flush=True)
         logger.info("🔧 Настройка сервоприводов...")
-        logger.info("   Тип железа: %s", hardware_type)
+        logger.info("   SERVO_HARDWARE из env: '%s'", hardware_type_raw)
+        logger.info("   Тип железа (обработанный): %s", hardware_type)
         
         if hardware_type == "none":
-            print("ℹ️  [SERVO] Сервоприводы работают в программном режиме (без железа)")
+            print("ℹ️  [SERVO] Сервоприводы работают в программном режиме (без железа)", flush=True)
+            print("   [SERVO] Для использования аппаратных сервоприводов установите:", flush=True)
+            print("   [SERVO]   SERVO_HARDWARE=gpio (для GPIO)", flush=True)
+            print("   [SERVO]   SERVO_HARDWARE=pca9685 (для PCA9685)", flush=True)
+            print("   [SERVO]   SERVO_PAN_PIN=18 и SERVO_TILT_PIN=19 (для GPIO)", flush=True)
+            print("=" * 60, flush=True)
             logger.info("ℹ️  Сервоприводы работают в программном режиме (без железа)")
-            return cls()
+            logger.info("   Для использования аппаратных сервоприводов установите SERVO_HARDWARE=gpio или SERVO_HARDWARE=pca9685")
+            controller = cls()
+            print(f"✅ [SERVO] ServoController создан (программный режим)", flush=True)
+            return controller
         
         # Параметры для GPIO
         pan_pin = os.environ.get("SERVO_PAN_PIN")
@@ -89,6 +110,10 @@ class ServoController:
         address = os.environ.get("SERVO_PCA9685_ADDRESS", "0x40")
         frequency = int(os.environ.get("SERVO_FREQUENCY", "50"))
         
+        print(f"   [SERVO] Pan pin: {pan_pin}")
+        print(f"   [SERVO] Tilt pin: {tilt_pin}")
+        print(f"   [SERVO] Frequency: {frequency} Hz")
+        
         kwargs = {"frequency": frequency}
         if hardware_type == "pca9685":
             kwargs["address"] = int(address, 16) if isinstance(address, str) and address.startswith("0x") else int(address)
@@ -96,13 +121,17 @@ class ServoController:
                 kwargs["pan_channel"] = int(pan_channel)
             if tilt_channel:
                 kwargs["tilt_channel"] = int(tilt_channel)
+            print(f"   [SERVO] PCA9685: Pan канал={pan_channel}, Tilt канал={tilt_channel}, Адрес=0x{kwargs['address']:02x}")
             logger.info("   PCA9685: Pan канал=%s, Tilt канал=%s, Адрес=0x%02x", 
                        pan_channel, tilt_channel, kwargs["address"])
         elif hardware_type == "gpio":
+            print(f"   [SERVO] GPIO: Pan pin={pan_pin}, Tilt pin={tilt_pin}")
             logger.info("   GPIO: Pan pin=%s, Tilt pin=%s", pan_pin, tilt_pin)
             if not pan_pin or not tilt_pin:
+                print("⚠️  [SERVO] SERVO_PAN_PIN или SERVO_TILT_PIN не указаны")
                 logger.warning("⚠️  SERVO_PAN_PIN или SERVO_TILT_PIN не указаны")
         
+        print(f"⏳ [SERVO] Создание контроллера железа типа '{hardware_type}'...")
         hardware = create_servo_controller(
             hardware_type=hardware_type,
             pan_pin=int(pan_pin) if pan_pin else None,
@@ -111,9 +140,16 @@ class ServoController:
         )
         
         if hardware is None:
+            print("⚠️  [SERVO] Не удалось создать контроллер железа, используется программный режим")
             logger.warning("⚠️  Не удалось создать контроллер железа, используется программный режим")
+        else:
+            print(f"✅ [SERVO] Контроллер железа создан: {type(hardware).__name__}")
         
-        return cls(hardware_controller=hardware)
+        print(f"⏳ [SERVO] Создание ServoController с контроллером железа...")
+        controller = cls(hardware_controller=hardware)
+        print(f"✅ [SERVO] ServoController создан")
+        
+        return controller
 
     def track_bbox(self, bbox: Sequence[float], frame_shape: Tuple[int, int]) -> None:
         """Adjust servo angles trying to keep bbox center near frame center."""
