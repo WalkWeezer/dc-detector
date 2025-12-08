@@ -267,6 +267,18 @@ class DetectionService:
             return None
         return self.mavlink_gps.get_gps_with_status()
     
+    def get_gps_connection_status(self) -> Optional[dict]:
+        """
+        Возвращает детальный статус подключения MavLink.
+        
+        Returns:
+            Dict с детальной информацией о состоянии подключения
+            или None если GPS не настроен
+        """
+        if not self.mavlink_gps:
+            return None
+        return self.mavlink_gps.get_connection_status()
+    
     def set_servo_angles(self, pan: Optional[float] = None, tilt: Optional[float] = None) -> dict:
         """
         Устанавливает углы сервоприводов вручную.

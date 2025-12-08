@@ -51,14 +51,34 @@ class MavLinkGPSReader:
     def start(self) -> bool:
         """Запускает подключение к MavLink и поток чтения GPS."""
         if not MAVLINK_AVAILABLE:
-            logger.warning("pymavlink не установлен. MavLink GPS недоступен.")
+            logger.error("❌ pymavlink не установлен. Установите: pip install pymavlink")
             return False
 
         if self._running:
             logger.warning("MavLink GPS reader уже запущен")
             return True
 
+        logger.info("🔌 Попытка подключения к MavLink...")
+        logger.info("   Порт: %s", self.port)
+        logger.info("   Скорость: %d", self.baudrate)
+
         try:
+            # Проверяем доступность порта для последовательных портов
+            if self.port.startswith('/dev/') or self.port.startswith('COM'):
+                import os
+                if not os.path.exists(self.port):
+                    logger.error("❌ Последовательный порт не найден: %s", self.port)
+                    logger.error("   Проверьте, что порт существует и доступен")
+                    logger.error("   Команда для проверки: ls -l %s", self.port)
+                    return False
+                
+                # Проверяем права доступа
+                if not os.access(self.port, os.R_OK | os.W_OK):
+                    logger.error("❌ Нет прав доступа к порту: %s", self.port)
+                    logger.error("   Решение: sudo usermod -a -G dialout $USER")
+                    logger.error("   Затем перелогиньтесь")
+                    return False
+
             # Определяем тип подключения
             if self.port.startswith('udp:') or self.port.startswith('tcp:'):
                 # UDP или TCP подключение
@@ -70,24 +90,51 @@ class MavLinkGPSReader:
                 # Пробуем как UDP
                 connection_string = f"udp:{self.port}"
 
-            logger.info("Подключение к MavLink: %s", connection_string)
+            logger.info("📡 Строка подключения: %s", connection_string)
+            logger.info("⏳ Создание подключения...")
+            
             self.connection = mavutil.mavlink_connection(connection_string)
             
-            # Ждем heartbeat для подтверждения подключения
-            logger.info("Ожидание heartbeat от автопилота...")
+            logger.info("⏳ Ожидание heartbeat от автопилота (таймаут 10 сек)...")
             self.connection.wait_heartbeat(timeout=10)
-            logger.info("MavLink подключение установлено (system %u component %u)",
-                        self.connection.target_system, self.connection.target_component)
+            
+            logger.info("✅ MavLink подключение установлено!")
+            logger.info("   System ID: %u", self.connection.target_system)
+            logger.info("   Component ID: %u", self.connection.target_component)
 
             self._running = True
             self.stop_event.clear()
             self.reader_thread = threading.Thread(target=self._read_loop, name="mavlink-gps-reader", daemon=True)
             self.reader_thread.start()
-            logger.info("MavLink GPS reader запущен")
+            logger.info("✅ MavLink GPS reader запущен и ожидает GPS данные...")
             return True
 
+        except TimeoutError:
+            logger.error("❌ Таймаут ожидания heartbeat от автопилота")
+            logger.error("   Проверьте:")
+            logger.error("   1. Автопилот включен и подключен")
+            logger.error("   2. Правильный порт: %s", self.port)
+            logger.error("   3. Правильная скорость: %d", self.baudrate)
+            logger.error("   4. Кабель подключен правильно")
+            self.connection = None
+            self._running = False
+            return False
+        except FileNotFoundError as exc:
+            logger.error("❌ Порт не найден: %s", exc)
+            logger.error("   Проверьте, что порт существует: ls -l %s", self.port)
+            self.connection = None
+            self._running = False
+            return False
+        except PermissionError as exc:
+            logger.error("❌ Нет прав доступа к порту: %s", exc)
+            logger.error("   Решение: sudo usermod -a -G dialout $USER")
+            logger.error("   Затем перелогиньтесь")
+            self.connection = None
+            self._running = False
+            return False
         except Exception as exc:
-            logger.error("Не удалось подключиться к MavLink: %s", exc, exc_info=True)
+            logger.error("❌ Не удалось подключиться к MavLink: %s", exc, exc_info=True)
+            logger.error("   Тип ошибки: %s", type(exc).__name__)
             self.connection = None
             self._running = False
             return False
@@ -140,6 +187,41 @@ class MavLinkGPSReader:
                 "last_update": self.last_update_time,
                 "available": self.latitude is not None and self.longitude is not None
             }
+
+    def get_connection_status(self) -> dict:
+        """
+        Возвращает детальный статус подключения MavLink.
+        
+        Returns:
+            Dict с детальной информацией о состоянии подключения
+        """
+        with self.lock:
+            status = {
+                "available": MAVLINK_AVAILABLE,
+                "configured": self.port is not None,
+                "port": self.port,
+                "baudrate": self.baudrate,
+                "running": self._running,
+                "connected": self.connection is not None,
+                "has_gps": self.latitude is not None and self.longitude is not None,
+                "gps_fix_type": self.gps_fix_type,
+                "last_update": self.last_update_time,
+                "thread_alive": self.reader_thread.is_alive() if self.reader_thread else False,
+            }
+            
+            # Дополнительная информация об ошибках
+            if not MAVLINK_AVAILABLE:
+                status["error"] = "pymavlink не установлен. Установите: pip install pymavlink"
+            elif not self.port:
+                status["error"] = "MAVLINK_PORT не настроен в переменных окружения"
+            elif not self._running:
+                status["error"] = "MavLink reader не запущен"
+            elif not self.connection:
+                status["error"] = "Подключение не установлено"
+            elif self.reader_thread and not self.reader_thread.is_alive():
+                status["error"] = "Поток чтения не запущен"
+            
+            return status
 
     def _read_loop(self) -> None:
         """Основной цикл чтения сообщений MavLink."""

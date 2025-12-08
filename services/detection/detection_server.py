@@ -232,6 +232,23 @@ def get_gps():
     return jsonify(gps)
 
 
+@app.route('/api/gps/status', methods=['GET'])
+def get_gps_status():
+    """Получить детальный статус подключения MavLink"""
+    if detection_service is None:
+        return jsonify({'error': 'Service not initialized'}), 503
+    
+    status = detection_service.get_gps_connection_status()
+    if status is None:
+        return jsonify({
+            'available': False,
+            'configured': False,
+            'error': 'MavLink не настроен (MAVLINK_PORT не указан в переменных окружения)'
+        })
+    
+    return jsonify(status)
+
+
 @app.route('/api/servo', methods=['GET'])
 def get_servo():
     """Получить текущее состояние сервоприводов"""
