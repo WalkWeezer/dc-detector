@@ -2,9 +2,14 @@ import express from 'express'
 import cors from 'cors'
 import morgan from 'morgan'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Readable } from 'node:stream'
 import fs from 'node:fs'
 import { config } from './config.js'
+
+// Получаем __dirname для ES modules
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 import { detectionsRouter, detectionStatusHandler } from './routes/detections.js'
 import { internalRouter } from './routes/internal.js'
 import { configRouter } from './routes/config.js'
@@ -12,7 +17,8 @@ import { trackersRouter } from './routes/trackers.js'
 import { callDetectionJson } from './utils/detectionClient.js'
 
 export function createApp() {
-  const app = express()
+  try {
+    const app = express()
   // Настройка CORS - важно, чтобы это было первым middleware
   app.use(cors({
     origin: (origin, callback) => {
@@ -230,7 +236,11 @@ export function createApp() {
     res.status(500).json({ error: 'Internal Server Error' })
   })
 
-  return app
+    return app
+  } catch (err) {
+    console.error('❌ Error creating Express app:', err)
+    throw err
+  }
 }
 
 

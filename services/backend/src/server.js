@@ -3,7 +3,33 @@ import { config } from './config.js'
 import { startAutoTargetSelection } from './utils/autoTargetManager.js'
 import { startAutoSave } from './utils/autoSaveManager.js'
 
-const app = createApp()
+console.log('🚀 Starting backend server...')
+console.log(`📋 Configuration:`)
+console.log(`   Port: ${config.port}`)
+console.log(`   Detection Service URL: ${config.detectionServiceUrl}`)
+console.log(`   Detections Dir: ${config.detectionsDataDir}`)
+console.log(`   Working Directory: ${process.cwd()}`)
+
+// Обработка необработанных ошибок
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught Exception:', err)
+  process.exit(1)
+})
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason)
+  process.exit(1)
+})
+
+let app
+try {
+  app = createApp()
+} catch (err) {
+  console.error('❌ Failed to create app:', err)
+  console.error(err.stack)
+  process.exit(1)
+}
+
 // Слушаем на всех интерфейсах (0.0.0.0) для доступа извне
 app.listen(config.port, '0.0.0.0', async () => {
   console.log(`\n🚀 Backend listening on 0.0.0.0:${config.port}`)
@@ -41,6 +67,16 @@ app.listen(config.port, '0.0.0.0', async () => {
   } catch (err) {
     console.warn('Failed to start auto save:', err.message)
   }
+}).on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`❌ Port ${config.port} is already in use`)
+    console.error(`   Please stop the process using this port or change BACKEND_PORT in .env`)
+    console.error(`   To find the process: lsof -i :${config.port} or netstat -tulpn | grep ${config.port}`)
+  } else {
+    console.error(`❌ Failed to start server on port ${config.port}:`, err.message)
+    console.error(err.stack)
+  }
+  process.exit(1)
 })
 
 
