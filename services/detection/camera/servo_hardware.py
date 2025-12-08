@@ -75,14 +75,14 @@ class GPIOServoController(HardwareServoController):
         # Защита от слишком частых команд
         self._last_pan_command = 0.0
         self._last_tilt_command = 0.0
-        self._min_command_interval = 0.1  # 100ms между командами
+        self._min_command_interval = 0.05  # 50ms между командами (уменьшено для лучшей отзывчивости)
 
     def initialize(self) -> bool:
         """Initialize GPIO and PWM."""
-        print(f"🔌 [SERVO-GPIO] Инициализация GPIO сервоприводов...")
-        print(f"   [SERVO-GPIO] Pan pin: {self.pan_pin}")
-        print(f"   [SERVO-GPIO] Tilt pin: {self.tilt_pin}")
-        print(f"   [SERVO-GPIO] Frequency: {self.frequency} Hz")
+        print(f"🔌 [SERVO-GPIO] Инициализация GPIO сервоприводов...", flush=True)
+        print(f"   [SERVO-GPIO] Pan pin: {self.pan_pin}", flush=True)
+        print(f"   [SERVO-GPIO] Tilt pin: {self.tilt_pin}", flush=True)
+        print(f"   [SERVO-GPIO] Frequency: {self.frequency} Hz", flush=True)
         logger.info("🔌 Инициализация GPIO сервоприводов...")
         logger.info("   Pan pin: %d", self.pan_pin)
         logger.info("   Tilt pin: %d", self.tilt_pin)
@@ -90,12 +90,12 @@ class GPIOServoController(HardwareServoController):
         
         try:
             import RPi.GPIO as GPIO
-            print("✅ [SERVO-GPIO] RPi.GPIO модуль доступен")
+            print("✅ [SERVO-GPIO] RPi.GPIO модуль доступен", flush=True)
             logger.info("✅ RPi.GPIO модуль доступен")
         except ImportError:
-            print("❌ [SERVO-GPIO] RPi.GPIO не установлен")
-            print("   [SERVO-GPIO] Установите: pip install RPi.GPIO")
-            print("   [SERVO-GPIO] Или запустите не на Raspberry Pi (программный режим)")
+            print("❌ [SERVO-GPIO] RPi.GPIO не установлен", flush=True)
+            print("   [SERVO-GPIO] Установите: pip install RPi.GPIO", flush=True)
+            print("   [SERVO-GPIO] Или запустите не на Raspberry Pi (программный режим)", flush=True)
             logger.error("❌ RPi.GPIO не установлен")
             logger.error("   Установите: pip install RPi.GPIO")
             logger.error("   Или запустите не на Raspberry Pi (программный режим)")
@@ -110,40 +110,52 @@ class GPIOServoController(HardwareServoController):
             # Setup pan servo
             if self.pan_pin:
                 logger.info("⏳ Настройка Pan серво на GPIO %d...", self.pan_pin)
+                print(f"⏳ [SERVO-GPIO] Настройка Pan на GPIO {self.pan_pin}...", flush=True)
                 GPIO.setup(self.pan_pin, GPIO.OUT)
                 self.pan_pwm = GPIO.PWM(self.pan_pin, self.frequency)
-                # Запускаем с нейтральной позицией (7.5% = 90 градусов) вместо 0
-                self.pan_pwm.start(7.5)
-                # Сразу даем время стабилизироваться
-                time.sleep(0.1)
+                # Запускаем PWM
+                self.pan_pwm.start(0)
+                time.sleep(0.1)  # Короткая пауза для стабилизации
+                # Устанавливаем начальную позицию (90°)
+                initial_duty = 7.5
+                print(f"   [SERVO-GPIO] Установка начальной позиции Pan: {initial_duty:.1f}% (90°)", flush=True)
+                self.pan_pwm.ChangeDutyCycle(initial_duty)
+                time.sleep(0.5)  # Даем время серве достичь позиции
+                print(f"✅ [SERVO-GPIO] Pan серво инициализирован на GPIO {self.pan_pin}", flush=True)
                 logger.info("✅ Pan серво инициализирован (начальная позиция: 90°)")
 
             # Setup tilt servo
             if self.tilt_pin:
                 logger.info("⏳ Настройка Tilt серво на GPIO %d...", self.tilt_pin)
+                print(f"⏳ [SERVO-GPIO] Настройка Tilt на GPIO {self.tilt_pin}...", flush=True)
                 GPIO.setup(self.tilt_pin, GPIO.OUT)
                 self.tilt_pwm = GPIO.PWM(self.tilt_pin, self.frequency)
-                # Запускаем с нейтральной позицией (7.5% = 90 градусов) вместо 0
-                self.tilt_pwm.start(7.5)
-                # Сразу даем время стабилизироваться
-                time.sleep(0.1)
+                # Запускаем PWM
+                self.tilt_pwm.start(0)
+                time.sleep(0.1)  # Короткая пауза для стабилизации
+                # Устанавливаем начальную позицию (90°)
+                initial_duty = 7.5
+                print(f"   [SERVO-GPIO] Установка начальной позиции Tilt: {initial_duty:.1f}% (90°)", flush=True)
+                self.tilt_pwm.ChangeDutyCycle(initial_duty)
+                time.sleep(0.5)  # Даем время серве достичь позиции
+                print(f"✅ [SERVO-GPIO] Tilt серво инициализирован на GPIO {self.tilt_pin}", flush=True)
                 logger.info("✅ Tilt серво инициализирован (начальная позиция: 90°)")
 
             self._initialized = True
             self._last_pan_angle = 90.0
             self._last_tilt_angle = 90.0
-            print(f"✅ [SERVO-GPIO] GPIO сервоприводы успешно инициализированы")
-            print(f"   [SERVO-GPIO] Pan: GPIO {self.pan_pin}, Tilt: GPIO {self.tilt_pin}, Частота: {self.frequency} Hz")
+            print(f"✅ [SERVO-GPIO] GPIO сервоприводы успешно инициализированы", flush=True)
+            print(f"   [SERVO-GPIO] Pan: GPIO {self.pan_pin}, Tilt: GPIO {self.tilt_pin}, Частота: {self.frequency} Hz", flush=True)
             logger.info("✅ GPIO сервоприводы успешно инициализированы")
             logger.info("   Pan: GPIO %d, Tilt: GPIO %d, Частота: %d Hz", 
                        self.pan_pin, self.tilt_pin, self.frequency)
             return True
         except RuntimeError as exc:
-            print(f"❌ [SERVO-GPIO] Ошибка инициализации GPIO: {exc}")
-            print(f"   [SERVO-GPIO] Возможные причины:")
-            print(f"   1. GPIO уже используется другим процессом")
-            print(f"   2. Недостаточно прав (нужны root или группа gpio)")
-            print(f"   3. Неправильные номера пинов")
+            print(f"❌ [SERVO-GPIO] Ошибка инициализации GPIO: {exc}", flush=True)
+            print(f"   [SERVO-GPIO] Возможные причины:", flush=True)
+            print(f"   1. GPIO уже используется другим процессом", flush=True)
+            print(f"   2. Недостаточно прав (нужны root или группа gpio)", flush=True)
+            print(f"   3. Неправильные номера пинов", flush=True)
             logger.error("❌ Ошибка инициализации GPIO: %s", exc)
             logger.error("   Возможные причины:")
             logger.error("   1. GPIO уже используется другим процессом")
@@ -151,8 +163,8 @@ class GPIOServoController(HardwareServoController):
             logger.error("   3. Неправильные номера пинов")
             return False
         except Exception as exc:
-            print(f"❌ [SERVO-GPIO] Не удалось инициализировать GPIO сервоприводы: {exc}")
-            print(f"   [SERVO-GPIO] Тип ошибки: {type(exc).__name__}")
+            print(f"❌ [SERVO-GPIO] Не удалось инициализировать GPIO сервоприводы: {exc}", flush=True)
+            print(f"   [SERVO-GPIO] Тип ошибки: {type(exc).__name__}", flush=True)
             logger.error("❌ Не удалось инициализировать GPIO сервоприводы: %s", exc, exc_info=True)
             logger.error("   Тип ошибки: %s", type(exc).__name__)
             return False
@@ -164,22 +176,22 @@ class GPIOServoController(HardwareServoController):
         # Проверяем интервал между командами
         if servo == "pan":
             if current_time - self._last_pan_command < self._min_command_interval:
-                print(f"   [GPIO-SERVO] Пропуск Pan команды: слишком часто (интервал {self._min_command_interval}с)", flush=True)
+                # print(f"   [GPIO-SERVO] Пропуск Pan команды: слишком часто (интервал {self._min_command_interval}с)", flush=True)
                 return
             self._last_pan_command = current_time
         elif servo == "tilt":
             if current_time - self._last_tilt_command < self._min_command_interval:
-                print(f"   [GPIO-SERVO] Пропуск Tilt команды: слишком часто (интервал {self._min_command_interval}с)", flush=True)
+                # print(f"   [GPIO-SERVO] Пропуск Tilt команды: слишком часто (интервал {self._min_command_interval}с)", flush=True)
                 return
             self._last_tilt_command = current_time
         
         # Проверяем, нужно ли обновлять угол
         if not self.should_update_angle(servo, angle):
-            print(f"   [GPIO-SERVO] {servo}: пропуск (изменение меньше {self._min_angle_change}°)", flush=True)
+            # print(f"   [GPIO-SERVO] {servo}: пропуск (изменение меньше {self._min_angle_change}°)", flush=True)
             return
         
         last_angle = self._last_pan_angle if servo == "pan" else self._last_tilt_angle
-        print(f"🔧 [GPIO-SERVO] set_angle: servo={servo}, angle={angle:.1f}°, last={last_angle}", flush=True)
+        # print(f"🔧 [GPIO-SERVO] set_angle: servo={servo}, angle={angle:.1f}°, last={last_angle}", flush=True)
         
         if not self._initialized:
             print(f"❌ [GPIO-SERVO] Контроллер не инициализирован!", flush=True)
@@ -192,48 +204,57 @@ class GPIOServoController(HardwareServoController):
         # Convert angle to duty cycle (0-180 degrees -> 2.5-12.5% duty cycle for standard servos)
         # Standard servos: 0° = 2.5%, 90° = 7.5%, 180° = 12.5%
         duty_cycle = 2.5 + (angle / 180.0) * 10.0
-        print(f"   [GPIO-SERVO] Duty cycle: {duty_cycle:.2f}%", flush=True)
+        # print(f"   [GPIO-SERVO] Duty cycle: {duty_cycle:.2f}%", flush=True)
 
         try:
             if servo == "pan" and self.pan_pwm:
-                print(f"⏳ [GPIO-SERVO] Установка Pan на GPIO {self.pan_pin}: duty_cycle={duty_cycle:.2f}%", flush=True)
-                logger.info("⏳ [GPIO-SERVO] Установка Pan на GPIO %d: угол=%.1f°, duty_cycle=%.2f%%", 
-                           self.pan_pin, angle, duty_cycle)
+                # print(f"⏳ [GPIO-SERVO] Установка Pan на GPIO {self.pan_pin}: duty_cycle={duty_cycle:.2f}%", flush=True)
+                # logger.info("⏳ [GPIO-SERVO] Установка Pan на GPIO %d: угол=%.1f°, duty_cycle=%.2f%%", 
+                #            self.pan_pin, angle, duty_cycle)
                 
-                # Устанавливаем новый duty cycle напрямую
-                # PWM должен работать постоянно для удержания позиции сервопривода
-                print(f"   [GPIO-SERVO] Отправка команды на GPIO {self.pan_pin}: ChangeDutyCycle({duty_cycle:.2f}%)", flush=True)
-                logger.info("   [GPIO-SERVO] Отправка команды на GPIO %d: ChangeDutyCycle(%.2f%%)", 
-                           self.pan_pin, duty_cycle)
+                # ПРЯМАЯ УСТАНОВКА угла
+                # print(f"   [GPIO-SERVO] Установка duty_cycle={duty_cycle:.2f}% на GPIO {self.pan_pin}", flush=True)
+                # logger.info("   [GPIO-SERVO] Отправка команды на GPIO %d: ChangeDutyCycle(%.2f%%)", 
+                #            self.pan_pin, duty_cycle)
+                
+                # Прямая установка угла
                 self.pan_pwm.ChangeDutyCycle(duty_cycle)
-                print(f"   [GPIO-SERVO] ✅ Команда отправлена на GPIO {self.pan_pin}", flush=True)
+                # print(f"   [GPIO-SERVO] ✅ Команда отправлена на GPIO {self.pan_pin}", flush=True)
+                
+                # Короткая пауза для стабилизации сигнала
+                # Для стандартных серво: очень короткая пауза
+                time.sleep(0.02)  # 20ms - минимальное время для обновления PWM
                 
                 # Обновляем последний угол
                 self._update_last_angle(servo, angle)
                 
-                print(f"✅ [GPIO-SERVO] Pan установлен на {angle:.1f}° (PWM активен, duty_cycle={duty_cycle:.2f}%)", flush=True)
-                logger.info("✅ [GPIO-SERVO] Pan установлен на %.1f° на GPIO %d (PWM активен, duty_cycle=%.2f%%)", 
-                           angle, self.pan_pin, duty_cycle)
+                # print(f"✅ [GPIO-SERVO] Pan установлен на {angle:.1f}°", flush=True)
+                # logger.info("✅ [GPIO-SERVO] Pan установлен на %.1f° на GPIO %d", 
+                #            angle, self.pan_pin)
                 
             elif servo == "tilt" and self.tilt_pwm:
-                print(f"⏳ [GPIO-SERVO] Установка Tilt на GPIO {self.tilt_pin}: duty_cycle={duty_cycle:.2f}%", flush=True)
-                logger.info("⏳ [GPIO-SERVO] Установка Tilt на GPIO %d: угол=%.1f°, duty_cycle=%.2f%%", 
-                           self.tilt_pin, angle, duty_cycle)
+                # print(f"⏳ [GPIO-SERVO] Установка Tilt на GPIO {self.tilt_pin}: duty_cycle={duty_cycle:.2f}%", flush=True)
+                # logger.info("⏳ [GPIO-SERVO] Установка Tilt на GPIO %d: угол=%.1f°, duty_cycle=%.2f%%", 
+                #            self.tilt_pin, angle, duty_cycle)
                 
-                # Устанавливаем новый duty cycle напрямую
-                # PWM должен работать постоянно для удержания позиции сервопривода
-                print(f"   [GPIO-SERVO] Отправка команды на GPIO {self.tilt_pin}: ChangeDutyCycle({duty_cycle:.2f}%)", flush=True)
-                logger.info("   [GPIO-SERVO] Отправка команды на GPIO %d: ChangeDutyCycle(%.2f%%)", 
-                           self.tilt_pin, duty_cycle)
+                # ПРЯМАЯ УСТАНОВКА угла
+                # print(f"   [GPIO-SERVO] Установка duty_cycle={duty_cycle:.2f}% на GPIO {self.tilt_pin}", flush=True)
+                # logger.info("   [GPIO-SERVO] Отправка команды на GPIO %d: ChangeDutyCycle(%.2f%%)", 
+                #            self.tilt_pin, duty_cycle)
+                
+                # Прямая установка угла
                 self.tilt_pwm.ChangeDutyCycle(duty_cycle)
-                print(f"   [GPIO-SERVO] ✅ Команда отправлена на GPIO {self.tilt_pin}", flush=True)
+                # print(f"   [GPIO-SERVO] ✅ Команда отправлена на GPIO {self.tilt_pin}", flush=True)
+                
+                # Короткая пауза для стабилизации сигнала
+                time.sleep(0.02)  # 20ms - минимальное время для обновления PWM
                 
                 # Обновляем последний угол
                 self._update_last_angle(servo, angle)
                 
-                print(f"✅ [GPIO-SERVO] Tilt установлен на {angle:.1f}° (PWM активен, duty_cycle={duty_cycle:.2f}%)", flush=True)
-                logger.info("✅ [GPIO-SERVO] Tilt установлен на %.1f° на GPIO %d (PWM активен, duty_cycle=%.2f%%)", 
-                           angle, self.tilt_pin, duty_cycle)
+                # print(f"✅ [GPIO-SERVO] Tilt установлен на {angle:.1f}°", flush=True)
+                # logger.info("✅ [GPIO-SERVO] Tilt установлен на %.1f° на GPIO %d", 
+                #            angle, self.tilt_pin)
             else:
                 print(f"⚠️  [GPIO-SERVO] Неизвестный серво или PWM не инициализирован: servo={servo}", flush=True)
                 logger.warning(f"Unknown servo '{servo}' or PWM not initialized")
