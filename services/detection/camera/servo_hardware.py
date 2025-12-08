@@ -54,35 +54,57 @@ class GPIOServoController(HardwareServoController):
 
     def initialize(self) -> bool:
         """Initialize GPIO and PWM."""
+        logger.info("🔌 Инициализация GPIO сервоприводов...")
+        logger.info("   Pan pin: %d", self.pan_pin)
+        logger.info("   Tilt pin: %d", self.tilt_pin)
+        logger.info("   Frequency: %d Hz", self.frequency)
+        
         try:
             import RPi.GPIO as GPIO
+            logger.info("✅ RPi.GPIO модуль доступен")
+        except ImportError:
+            logger.error("❌ RPi.GPIO не установлен")
+            logger.error("   Установите: pip install RPi.GPIO")
+            logger.error("   Или запустите не на Raspberry Pi (программный режим)")
+            return False
 
+        try:
             self._gpio = GPIO
+            logger.info("⏳ Настройка GPIO режима (BCM)...")
             GPIO.setmode(GPIO.BCM)
             GPIO.setwarnings(False)
 
             # Setup pan servo
             if self.pan_pin:
+                logger.info("⏳ Настройка Pan серво на GPIO %d...", self.pan_pin)
                 GPIO.setup(self.pan_pin, GPIO.OUT)
                 self.pan_pwm = GPIO.PWM(self.pan_pin, self.frequency)
                 self.pan_pwm.start(0)
+                logger.info("✅ Pan серво инициализирован")
 
             # Setup tilt servo
             if self.tilt_pin:
+                logger.info("⏳ Настройка Tilt серво на GPIO %d...", self.tilt_pin)
                 GPIO.setup(self.tilt_pin, GPIO.OUT)
                 self.tilt_pwm = GPIO.PWM(self.tilt_pin, self.frequency)
                 self.tilt_pwm.start(0)
+                logger.info("✅ Tilt серво инициализирован")
 
             self._initialized = True
-            logger.info(
-                f"GPIO Servo initialized: pan_pin={self.pan_pin}, tilt_pin={self.tilt_pin}, freq={self.frequency}Hz"
-            )
+            logger.info("✅ GPIO сервоприводы успешно инициализированы")
+            logger.info("   Pan: GPIO %d, Tilt: GPIO %d, Частота: %d Hz", 
+                       self.pan_pin, self.tilt_pin, self.frequency)
             return True
-        except ImportError:
-            logger.warning("RPi.GPIO not available (not running on Raspberry Pi?)")
+        except RuntimeError as exc:
+            logger.error("❌ Ошибка инициализации GPIO: %s", exc)
+            logger.error("   Возможные причины:")
+            logger.error("   1. GPIO уже используется другим процессом")
+            logger.error("   2. Недостаточно прав (нужны root или группа gpio)")
+            logger.error("   3. Неправильные номера пинов")
             return False
         except Exception as exc:
-            logger.error(f"Failed to initialize GPIO servos: {exc}")
+            logger.error("❌ Не удалось инициализировать GPIO сервоприводы: %s", exc, exc_info=True)
+            logger.error("   Тип ошибки: %s", type(exc).__name__)
             return False
 
     def set_angle(self, servo: str, angle: float) -> None:
@@ -153,21 +175,53 @@ class PCA9685ServoController(HardwareServoController):
 
     def initialize(self) -> bool:
         """Initialize PCA9685."""
+        logger.info("🔌 Инициализация PCA9685 сервоприводов...")
+        logger.info("   Pan channel: %d", self.pan_channel)
+        logger.info("   Tilt channel: %d", self.tilt_channel)
+        logger.info("   I2C address: 0x%02x", self.address)
+        logger.info("   Frequency: %d Hz", self.frequency)
+        
         try:
             from adafruit_servokit import ServoKit
+            logger.info("✅ adafruit-circuitpython-servokit модуль доступен")
+        except ImportError:
+            logger.error("❌ adafruit-circuitpython-servokit не установлен")
+            logger.error("   Установите: pip install adafruit-circuitpython-servokit")
+            return False
 
+        try:
+            # Проверяем доступность I2C
+            try:
+                import board
+                import busio
+                logger.info("⏳ Проверка доступности I2C...")
+                i2c = busio.I2C(board.SCL, board.SDA)
+                logger.info("✅ I2C доступен")
+            except Exception as i2c_exc:
+                logger.error("❌ I2C недоступен: %s", i2c_exc)
+                logger.error("   Проверьте:")
+                logger.error("   1. I2C включен: sudo raspi-config → Interface Options → I2C → Enable")
+                logger.error("   2. PCA9685 подключен к I2C шине")
+                logger.error("   3. Правильный адрес I2C: 0x%02x", self.address)
+                return False
+
+            logger.info("⏳ Создание ServoKit (channels=16, address=0x%02x)...", self.address)
             self._servo_kit = ServoKit(channels=16, address=self.address, frequency=self.frequency)
             self._initialized = True
-            logger.info(
-                f"PCA9685 Servo initialized: pan_channel={self.pan_channel}, "
-                f"tilt_channel={self.tilt_channel}, address=0x{self.address:02x}, freq={self.frequency}Hz"
-            )
+            logger.info("✅ PCA9685 сервоприводы успешно инициализированы")
+            logger.info("   Pan: канал %d, Tilt: канал %d, Адрес: 0x%02x, Частота: %d Hz",
+                       self.pan_channel, self.tilt_channel, self.address, self.frequency)
             return True
-        except ImportError:
-            logger.warning("adafruit-circuitpython-servokit not available")
+        except ValueError as exc:
+            logger.error("❌ Ошибка инициализации PCA9685: %s", exc)
+            logger.error("   Возможные причины:")
+            logger.error("   1. Неправильный I2C адрес (проверьте перемычки на PCA9685)")
+            logger.error("   2. PCA9685 не подключен к I2C шине")
+            logger.error("   3. Недостаточно питания для PCA9685")
             return False
         except Exception as exc:
-            logger.error(f"Failed to initialize PCA9685 servos: {exc}")
+            logger.error("❌ Не удалось инициализировать PCA9685 сервоприводы: %s", exc, exc_info=True)
+            logger.error("   Тип ошибки: %s", type(exc).__name__)
             return False
 
     def set_angle(self, servo: str, angle: float) -> None:

@@ -258,6 +258,16 @@ def get_servo():
     return jsonify(detection_service.servo.get_state())
 
 
+@app.route('/api/servo/status', methods=['GET'])
+def get_servo_status():
+    """Получить детальный статус подключения сервоприводов"""
+    if detection_service is None:
+        return jsonify({'error': 'Service not initialized'}), 503
+    
+    status = detection_service.servo.get_connection_status()
+    return jsonify(status)
+
+
 @app.route('/api/servo', methods=['POST'])
 def set_servo():
     """Установить углы сервоприводов"""

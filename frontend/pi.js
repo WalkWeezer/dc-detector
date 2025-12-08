@@ -54,6 +54,7 @@
     servoTiltValue: document.getElementById('servo-tilt-value'),
     servoResetBtn: document.getElementById('servo-reset-btn'),
     servoStatus: document.getElementById('servo-status'),
+    servoError: document.getElementById('servo-error'),
   };
 
   const state = {
@@ -90,6 +91,7 @@
     autosaveConfig: `${backendOrigin}/api/config/autosave`, // Конфигурация автосохранения
     performanceConfig: `${detectionServiceOrigin}/api/config/performance`, // Настройки производительности
     servo: `${detectionServiceOrigin}/api/servo`, // Управление сервоприводами
+    servoStatus: `${detectionServiceOrigin}/api/servo/status`, // Детальный статус сервоприводов
     gps: `${detectionServiceOrigin}/api/gps`, // GPS координаты
   };
 
@@ -216,6 +218,9 @@
         updateServoStatus(data.servo);
       }
       
+      // Обновляем детальный статус сервоприводов
+      refreshServoStatus();
+      
       // Обновляем метрики производительности если вкладка открыта
       const performancePanel = document.getElementById('panel-tab-performance');
       if (performancePanel && performancePanel.classList.contains('active')) {
@@ -289,8 +294,33 @@
     if (!servoState) return;
     
     if (els.servoStatus) {
-      const hardwareStatus = servoState.hardware_enabled ? 'Аппаратный' : 'Программный';
-      els.servoStatus.textContent = hardwareStatus;
+      let statusText = '—';
+      let statusColor = '#999';
+      
+      if (servoState.hardware_enabled) {
+        statusText = 'Аппаратный';
+        statusColor = '#40ffbc';
+      } else if (servoState.configured) {
+        statusText = 'Ошибка инициализации';
+        statusColor = '#ff6b6b';
+      } else {
+        statusText = 'Программный';
+        statusColor = '#ffa500';
+      }
+      
+      els.servoStatus.textContent = statusText;
+      els.servoStatus.style.color = statusColor;
+      els.servoStatus.title = servoState.error || statusText;
+    }
+    
+    // Показываем ошибку если есть
+    if (els.servoError) {
+      if (servoState.error) {
+        els.servoError.textContent = `⚠️ ${servoState.error}`;
+        els.servoError.style.display = 'block';
+      } else {
+        els.servoError.style.display = 'none';
+      }
     }
     
     // Обновляем ползунки только если они не в фокусе (чтобы не мешать пользователю)
@@ -306,6 +336,15 @@
       if (els.servoTiltValue) {
         els.servoTiltValue.textContent = `${Math.round(servoState.tilt || 90)}°`;
       }
+    }
+  }
+  
+  async function refreshServoStatus() {
+    try {
+      const status = await fetchJSON(api.servoStatus);
+      updateServoStatus(status);
+    } catch (err) {
+      console.debug('Ошибка получения статуса сервоприводов:', err);
     }
   }
 
@@ -1301,6 +1340,9 @@
     // Обновляем статус MavLink и GPS каждые 3 секунды
     refreshMavLinkAndGPS();
     setInterval(refreshMavLinkAndGPS, 3000);
+    // Обновляем детальный статус сервоприводов каждые 5 секунд
+    refreshServoStatus();
+    setInterval(refreshServoStatus, 5000);
   }
 
   init();

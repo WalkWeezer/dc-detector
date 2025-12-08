@@ -40,14 +40,20 @@ class ServoController:
 
         # Инициализируем железо, если оно предоставлено
         if self._hardware:
+            logger.info("⏳ Попытка инициализации аппаратных сервоприводов...")
             if self._hardware.initialize():
-                logger.info("Hardware servos initialized successfully")
+                logger.info("✅ Аппаратные сервоприводы успешно инициализированы")
                 # Устанавливаем начальную позицию
+                logger.info("⏳ Установка начальной позиции (90°/90°)...")
                 self._hardware.set_angle("pan", self._pan)
                 self._hardware.set_angle("tilt", self._tilt)
+                logger.info("✅ Начальная позиция установлена")
             else:
-                logger.warning("Hardware servos initialization failed, using software mode")
+                logger.warning("⚠️  Инициализация аппаратных сервоприводов не удалась, используется программный режим")
+                logger.warning("   Сервоприводы будут работать, но без управления реальным железом")
                 self._hardware = None
+        else:
+            logger.info("ℹ️  Сервоприводы работают в программном режиме (без железа)")
 
     @classmethod
     def from_config(cls, config=None) -> "ServoController":
@@ -55,7 +61,11 @@ class ServoController:
         # Читаем настройки из переменных окружения
         hardware_type = os.environ.get("SERVO_HARDWARE", "none").lower()
         
+        logger.info("🔧 Настройка сервоприводов...")
+        logger.info("   Тип железа: %s", hardware_type)
+        
         if hardware_type == "none":
+            logger.info("ℹ️  Сервоприводы работают в программном режиме (без железа)")
             return cls()
         
         # Параметры для GPIO
@@ -75,6 +85,12 @@ class ServoController:
                 kwargs["pan_channel"] = int(pan_channel)
             if tilt_channel:
                 kwargs["tilt_channel"] = int(tilt_channel)
+            logger.info("   PCA9685: Pan канал=%s, Tilt канал=%s, Адрес=0x%02x", 
+                       pan_channel, tilt_channel, kwargs["address"])
+        elif hardware_type == "gpio":
+            logger.info("   GPIO: Pan pin=%s, Tilt pin=%s", pan_pin, tilt_pin)
+            if not pan_pin or not tilt_pin:
+                logger.warning("⚠️  SERVO_PAN_PIN или SERVO_TILT_PIN не указаны")
         
         hardware = create_servo_controller(
             hardware_type=hardware_type,
@@ -82,6 +98,9 @@ class ServoController:
             tilt_pin=int(tilt_pin) if tilt_pin else None,
             **kwargs
         )
+        
+        if hardware is None:
+            logger.warning("⚠️  Не удалось создать контроллер железа, используется программный режим")
         
         return cls(hardware_controller=hardware)
 
@@ -142,6 +161,84 @@ class ServoController:
                 "hardware_enabled": self._hardware is not None and self._hardware.is_available(),
             }
         return state
+
+    def get_connection_status(self) -> dict:
+        """
+        Возвращает детальный статус подключения сервоприводов.
+        
+        Returns:
+            Dict с детальной информацией о состоянии сервоприводов
+        """
+        import os
+        
+        hardware_type = os.environ.get("SERVO_HARDWARE", "none").lower()
+        
+        status = {
+            "configured": hardware_type != "none",
+            "hardware_type": hardware_type,
+            "hardware_enabled": self._hardware is not None and self._hardware.is_available() if self._hardware else False,
+            "pan": round(self._pan, 2),
+            "tilt": round(self._tilt, 2),
+        }
+        
+        # Добавляем информацию о конфигурации
+        if hardware_type == "gpio":
+            status["pan_pin"] = os.environ.get("SERVO_PAN_PIN")
+            status["tilt_pin"] = os.environ.get("SERVO_TILT_PIN")
+            status["frequency"] = int(os.environ.get("SERVO_FREQUENCY", "50"))
+            
+            # Проверяем доступность RPi.GPIO
+            try:
+                import RPi.GPIO as GPIO
+                status["rpi_gpio_available"] = True
+            except ImportError:
+                status["rpi_gpio_available"] = False
+                status["error"] = "RPi.GPIO не установлен. Установите: pip install RPi.GPIO"
+            
+            # Проверяем, что пины указаны
+            if not status["pan_pin"] or not status["tilt_pin"]:
+                status["error"] = "SERVO_PAN_PIN или SERVO_TILT_PIN не указаны"
+                
+        elif hardware_type == "pca9685":
+            status["pan_channel"] = os.environ.get("SERVO_PAN_CHANNEL")
+            status["tilt_channel"] = os.environ.get("SERVO_TILT_CHANNEL")
+            status["address"] = os.environ.get("SERVO_PCA9685_ADDRESS", "0x40")
+            status["frequency"] = int(os.environ.get("SERVO_FREQUENCY", "50"))
+            
+            # Проверяем доступность adafruit-circuitpython-servokit
+            try:
+                from adafruit_servokit import ServoKit
+                status["servokit_available"] = True
+            except ImportError:
+                status["servokit_available"] = False
+                status["error"] = "adafruit-circuitpython-servokit не установлен. Установите: pip install adafruit-circuitpython-servokit"
+            
+            # Проверяем доступность I2C
+            try:
+                import board
+                import busio
+                i2c = busio.I2C(board.SCL, board.SDA)
+                status["i2c_available"] = True
+            except Exception as exc:
+                status["i2c_available"] = False
+                status["error"] = f"I2C недоступен: {exc}"
+                
+        else:
+            status["error"] = "SERVO_HARDWARE не настроен (используется программный режим)"
+        
+        # Добавляем информацию о состоянии железа
+        if self._hardware:
+            status["hardware_initialized"] = self._hardware.is_available()
+            if hasattr(self._hardware, 'pan_pin'):
+                status["hardware_pan_pin"] = self._hardware.pan_pin
+                status["hardware_tilt_pin"] = self._hardware.tilt_pin
+            if hasattr(self._hardware, 'pan_channel'):
+                status["hardware_pan_channel"] = self._hardware.pan_channel
+                status["hardware_tilt_channel"] = self._hardware.tilt_channel
+        else:
+            status["hardware_initialized"] = False
+        
+        return status
 
     def set_angles(self, pan: Optional[float] = None, tilt: Optional[float] = None) -> None:
         """Устанавливает углы сервоприводов вручную."""
