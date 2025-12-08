@@ -53,7 +53,8 @@ class RuntimeConfig:
     def from_env(cls) -> "RuntimeConfig":
         defaults = cls()
         return cls(
-            port=int(os.environ.get("PORT", defaults.port)),
+            # Используем DETECTION_PORT, но поддерживаем PORT для обратной совместимости
+            port=int(os.environ.get("DETECTION_PORT", os.environ.get("PORT", defaults.port))),
             confidence_threshold=float(os.environ.get("CONFIDENCE_THRESHOLD", defaults.confidence_threshold)),
             infer_fps=float(os.environ.get("INFER_FPS", defaults.infer_fps)),
             jpeg_quality=int(os.environ.get("JPEG_QUALITY", defaults.jpeg_quality)),

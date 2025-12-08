@@ -4,7 +4,8 @@ import path from 'node:path'
 const DEFAULT_DETECTION_URL = 'http://localhost:8001'
 
 export const config = {
-  port: Number.parseInt(process.env.PORT ?? '8080', 10),
+  // Используем BACKEND_PORT, но поддерживаем PORT для обратной совместимости
+  port: Number.parseInt(process.env.BACKEND_PORT ?? process.env.PORT ?? '8080', 10),
   detectionServiceUrl: process.env.DETECTION_URL ?? DEFAULT_DETECTION_URL,
   detectionsDataDir: path.resolve(process.cwd(), process.env.DETECTIONS_DIR ?? 'data/detections'),
   // Увеличенный лимит для загрузки кадров (gif сохранение)

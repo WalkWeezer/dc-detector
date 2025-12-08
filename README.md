@@ -72,9 +72,19 @@ cp env.example .env
 
 Важные переменные:
 ```dotenv
+# Backend порт (рекомендуется использовать BACKEND_PORT)
+BACKEND_PORT=8080
+# Или PORT=8080 для обратной совместимости
+
+# Detection Service порт (рекомендуется использовать DETECTION_PORT)
+DETECTION_PORT=8001
+# Или PORT=8001 для обратной совместимости
+
+# URL Detection Service
 DETECTION_URL=http://localhost:8001
-PORT=8080
 ```
+
+**Важно:** Используйте `BACKEND_PORT` и `DETECTION_PORT` вместо одного `PORT`, чтобы избежать конфликтов при запуске обоих сервисов из одного `.env` файла.
 
 ### 2. Установка зависимостей Detection Service
 
