@@ -71,7 +71,12 @@ class DetectionService:
         
         self.last_raw_frame: Optional[np.ndarray] = None
         self.last_annotated_frame: Optional[bytes] = None
+        
+        # Инициализация сервоприводов
+        logger.info("🔧 Инициализация сервоприводов...")
         self.servo = ServoController.from_config(config)
+        logger.info("✅ Сервоприводы инициализированы")
+        
         self.target_track_id: Optional[int] = None
         
         # MavLink GPS reader

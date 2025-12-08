@@ -54,6 +54,10 @@ class GPIOServoController(HardwareServoController):
 
     def initialize(self) -> bool:
         """Initialize GPIO and PWM."""
+        print(f"🔌 [SERVO-GPIO] Инициализация GPIO сервоприводов...")
+        print(f"   [SERVO-GPIO] Pan pin: {self.pan_pin}")
+        print(f"   [SERVO-GPIO] Tilt pin: {self.tilt_pin}")
+        print(f"   [SERVO-GPIO] Frequency: {self.frequency} Hz")
         logger.info("🔌 Инициализация GPIO сервоприводов...")
         logger.info("   Pan pin: %d", self.pan_pin)
         logger.info("   Tilt pin: %d", self.tilt_pin)
@@ -61,8 +65,12 @@ class GPIOServoController(HardwareServoController):
         
         try:
             import RPi.GPIO as GPIO
+            print("✅ [SERVO-GPIO] RPi.GPIO модуль доступен")
             logger.info("✅ RPi.GPIO модуль доступен")
         except ImportError:
+            print("❌ [SERVO-GPIO] RPi.GPIO не установлен")
+            print("   [SERVO-GPIO] Установите: pip install RPi.GPIO")
+            print("   [SERVO-GPIO] Или запустите не на Raspberry Pi (программный режим)")
             logger.error("❌ RPi.GPIO не установлен")
             logger.error("   Установите: pip install RPi.GPIO")
             logger.error("   Или запустите не на Raspberry Pi (программный режим)")
@@ -91,11 +99,18 @@ class GPIOServoController(HardwareServoController):
                 logger.info("✅ Tilt серво инициализирован")
 
             self._initialized = True
+            print(f"✅ [SERVO-GPIO] GPIO сервоприводы успешно инициализированы")
+            print(f"   [SERVO-GPIO] Pan: GPIO {self.pan_pin}, Tilt: GPIO {self.tilt_pin}, Частота: {self.frequency} Hz")
             logger.info("✅ GPIO сервоприводы успешно инициализированы")
             logger.info("   Pan: GPIO %d, Tilt: GPIO %d, Частота: %d Hz", 
                        self.pan_pin, self.tilt_pin, self.frequency)
             return True
         except RuntimeError as exc:
+            print(f"❌ [SERVO-GPIO] Ошибка инициализации GPIO: {exc}")
+            print(f"   [SERVO-GPIO] Возможные причины:")
+            print(f"   1. GPIO уже используется другим процессом")
+            print(f"   2. Недостаточно прав (нужны root или группа gpio)")
+            print(f"   3. Неправильные номера пинов")
             logger.error("❌ Ошибка инициализации GPIO: %s", exc)
             logger.error("   Возможные причины:")
             logger.error("   1. GPIO уже используется другим процессом")
@@ -103,6 +118,8 @@ class GPIOServoController(HardwareServoController):
             logger.error("   3. Неправильные номера пинов")
             return False
         except Exception as exc:
+            print(f"❌ [SERVO-GPIO] Не удалось инициализировать GPIO сервоприводы: {exc}")
+            print(f"   [SERVO-GPIO] Тип ошибки: {type(exc).__name__}")
             logger.error("❌ Не удалось инициализировать GPIO сервоприводы: %s", exc, exc_info=True)
             logger.error("   Тип ошибки: %s", type(exc).__name__)
             return False
@@ -175,6 +192,11 @@ class PCA9685ServoController(HardwareServoController):
 
     def initialize(self) -> bool:
         """Initialize PCA9685."""
+        print(f"🔌 [SERVO-PCA9685] Инициализация PCA9685 сервоприводов...")
+        print(f"   [SERVO-PCA9685] Pan channel: {self.pan_channel}")
+        print(f"   [SERVO-PCA9685] Tilt channel: {self.tilt_channel}")
+        print(f"   [SERVO-PCA9685] I2C address: 0x{self.address:02x}")
+        print(f"   [SERVO-PCA9685] Frequency: {self.frequency} Hz")
         logger.info("🔌 Инициализация PCA9685 сервоприводов...")
         logger.info("   Pan channel: %d", self.pan_channel)
         logger.info("   Tilt channel: %d", self.tilt_channel)
@@ -183,8 +205,11 @@ class PCA9685ServoController(HardwareServoController):
         
         try:
             from adafruit_servokit import ServoKit
+            print("✅ [SERVO-PCA9685] adafruit-circuitpython-servokit модуль доступен")
             logger.info("✅ adafruit-circuitpython-servokit модуль доступен")
         except ImportError:
+            print("❌ [SERVO-PCA9685] adafruit-circuitpython-servokit не установлен")
+            print("   [SERVO-PCA9685] Установите: pip install adafruit-circuitpython-servokit")
             logger.error("❌ adafruit-circuitpython-servokit не установлен")
             logger.error("   Установите: pip install adafruit-circuitpython-servokit")
             return False
@@ -208,11 +233,18 @@ class PCA9685ServoController(HardwareServoController):
             logger.info("⏳ Создание ServoKit (channels=16, address=0x%02x)...", self.address)
             self._servo_kit = ServoKit(channels=16, address=self.address, frequency=self.frequency)
             self._initialized = True
+            print(f"✅ [SERVO-PCA9685] PCA9685 сервоприводы успешно инициализированы")
+            print(f"   [SERVO-PCA9685] Pan: канал {self.pan_channel}, Tilt: канал {self.tilt_channel}, Адрес: 0x{self.address:02x}, Частота: {self.frequency} Hz")
             logger.info("✅ PCA9685 сервоприводы успешно инициализированы")
             logger.info("   Pan: канал %d, Tilt: канал %d, Адрес: 0x%02x, Частота: %d Hz",
                        self.pan_channel, self.tilt_channel, self.address, self.frequency)
             return True
         except ValueError as exc:
+            print(f"❌ [SERVO-PCA9685] Ошибка инициализации PCA9685: {exc}")
+            print(f"   [SERVO-PCA9685] Возможные причины:")
+            print(f"   1. Неправильный I2C адрес (проверьте перемычки на PCA9685)")
+            print(f"   2. PCA9685 не подключен к I2C шине")
+            print(f"   3. Недостаточно питания для PCA9685")
             logger.error("❌ Ошибка инициализации PCA9685: %s", exc)
             logger.error("   Возможные причины:")
             logger.error("   1. Неправильный I2C адрес (проверьте перемычки на PCA9685)")
@@ -220,6 +252,8 @@ class PCA9685ServoController(HardwareServoController):
             logger.error("   3. Недостаточно питания для PCA9685")
             return False
         except Exception as exc:
+            print(f"❌ [SERVO-PCA9685] Не удалось инициализировать PCA9685 сервоприводы: {exc}")
+            print(f"   [SERVO-PCA9685] Тип ошибки: {type(exc).__name__}")
             logger.error("❌ Не удалось инициализировать PCA9685 сервоприводы: %s", exc, exc_info=True)
             logger.error("   Тип ошибки: %s", type(exc).__name__)
             return False
