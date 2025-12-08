@@ -155,6 +155,8 @@ class ServoController:
 
     def track_bbox(self, bbox: Sequence[float], frame_shape: Tuple[int, int]) -> None:
         """Adjust servo angles trying to keep bbox center near frame center."""
+        print(f"⚠️  [SERVO] track_bbox вызван (автоследование) - это не должно происходить если автоследование отключено!", flush=True)
+        
         if not bbox or len(bbox) < 4:
             return
         height, width = frame_shape[:2]
@@ -181,22 +183,32 @@ class ServoController:
             if abs(new_tilt - self._tilt) >= self._min_change:
                 self._tilt = new_tilt
 
-        # Отправляем на железо
-        self._apply_to_hardware()
+        # Отправляем на железо (НЕ принудительно, чтобы не конфликтовать с ручным управлением)
+        self._apply_to_hardware(force=False)
 
-    def _apply_to_hardware(self) -> None:
-        """Send angles to hardware servos if available."""
+    def _apply_to_hardware(self, force: bool = False) -> None:
+        """Send angles to hardware servos if available.
+        
+        Args:
+            force: Если True, отправляет команду принудительно, игнорируя проверку минимального изменения
+        """
         with self._lock:
             pan = self._pan
             tilt = self._tilt
         
-        print(f"🔧 [SERVO] _apply_to_hardware: pan={pan:.1f}°, tilt={tilt:.1f}°", flush=True)
+        print(f"🔧 [SERVO] _apply_to_hardware: pan={pan:.1f}°, tilt={tilt:.1f}°, force={force}", flush=True)
         print(f"   [SERVO] Hardware доступен: {self._hardware is not None and (self._hardware.is_available() if self._hardware else False)}", flush=True)
         
-        # Отправляем только если угол изменился достаточно
+        # Отправляем только если угол изменился достаточно (или принудительно)
         if self._hardware and self._hardware.is_available():
-            pan_changed = self._last_pan is None or abs(pan - self._last_pan) >= self._min_change
-            tilt_changed = self._last_tilt is None or abs(tilt - self._last_tilt) >= self._min_change
+            if force:
+                # Принудительная отправка - игнорируем проверку минимального изменения
+                pan_changed = True
+                tilt_changed = True
+                print(f"   [SERVO] ПРИНУДИТЕЛЬНАЯ отправка (force=True)", flush=True)
+            else:
+                pan_changed = self._last_pan is None or abs(pan - self._last_pan) >= self._min_change
+                tilt_changed = self._last_tilt is None or abs(tilt - self._last_tilt) >= self._min_change
             
             pan_diff_str = f"{abs(pan - self._last_pan):.2f}" if self._last_pan is not None else "N/A"
             tilt_diff_str = f"{abs(tilt - self._last_tilt):.2f}" if self._last_tilt is not None else "N/A"
@@ -207,7 +219,8 @@ class ServoController:
                 print(f"⏳ [SERVO] Отправка Pan={pan:.1f}° на железо...", flush=True)
                 try:
                     self._hardware.set_angle("pan", pan)
-                    self._last_pan = pan
+                    with self._lock:
+                        self._last_pan = pan
                     print(f"✅ [SERVO] Pan={pan:.1f}° отправлен на железо", flush=True)
                 except Exception as exc:
                     print(f"❌ [SERVO] Ошибка отправки Pan: {exc}", flush=True)
@@ -217,7 +230,8 @@ class ServoController:
                 print(f"⏳ [SERVO] Отправка Tilt={tilt:.1f}° на железо...", flush=True)
                 try:
                     self._hardware.set_angle("tilt", tilt)
-                    self._last_tilt = tilt
+                    with self._lock:
+                        self._last_tilt = tilt
                     print(f"✅ [SERVO] Tilt={tilt:.1f}° отправлен на железо", flush=True)
                 except Exception as exc:
                     print(f"❌ [SERVO] Ошибка отправки Tilt: {exc}", flush=True)
@@ -325,30 +339,36 @@ class ServoController:
             old_tilt = self._tilt
             
             if pan is not None:
-                self._pan = clamp(pan, 0.0, 180.0)
-                print(f"   [SERVO] Pan изменен: {old_pan:.1f}° -> {self._pan:.1f}°", flush=True)
+                new_pan = clamp(pan, 0.0, 180.0)
+                self._pan = new_pan
+                # ПРИНУДИТЕЛЬНО сбрасываем _last_pan, чтобы гарантировать отправку команды
+                self._last_pan = None
+                print(f"   [SERVO] Pan изменен: {old_pan:.1f}° -> {self._pan:.1f}° (принудительная отправка)", flush=True)
             if tilt is not None:
-                self._tilt = clamp(tilt, 0.0, 180.0)
-                print(f"   [SERVO] Tilt изменен: {old_tilt:.1f}° -> {self._tilt:.1f}°", flush=True)
+                new_tilt = clamp(tilt, 0.0, 180.0)
+                self._tilt = new_tilt
+                # ПРИНУДИТЕЛЬНО сбрасываем _last_tilt, чтобы гарантировать отправку команды
+                self._last_tilt = None
+                print(f"   [SERVO] Tilt изменен: {old_tilt:.1f}° -> {self._tilt:.1f}° (принудительная отправка)", flush=True)
             
             # Блокируем автоследование на 5 секунд после ручной команды
             self._manual_control_until = time.time() + 5.0
             print(f"   [SERVO] Автоследование заблокировано до {self._manual_control_until:.1f}", flush=True)
         
-        # Отправляем на железо
-        self._apply_to_hardware()
+        # ПРИНУДИТЕЛЬНО отправляем на железо (без проверки минимального изменения)
+        self._apply_to_hardware(force=True)
 
     def reset(self) -> None:
         """Reset servos to center position (90 degrees)."""
         with self._lock:
             self._pan = 90.0
             self._tilt = 90.0
+            # Сбрасываем _last_pan и _last_tilt для принудительной отправки
+            self._last_pan = None
+            self._last_tilt = None
         
-        if self._hardware and self._hardware.is_available():
-            self._hardware.set_angle("pan", 90.0)
-            self._hardware.set_angle("tilt", 90.0)
-            self._last_pan = 90.0
-            self._last_tilt = 90.0
+        # Принудительно отправляем на железо
+        self._apply_to_hardware(force=True)
 
     def cleanup(self) -> None:
         """Cleanup hardware resources."""
