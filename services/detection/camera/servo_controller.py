@@ -196,8 +196,10 @@ class ServoController:
             pan_changed = self._last_pan is None or abs(pan - self._last_pan) >= self._min_change
             tilt_changed = self._last_tilt is None or abs(tilt - self._last_tilt) >= self._min_change
             
-            print(f"   [SERVO] Pan изменился: {pan_changed} (last={self._last_pan}, current={pan:.1f}, diff={abs(pan - self._last_pan) if self._last_pan is not None else 'N/A':.2f})", flush=True)
-            print(f"   [SERVO] Tilt изменился: {tilt_changed} (last={self._last_tilt}, current={tilt:.1f}, diff={abs(tilt - self._last_tilt) if self._last_tilt is not None else 'N/A':.2f})", flush=True)
+            pan_diff_str = f"{abs(pan - self._last_pan):.2f}" if self._last_pan is not None else "N/A"
+            tilt_diff_str = f"{abs(tilt - self._last_tilt):.2f}" if self._last_tilt is not None else "N/A"
+            print(f"   [SERVO] Pan изменился: {pan_changed} (last={self._last_pan}, current={pan:.1f}, diff={pan_diff_str})", flush=True)
+            print(f"   [SERVO] Tilt изменился: {tilt_changed} (last={self._last_tilt}, current={tilt:.1f}, diff={tilt_diff_str})", flush=True)
             
             if pan_changed:
                 print(f"⏳ [SERVO] Отправка Pan={pan:.1f}° на железо...", flush=True)
