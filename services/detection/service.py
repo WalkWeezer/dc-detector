@@ -87,6 +87,9 @@ class DetectionService:
         if not self.servo_auto_tracking_enabled:
             print("ℹ️  [SERVICE] Автоследование сервоприводов ОТКЛЮЧЕНО", flush=True)
             logger.info("ℹ️  Автоследование сервоприводов отключено (SERVO_AUTO_TRACKING=false)")
+            # ПОЛНОСТЬЮ блокируем автоследование в ServoController
+            self.servo._auto_tracking_disabled = True
+            print("   [SERVICE] Автоследование заблокировано в ServoController", flush=True)
         
         # MavLink GPS reader
         self.mavlink_gps: Optional[MavLinkGPSReader] = None
