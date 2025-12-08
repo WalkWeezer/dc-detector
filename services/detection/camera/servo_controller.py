@@ -108,11 +108,10 @@ class ServoController:
             print("ℹ️  [SERVO] Сервоприводы работают в программном режиме (без железа)", flush=True)
             print("   [SERVO] Для использования аппаратных сервоприводов установите:", flush=True)
             print("   [SERVO]   SERVO_HARDWARE=gpio (для GPIO)", flush=True)
-            print("   [SERVO]   SERVO_HARDWARE=pca9685 (для PCA9685)", flush=True)
             print("   [SERVO]   SERVO_PAN_PIN=18 и SERVO_TILT_PIN=19 (для GPIO)", flush=True)
             print("=" * 60, flush=True)
             logger.info("ℹ️  Сервоприводы работают в программном режиме (без железа)")
-            logger.info("   Для использования аппаратных сервоприводов установите SERVO_HARDWARE=gpio или SERVO_HARDWARE=pca9685")
+            logger.info("   Для использования аппаратных сервоприводов установите SERVO_HARDWARE=gpio")
             controller = cls()
             print(f"✅ [SERVO] ServoController создан (программный режим)", flush=True)
             return controller
@@ -120,33 +119,25 @@ class ServoController:
         # Параметры для GPIO
         pan_pin = os.environ.get("SERVO_PAN_PIN")
         tilt_pin = os.environ.get("SERVO_TILT_PIN")
-        
-        # Параметры для PCA9685
-        pan_channel = os.environ.get("SERVO_PAN_CHANNEL")
-        tilt_channel = os.environ.get("SERVO_TILT_CHANNEL")
-        address = os.environ.get("SERVO_PCA9685_ADDRESS", "0x40")
         frequency = int(os.environ.get("SERVO_FREQUENCY", "50"))
         
         print(f"   [SERVO] Pan pin: {pan_pin}")
         print(f"   [SERVO] Tilt pin: {tilt_pin}")
         print(f"   [SERVO] Frequency: {frequency} Hz")
         
-        kwargs = {"frequency": frequency}
-        if hardware_type == "pca9685":
-            kwargs["address"] = int(address, 16) if isinstance(address, str) and address.startswith("0x") else int(address)
-            if pan_channel:
-                kwargs["pan_channel"] = int(pan_channel)
-            if tilt_channel:
-                kwargs["tilt_channel"] = int(tilt_channel)
-            print(f"   [SERVO] PCA9685: Pan канал={pan_channel}, Tilt канал={tilt_channel}, Адрес=0x{kwargs['address']:02x}")
-            logger.info("   PCA9685: Pan канал=%s, Tilt канал=%s, Адрес=0x%02x", 
-                       pan_channel, tilt_channel, kwargs["address"])
-        elif hardware_type == "gpio":
+        if hardware_type == "gpio":
             print(f"   [SERVO] GPIO: Pan pin={pan_pin}, Tilt pin={tilt_pin}")
             logger.info("   GPIO: Pan pin=%s, Tilt pin=%s", pan_pin, tilt_pin)
             if not pan_pin or not tilt_pin:
                 print("⚠️  [SERVO] SERVO_PAN_PIN или SERVO_TILT_PIN не указаны")
                 logger.warning("⚠️  SERVO_PAN_PIN или SERVO_TILT_PIN не указаны")
+        else:
+            print(f"⚠️  [SERVO] Неизвестный тип железа: {hardware_type}, используется программный режим")
+            logger.warning("⚠️  Неизвестный тип железа: %s, используется программный режим", hardware_type)
+            controller = cls()
+            return controller
+        
+        kwargs = {"frequency": frequency}
         
         print(f"⏳ [SERVO] Создание контроллера железа типа '{hardware_type}'...")
         hardware = create_servo_controller(
@@ -201,6 +192,9 @@ class ServoController:
         delta_pan = err_x * self._step * 12  # amplify to be responsive
         delta_tilt = err_y * self._step * 12
 
+        pan_changed = False
+        tilt_changed = False
+        
         with self._lock:
             new_pan = clamp(self._pan + delta_pan, 0.0, 180.0)
             new_tilt = clamp(self._tilt - delta_tilt, 0.0, 180.0)
@@ -343,31 +337,6 @@ class ServoController:
             # Проверяем, что пины указаны
             if not status["pan_pin"] or not status["tilt_pin"]:
                 status["error"] = "SERVO_PAN_PIN или SERVO_TILT_PIN не указаны"
-                
-        elif hardware_type == "pca9685":
-            status["pan_channel"] = os.environ.get("SERVO_PAN_CHANNEL")
-            status["tilt_channel"] = os.environ.get("SERVO_TILT_CHANNEL")
-            status["address"] = os.environ.get("SERVO_PCA9685_ADDRESS", "0x40")
-            status["frequency"] = int(os.environ.get("SERVO_FREQUENCY", "50"))
-            
-            # Проверяем доступность adafruit-circuitpython-servokit
-            try:
-                from adafruit_servokit import ServoKit
-                status["servokit_available"] = True
-            except ImportError:
-                status["servokit_available"] = False
-                status["error"] = "adafruit-circuitpython-servokit не установлен. Установите: pip install adafruit-circuitpython-servokit"
-            
-            # Проверяем доступность I2C
-            try:
-                import board
-                import busio
-                i2c = busio.I2C(board.SCL, board.SDA)
-                status["i2c_available"] = True
-            except Exception as exc:
-                status["i2c_available"] = False
-                status["error"] = f"I2C недоступен: {exc}"
-                
         else:
             status["error"] = "SERVO_HARDWARE не настроен (используется программный режим)"
         
@@ -377,9 +346,6 @@ class ServoController:
             if hasattr(self._hardware, 'pan_pin'):
                 status["hardware_pan_pin"] = self._hardware.pan_pin
                 status["hardware_tilt_pin"] = self._hardware.tilt_pin
-            if hasattr(self._hardware, 'pan_channel'):
-                status["hardware_pan_channel"] = self._hardware.pan_channel
-                status["hardware_tilt_channel"] = self._hardware.tilt_channel
         else:
             status["hardware_initialized"] = False
         

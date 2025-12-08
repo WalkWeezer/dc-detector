@@ -44,9 +44,9 @@ try:
         # Показываем важные переменные для отладки
         servo_hw = os.environ.get("SERVO_HARDWARE", "не установлено")
         print(f"   [ENV] SERVO_HARDWARE = '{servo_hw}'", flush=True)
-        if servo_hw and servo_hw.lower() not in ("none", "gpio", "pca9685"):
+        if servo_hw and servo_hw.lower() not in ("none", "gpio"):
             print(f"⚠️  [ENV] ВНИМАНИЕ: SERVO_HARDWARE='{servo_hw}' - возможно опечатка?", flush=True)
-            print(f"   [ENV] Ожидаемые значения: 'gpio', 'pca9685' или 'none'", flush=True)
+            print(f"   [ENV] Ожидаемые значения: 'gpio' или 'none'", flush=True)
     else:
         # Пробуем найти .env в текущей директории
         load_dotenv(override=False)
