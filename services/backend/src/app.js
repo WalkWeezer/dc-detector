@@ -110,23 +110,53 @@ export function createApp() {
 
   // Раздача статики фронтенда (для продакшена)
   // На проде всегда используем исходники напрямую, без сборки Vite
-  const frontendSrc = path.resolve(process.cwd(), '../../frontend')
-  const frontendPath = frontendSrc
+  // Пробуем несколько вариантов пути к фронтенду
+  let frontendPath
+  const possiblePaths = [
+    path.resolve(process.cwd(), '../../frontend'),  // Если запускаем из services/backend/
+    path.resolve(process.cwd(), '../frontend'),    // Если запускаем из корня проекта
+    path.resolve(process.cwd(), 'frontend'),       // Если запускаем из services/
+    path.resolve(__dirname, '../../../frontend'), // Относительно текущего файла
+  ]
+  
+  // Ищем первый существующий путь
+  for (const possiblePath of possiblePaths) {
+    const indexPath = path.join(possiblePath, 'index.html')
+    if (fs.existsSync(indexPath)) {
+      frontendPath = possiblePath
+      break
+    }
+  }
+  
+  // Если не нашли - используем первый вариант по умолчанию
+  if (!frontendPath) {
+    frontendPath = possiblePaths[0]
+  }
   
   // Логирование для отладки
+  console.log(`📁 Current working directory: ${process.cwd()}`)
   console.log(`📁 Frontend path: ${frontendPath}`)
   console.log(`   Using source files directly (no Vite build on production)`)
   
   // Проверяем существование ключевых файлов
   const indexHtmlPath = path.join(frontendPath, 'index.html')
   const piJsPath = path.join(frontendPath, 'pi.js')
-  console.log(`   index.html exists: ${fs.existsSync(indexHtmlPath)}`)
-  console.log(`   pi.js exists: ${fs.existsSync(piJsPath)}`)
-  if (fs.existsSync(indexHtmlPath)) {
+  const indexExists = fs.existsSync(indexHtmlPath)
+  const piJsExists = fs.existsSync(piJsPath)
+  
+  console.log(`   index.html exists: ${indexExists}`)
+  console.log(`   pi.js exists: ${piJsExists}`)
+  
+  if (!indexExists) {
+    console.error(`❌ ERROR: Frontend index.html not found at: ${indexHtmlPath}`)
+    console.error(`   Please check that frontend directory exists and contains index.html`)
+  }
+  
+  if (indexExists) {
     const stats = fs.statSync(indexHtmlPath)
     console.log(`   index.html modified: ${stats.mtime.toISOString()}`)
   }
-  if (fs.existsSync(piJsPath)) {
+  if (piJsExists) {
     const stats = fs.statSync(piJsPath)
     console.log(`   pi.js modified: ${stats.mtime.toISOString()}`)
   }
@@ -161,15 +191,33 @@ export function createApp() {
         }
       }
     })(req, res, () => {
-      // Если файл не найден - отдаем index.html (SPA fallback)
-      const indexPath = path.join(frontendPath, 'index.html')
-      if (!fs.existsSync(indexPath)) {
-        console.error(`❌ Frontend index.html not found at: ${indexPath}`)
-        return res.status(404).send('Frontend not found')
+      // Если файл не найден - отдаем index.html или pi.html (SPA fallback)
+      // Проверяем, запрашивается ли pi.html напрямую
+      let indexPath
+      if (req.path === '/pi.html' || req.path === '/pi') {
+        indexPath = path.join(frontendPath, 'pi.html')
+      } else {
+        indexPath = path.join(frontendPath, 'index.html')
       }
+      
+      // Если запрошенный файл не существует, пробуем альтернативный
+      if (!fs.existsSync(indexPath)) {
+        const altPath = indexPath.endsWith('pi.html') 
+          ? path.join(frontendPath, 'index.html')
+          : path.join(frontendPath, 'pi.html')
+        if (fs.existsSync(altPath)) {
+          indexPath = altPath
+        }
+      }
+      
+      if (!fs.existsSync(indexPath)) {
+        console.error(`❌ Frontend HTML not found. Tried: ${indexPath}`)
+        return res.status(404).send('Frontend not found. Please check that frontend files exist.')
+      }
+      
       res.sendFile(indexPath, (err) => {
         if (err) {
-          console.error(`Error serving frontend index.html:`, err)
+          console.error(`Error serving frontend HTML:`, err)
           res.status(500).send('Internal Server Error')
         }
       })

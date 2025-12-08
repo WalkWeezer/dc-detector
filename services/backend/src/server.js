@@ -6,9 +6,11 @@ import { startAutoSave } from './utils/autoSaveManager.js'
 const app = createApp()
 // Слушаем на всех интерфейсах (0.0.0.0) для доступа извне
 app.listen(config.port, '0.0.0.0', async () => {
-  console.log(`Backend listening on 0.0.0.0:${config.port}`)
-  console.log(`Detection Service URL: ${config.detectionServiceUrl}`)
-  console.log(`Detections data directory: ${config.detectionsDataDir}`)
+  console.log(`\n🚀 Backend listening on 0.0.0.0:${config.port}`)
+  console.log(`📱 Frontend available at: http://localhost:${config.port}`)
+  console.log(`🌐 Or from network: http://<your-ip>:${config.port}`)
+  console.log(`\n📡 Detection Service URL: ${config.detectionServiceUrl}`)
+  console.log(`📁 Detections data directory: ${config.detectionsDataDir}`)
   
   // Проверяем доступность detection service при запуске
   try {
