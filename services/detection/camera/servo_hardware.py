@@ -126,7 +126,11 @@ class GPIOServoController(HardwareServoController):
 
     def set_angle(self, servo: str, angle: float) -> None:
         """Set servo angle. angle: 0-180 degrees."""
+        print(f"🔧 [GPIO-SERVO] set_angle вызван: servo={servo}, angle={angle:.1f}°", flush=True)
+        
         if not self._initialized:
+            print(f"❌ [GPIO-SERVO] Контроллер не инициализирован!", flush=True)
+            logger.warning(f"GPIO servo controller not initialized, cannot set {servo} angle")
             return
 
         # Clamp angle to valid range
@@ -135,14 +139,23 @@ class GPIOServoController(HardwareServoController):
         # Convert angle to duty cycle (0-180 degrees -> 2.5-12.5% duty cycle for standard servos)
         # Standard servos: 0° = 2.5%, 90° = 7.5%, 180° = 12.5%
         duty_cycle = 2.5 + (angle / 180.0) * 10.0
+        print(f"   [GPIO-SERVO] Duty cycle: {duty_cycle:.2f}%", flush=True)
 
         try:
             if servo == "pan" and self.pan_pwm:
+                print(f"⏳ [GPIO-SERVO] Установка Pan на GPIO {self.pan_pin}: duty_cycle={duty_cycle:.2f}%", flush=True)
                 self.pan_pwm.ChangeDutyCycle(duty_cycle)
+                print(f"✅ [GPIO-SERVO] Pan установлен на {angle:.1f}° (duty_cycle={duty_cycle:.2f}%)", flush=True)
             elif servo == "tilt" and self.tilt_pwm:
+                print(f"⏳ [GPIO-SERVO] Установка Tilt на GPIO {self.tilt_pin}: duty_cycle={duty_cycle:.2f}%", flush=True)
                 self.tilt_pwm.ChangeDutyCycle(duty_cycle)
+                print(f"✅ [GPIO-SERVO] Tilt установлен на {angle:.1f}° (duty_cycle={duty_cycle:.2f}%)", flush=True)
+            else:
+                print(f"⚠️  [GPIO-SERVO] Неизвестный серво или PWM не инициализирован: servo={servo}, pan_pwm={self.pan_pwm is not None}, tilt_pwm={self.tilt_pwm is not None}", flush=True)
+                logger.warning(f"Unknown servo '{servo}' or PWM not initialized")
         except Exception as exc:
-            logger.error(f"Failed to set {servo} servo angle: {exc}")
+            print(f"❌ [GPIO-SERVO] Ошибка установки {servo} серво: {exc}", flush=True)
+            logger.error(f"Failed to set {servo} servo angle: {exc}", exc_info=True)
 
     def cleanup(self) -> None:
         """Cleanup GPIO resources."""

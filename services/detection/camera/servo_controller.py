@@ -188,16 +188,39 @@ class ServoController:
             pan = self._pan
             tilt = self._tilt
         
+        print(f"🔧 [SERVO] _apply_to_hardware: pan={pan:.1f}°, tilt={tilt:.1f}°", flush=True)
+        print(f"   [SERVO] Hardware доступен: {self._hardware is not None and (self._hardware.is_available() if self._hardware else False)}", flush=True)
+        
         # Отправляем только если угол изменился достаточно
         if self._hardware and self._hardware.is_available():
-            if self._last_pan is None or abs(pan - self._last_pan) >= self._min_change:
-                self._hardware.set_angle("pan", pan)
-                self._last_pan = pan
-            if self._last_tilt is None or abs(tilt - self._last_tilt) >= self._min_change:
-                self._hardware.set_angle("tilt", tilt)
-                self._last_tilt = tilt
+            pan_changed = self._last_pan is None or abs(pan - self._last_pan) >= self._min_change
+            tilt_changed = self._last_tilt is None or abs(tilt - self._last_tilt) >= self._min_change
+            
+            print(f"   [SERVO] Pan изменился: {pan_changed} (last={self._last_pan}, current={pan:.1f}, diff={abs(pan - self._last_pan) if self._last_pan is not None else 'N/A':.2f})", flush=True)
+            print(f"   [SERVO] Tilt изменился: {tilt_changed} (last={self._last_tilt}, current={tilt:.1f}, diff={abs(tilt - self._last_tilt) if self._last_tilt is not None else 'N/A':.2f})", flush=True)
+            
+            if pan_changed:
+                print(f"⏳ [SERVO] Отправка Pan={pan:.1f}° на железо...", flush=True)
+                try:
+                    self._hardware.set_angle("pan", pan)
+                    self._last_pan = pan
+                    print(f"✅ [SERVO] Pan={pan:.1f}° отправлен на железо", flush=True)
+                except Exception as exc:
+                    print(f"❌ [SERVO] Ошибка отправки Pan: {exc}", flush=True)
+                    logger.error(f"Ошибка отправки Pan на сервопривод: {exc}", exc_info=True)
+            
+            if tilt_changed:
+                print(f"⏳ [SERVO] Отправка Tilt={tilt:.1f}° на железо...", flush=True)
+                try:
+                    self._hardware.set_angle("tilt", tilt)
+                    self._last_tilt = tilt
+                    print(f"✅ [SERVO] Tilt={tilt:.1f}° отправлен на железо", flush=True)
+                except Exception as exc:
+                    print(f"❌ [SERVO] Ошибка отправки Tilt: {exc}", flush=True)
+                    logger.error(f"Ошибка отправки Tilt на сервопривод: {exc}", exc_info=True)
         else:
             # Software-only mode - просто логируем
+            print(f"ℹ️  [SERVO] Программный режим: pan={pan:.1f}°, tilt={tilt:.1f}° (железо недоступно)", flush=True)
             logger.debug("Servo target pan=%.1f tilt=%.1f", pan, tilt)
 
     def get_state(self) -> dict:
@@ -289,11 +312,18 @@ class ServoController:
 
     def set_angles(self, pan: Optional[float] = None, tilt: Optional[float] = None) -> None:
         """Устанавливает углы сервоприводов вручную."""
+        print(f"🔧 [SERVO] set_angles вызван: pan={pan}, tilt={tilt}", flush=True)
+        
         with self._lock:
+            old_pan = self._pan
+            old_tilt = self._tilt
+            
             if pan is not None:
                 self._pan = clamp(pan, 0.0, 180.0)
+                print(f"   [SERVO] Pan изменен: {old_pan:.1f}° -> {self._pan:.1f}°", flush=True)
             if tilt is not None:
                 self._tilt = clamp(tilt, 0.0, 180.0)
+                print(f"   [SERVO] Tilt изменен: {old_tilt:.1f}° -> {self._tilt:.1f}°", flush=True)
         
         # Отправляем на железо
         self._apply_to_hardware()

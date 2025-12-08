@@ -297,38 +297,55 @@ def get_servo_status():
 @app.route('/api/servo', methods=['POST'])
 def set_servo():
     """Установить углы сервоприводов"""
+    print("=" * 60, flush=True)
+    print("📡 [API] POST /api/servo получен", flush=True)
+    
     if detection_service is None:
+        print("❌ [API] Detection service не инициализирован", flush=True)
         return jsonify({'error': 'Service not initialized'}), 503
     
     data = request.get_json()
+    print(f"   [API] Данные запроса: {data}", flush=True)
+    
     if not data:
+        print("❌ [API] JSON body отсутствует", flush=True)
         return jsonify({'error': 'JSON body required'}), 400
     
     pan = data.get('pan')
     tilt = data.get('tilt')
+    print(f"   [API] Извлеченные значения: pan={pan}, tilt={tilt}", flush=True)
     
     # Валидация
     if pan is not None:
         try:
             pan = float(pan)
             if not (0.0 <= pan <= 180.0):
+                print(f"❌ [API] Pan вне диапазона: {pan}", flush=True)
                 return jsonify({'error': 'pan must be between 0.0 and 180.0'}), 400
-        except (TypeError, ValueError):
+        except (TypeError, ValueError) as exc:
+            print(f"❌ [API] Ошибка валидации Pan: {exc}", flush=True)
             return jsonify({'error': 'pan must be a number'}), 400
     
     if tilt is not None:
         try:
             tilt = float(tilt)
             if not (0.0 <= tilt <= 180.0):
+                print(f"❌ [API] Tilt вне диапазона: {tilt}", flush=True)
                 return jsonify({'error': 'tilt must be between 0.0 and 180.0'}), 400
-        except (TypeError, ValueError):
+        except (TypeError, ValueError) as exc:
+            print(f"❌ [API] Ошибка валидации Tilt: {exc}", flush=True)
             return jsonify({'error': 'tilt must be a number'}), 400
     
     try:
+        print(f"⏳ [API] Вызов detection_service.set_servo_angles(pan={pan}, tilt={tilt})...", flush=True)
         result = detection_service.set_servo_angles(pan, tilt)
+        print(f"✅ [API] Углы установлены успешно: {result}", flush=True)
+        print("=" * 60, flush=True)
         return jsonify(result)
     except Exception as exc:
+        print(f"❌ [API] Ошибка установки углов: {exc}", flush=True)
         logger.error("Не удалось установить углы сервоприводов: %s", exc, exc_info=True)
+        print("=" * 60, flush=True)
         return jsonify({'error': str(exc)}), 500
 
 

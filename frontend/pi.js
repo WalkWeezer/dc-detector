@@ -349,10 +349,13 @@
   }
 
   async function setServoAngles(pan, tilt) {
+    console.log(`[UI] setServoAngles вызван: pan=${pan}, tilt=${tilt}`);
     try {
       const payload = {};
       if (pan != null) payload.pan = Number(pan);
       if (tilt != null) payload.tilt = Number(tilt);
+      
+      console.log(`[UI] Отправка запроса на ${api.servo} с payload:`, payload);
       
       const result = await fetchJSON(api.servo, {
         method: 'POST',
@@ -360,9 +363,10 @@
         body: JSON.stringify(payload),
       });
       
+      console.log(`[UI] Ответ от сервера:`, result);
       updateServoStatus(result);
     } catch (err) {
-      console.error('Ошибка установки углов сервоприводов:', err);
+      console.error('[UI] Ошибка установки углов сервоприводов:', err);
       if (els.errorMessage) {
         els.errorMessage.textContent = `Ошибка сервоприводов: ${err.message}`;
       }
@@ -1280,12 +1284,14 @@
     if (els.servoPan) {
       els.servoPan.addEventListener('input', (e) => {
         const value = Number(e.target.value);
+        console.log(`[UI] Pan слайдер изменен: ${value}°`);
         if (els.servoPanValue) {
           els.servoPanValue.textContent = `${value}°`;
         }
         // Отправляем изменение с небольшой задержкой (debounce)
         clearTimeout(els.servoPan._timeout);
         els.servoPan._timeout = setTimeout(() => {
+          console.log(`[UI] Отправка Pan=${value}° после debounce`);
           setServoAngles(value, null);
         }, 100);
       });
@@ -1294,12 +1300,14 @@
     if (els.servoTilt) {
       els.servoTilt.addEventListener('input', (e) => {
         const value = Number(e.target.value);
+        console.log(`[UI] Tilt слайдер изменен: ${value}°`);
         if (els.servoTiltValue) {
           els.servoTiltValue.textContent = `${value}°`;
         }
         // Отправляем изменение с небольшой задержкой (debounce)
         clearTimeout(els.servoTilt._timeout);
         els.servoTilt._timeout = setTimeout(() => {
+          console.log(`[UI] Отправка Tilt=${value}° после debounce`);
           setServoAngles(null, value);
         }, 100);
       });
